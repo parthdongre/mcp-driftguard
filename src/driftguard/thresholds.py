@@ -19,7 +19,7 @@ class ThresholdSelection:
 def _candidate_thresholds(values: list[float]) -> list[float]:
     if not values:
         return []
-    unique = sorted(set(float(value) for value in values))
+    unique = sorted({float(value) for value in values})
     epsilon = max(1e-12, abs(unique[-1]) * 1e-12)
     return [unique[-1] + epsilon, *reversed(unique)]
 
