@@ -43,6 +43,7 @@ class PairDatasetRecord(BaseModel):
     new_tool: dict[str, Any]
     label: ChangeClass
     provenance: Literal[
+        "real_history",
         "real_benign_history",
         "controlled_benign",
         "synthetic_attack",
