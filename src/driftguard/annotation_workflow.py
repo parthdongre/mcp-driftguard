@@ -194,6 +194,10 @@ def adjudications_to_pair_records(
                 new_tool=candidate.new_tool,
                 label=adjudication.final_label,
                 provenance="real_history",
+                old_version_id=candidate.old_version_id,
+                new_version_id=candidate.new_version_id,
+                old_committed_at=candidate.old_committed_at,
+                new_committed_at=candidate.new_committed_at,
                 annotators=[*adjudication.annotator_ids, adjudication.adjudicator_id],
                 notes=adjudication.rationale,
             )
