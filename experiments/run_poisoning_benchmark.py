@@ -10,6 +10,7 @@ from driftguard.evaluation import binary_metrics
 from driftguard.models import ChangeClass
 from driftguard.poisoning import PoisoningDetector
 from driftguard.poisoning_benchmark import build_development_poisoning_benchmark
+from driftguard.poisoning_challenges import build_structural_challenge_records
 from driftguard.splits import (
     apply_split_manifest,
     build_split_manifest,
@@ -61,23 +62,26 @@ def _family_stats(records, probabilities, threshold):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repositories", type=int, default=80)
-    parser.add_argument("--seed", type=int, default=20260906)
+    parser.add_argument("--seed", type=int, default=314159)
     parser.add_argument("--output", type=Path, default=Path("artifacts/poisoning_benchmark.json"))
     parser.add_argument(
         "--held-out-family",
         action="append",
         default=[
-            "authority_supersession",
-            "default_endpoint_hijack",
-            "annotation_deception",
+            "redirect_sink_injection",
+            "safety_hint_mismatch",
         ],
     )
     args = parser.parse_args()
 
-    records = build_development_poisoning_benchmark(
+    development_records = build_development_poisoning_benchmark(
         repositories=args.repositories,
         seed=args.seed,
     )
+    records = [
+        *development_records,
+        *build_structural_challenge_records(development_records),
+    ]
     manifest = build_split_manifest(
         records,
         seed=args.seed,
@@ -101,6 +105,7 @@ def main() -> None:
 
     result = {
         "benchmark_kind": "controlled_development_benchmark",
+        "benchmark_protocol": "fresh_structural_holdout_v1",
         "paper_claim_eligible": False,
         "warning": (
             "Synthetic/development result only. Do not report this accuracy as real-world MCP "
