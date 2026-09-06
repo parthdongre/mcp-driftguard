@@ -14,8 +14,15 @@ from driftguard.evaluation import (
     multiclass_metrics,
     rule_alert,
 )
-from driftguard.learning import LogisticPairClassifier, repository_group_split
+from driftguard.learning import LogisticPairClassifier
 from driftguard.models import ChangeClass
+from driftguard.splits import (
+    apply_split_manifest,
+    build_split_manifest,
+    held_out_family_test_records,
+    read_split_manifest,
+    write_split_manifest,
+)
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -25,13 +32,29 @@ def _write_json(path: Path, payload: object) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run DriftGuard pairwise baselines on a repository-disjoint test split."
+        description="Run DriftGuard pairwise baselines on a frozen repository-disjoint test split."
     )
     parser.add_argument("dataset", type=Path, help="PairDatasetRecord JSONL file")
     parser.add_argument("--output", type=Path, default=Path("artifacts/pair_baselines.json"))
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--lexical-threshold", type=float, default=0.12)
     parser.add_argument("--rule-threshold", type=float, default=45.0)
+    parser.add_argument(
+        "--split-manifest",
+        type=Path,
+        help="Use an existing frozen SplitManifest JSON instead of creating a split.",
+    )
+    parser.add_argument(
+        "--write-split-manifest",
+        type=Path,
+        help="Write the generated repository split for reuse by later experiments.",
+    )
+    parser.add_argument(
+        "--holdout-family",
+        action="append",
+        default=[],
+        help="Attack family excluded from train/validation; repeat for multiple families.",
+    )
     parser.add_argument(
         "--train-logistic",
         action="store_true",
@@ -40,7 +63,18 @@ def main() -> None:
     args = parser.parse_args()
 
     records = read_pair_jsonl(args.dataset)
-    split = repository_group_split(records, seed=args.seed)
+    if args.split_manifest:
+        manifest = read_split_manifest(args.split_manifest)
+    else:
+        manifest = build_split_manifest(
+            records,
+            seed=args.seed,
+            held_out_attack_families=args.holdout_family,
+        )
+        if args.write_split_manifest:
+            write_split_manifest(args.write_split_manifest, manifest)
+
+    split = apply_split_manifest(records, manifest)
     if not split.test:
         raise SystemExit("Test split is empty; add more repository groups or adjust the split.")
 
@@ -64,9 +98,11 @@ def main() -> None:
         for result in standard
     ]
 
+    family_holdout = held_out_family_test_records(records, manifest)
     payload: dict[str, object] = {
         "dataset": str(args.dataset),
-        "seed": args.seed,
+        "seed": manifest.seed,
+        "split_manifest": manifest.model_dump(mode="json"),
         "split": {
             "train_records": len(split.train),
             "validation_records": len(split.validation),
@@ -74,6 +110,7 @@ def main() -> None:
             "train_repositories": len({r.repository_id for r in split.train}),
             "validation_repositories": len({r.repository_id for r in split.validation}),
             "test_repositories": len({r.repository_id for r in split.test}),
+            "held_out_family_test_records": len(family_holdout),
         },
         "consent_significant_c2_c3": [
             {"name": result.name, "metrics": asdict(result.metrics)} for result in standard
