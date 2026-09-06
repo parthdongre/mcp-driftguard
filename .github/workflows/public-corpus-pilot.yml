@@ -1,0 +1,45 @@
+name: Public Corpus Pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install DriftGuard
+        run: pip install -e .
+
+      - name: Mine public MCP history
+        run: |
+          python experiments/build_public_corpus.py \
+            --only datalayer/jupyter-mcp-server \
+            --only zilliztech/mcp-server-milvus \
+            --only MariaDB/mcp \
+            --only haris-musa/excel-mcp-server \
+            --workspace "$RUNNER_TEMP/driftguard-corpus" \
+            --output artifacts/public_history_candidates.jsonl \
+            --summary artifacts/public_history_summary.json
+
+      - name: Upload corpus pilot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-corpus-pilot
+          path: |
+            artifacts/public_history_candidates.jsonl
+            artifacts/public_history_summary.json
+            data/public_corpus_sources.json
+          if-no-files-found: error
+          retention-days: 30
