@@ -3,7 +3,6 @@ import subprocess
 from driftguard.history import GitSourceHistoryMiner, adjacent_version_pairs
 from driftguard.source_extractors import PythonDecoratorToolExtractor
 
-
 SOURCE_V1 = '''
 from mcp.server.mcpserver import MCPServer
 
