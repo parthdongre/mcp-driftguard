@@ -10,8 +10,15 @@ from typing import Any
 from driftguard.corpus import historical_versions_to_candidates
 from driftguard.corpus_discovery import discover_mcp_sources, extractable_paths_by_kind
 from driftguard.dataset import AnnotationCandidate, write_jsonl
-from driftguard.history import GitManifestHistoryMiner, GitSourceHistoryMiner, HistoricalToolVersion
-from driftguard.source_extractors import PythonDecoratorToolExtractor, TypeScriptRegisterToolExtractor
+from driftguard.history import (
+    GitManifestHistoryMiner,
+    GitSourceHistoryMiner,
+    HistoricalToolVersion,
+)
+from driftguard.source_extractors import (
+    PythonDecoratorToolExtractor,
+    TypeScriptRegisterToolExtractor,
+)
 
 
 def _run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -50,7 +57,10 @@ def _ensure_repository(
     return target
 
 
-def _mine_repository(repository_path: Path, repository_id: str) -> tuple[list[HistoricalToolVersion], list[dict[str, Any]]]:
+def _mine_repository(
+    repository_path: Path,
+    repository_id: str,
+) -> tuple[list[HistoricalToolVersion], list[dict[str, Any]]]:
     discoveries = discover_mcp_sources(repository_path)
     paths = extractable_paths_by_kind(discoveries)
     versions: list[HistoricalToolVersion] = []
@@ -157,9 +167,15 @@ def main() -> None:
         candidates = historical_versions_to_candidates(versions)
         all_candidates.extend(candidates)
 
-        extractable = [item for item in discoveries if item["status"] == "extractable"]
-        unsupported = [item for item in discoveries if item["status"] == "unsupported_pattern"]
-        parse_errors = [item for item in discoveries if item["status"] == "parse_error"]
+        extractable = [
+            item for item in discoveries if item["status"] == "extractable"
+        ]
+        unsupported = [
+            item for item in discoveries if item["status"] == "unsupported_pattern"
+        ]
+        parse_errors = [
+            item for item in discoveries if item["status"] == "parse_error"
+        ]
         repository_summaries.append(
             {
                 "repository_id": repository_id,
@@ -182,13 +198,16 @@ def main() -> None:
         "annotation_candidates": len(all_candidates),
         "repositories": repository_summaries,
         "safety": {
-            "target_code_executed": false,
-            "target_code_imported": false,
-            "method": "static source/JSON parsing plus git show over historical blobs"
-        }
+            "target_code_executed": False,
+            "target_code_imported": False,
+            "method": "static source/JSON parsing plus git show over historical blobs",
+        },
     }
     args.summary.parent.mkdir(parents=True, exist_ok=True)
-    args.summary.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    args.summary.write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 
