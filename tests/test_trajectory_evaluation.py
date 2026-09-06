@@ -81,5 +81,5 @@ def test_aggregate_trajectory_metrics_reports_detection_delay():
     assert metrics.detected_positive_trajectories == 1
     assert metrics.detection_rate == 0.5
     assert metrics.false_alarm_trajectories == 1
-    assert metrics.false_alarm_rate == 1 / 3
+    assert metrics.false_alarm_rate == 0.333333
     assert metrics.average_detection_delay == 1.0
