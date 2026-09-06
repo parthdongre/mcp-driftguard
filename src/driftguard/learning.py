@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from random import Random
-from typing import Iterable
 
 from .canonicalize import make_snapshot
 from .dataset import PairDatasetRecord
@@ -96,7 +96,7 @@ class LogisticPairClassifier:
         *,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_cache: EmbeddingCache | None = None,
-    ) -> LogisticPairClassifier:
+    ) -> "LogisticPairClassifier":
         try:
             from sklearn.feature_extraction import DictVectorizer
             from sklearn.linear_model import LogisticRegression
