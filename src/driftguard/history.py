@@ -21,6 +21,7 @@ class HistoricalToolVersion:
     tool: dict[str, Any]
     schema_hash: str
     committed_at: str | None = None
+    historical_path: str | None = None
 
 
 def _looks_like_tool(value: Any) -> bool:
@@ -75,6 +76,56 @@ class _GitHistoryBase:
         result = self._git("rev-list", "--reverse", "HEAD", "--", *self.paths)
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
+    def _followed_history(self, path: str) -> list[tuple[str, str]]:
+        """Return oldest-first `(commit_sha, blob_path)` entries while following renames."""
+
+        marker = "__DRIFTGUARD_COMMIT__"
+        result = self._git(
+            "log",
+            "--follow",
+            f"--format={marker}%H",
+            "--name-status",
+            "--diff-filter=AMR",
+            "HEAD",
+            "--",
+            path,
+            check=False,
+        )
+        if result.returncode != 0:
+            return []
+
+        current_path = path
+        current_sha: str | None = None
+        status_lines: list[str] = []
+        newest_first: list[tuple[str, str]] = []
+
+        def flush() -> None:
+            nonlocal current_path, current_sha, status_lines
+            if current_sha is None:
+                return
+            newest_first.append((current_sha, current_path))
+            for status_line in status_lines:
+                parts = status_line.split("\t")
+                if len(parts) != 3 or not parts[0].startswith("R"):
+                    continue
+                old_path, new_path = parts[1], parts[2]
+                if new_path == current_path:
+                    current_path = old_path
+                    break
+            current_sha = None
+            status_lines = []
+
+        for raw_line in result.stdout.splitlines():
+            line = raw_line.strip()
+            if line.startswith(marker):
+                flush()
+                current_sha = line.removeprefix(marker)
+            elif line and current_sha is not None:
+                status_lines.append(line)
+        flush()
+        newest_first.reverse()
+        return newest_first
+
     def _commit_timestamp(self, commit_sha: str) -> str | None:
         result = self._git("show", "-s", "--format=%cI", commit_sha, check=False)
         if result.returncode != 0:
@@ -90,38 +141,39 @@ class _GitHistoryBase:
 
     def _collect(self, extractor: SourceToolExtractor) -> list[HistoricalToolVersion]:
         versions: list[HistoricalToolVersion] = []
-        last_hash_by_key: dict[tuple[str, str], str] = {}
         timestamp_by_commit: dict[str, str | None] = {}
-        for commit_sha in self.commits():
-            committed_at = timestamp_by_commit.setdefault(
-                commit_sha,
-                self._commit_timestamp(commit_sha),
-            )
-            for path in self.paths:
-                text = self._file_at_commit(commit_sha, path)
+
+        for lineage_path in self.paths:
+            last_hash_by_tool: dict[str, str] = {}
+            for commit_sha, blob_path in self._followed_history(lineage_path):
+                text = self._file_at_commit(commit_sha, blob_path)
                 if text is None:
                     continue
                 try:
                     tools = extractor.extract(text)
                 except (SyntaxError, ValueError, json.JSONDecodeError):
                     continue
+                committed_at = timestamp_by_commit.setdefault(
+                    commit_sha,
+                    self._commit_timestamp(commit_sha),
+                )
                 for tool in tools:
                     canonical = canonicalize_tool(tool)
                     tool_name = str(canonical["name"])
                     digest = schema_hash(canonical)
-                    key = (path, tool_name)
-                    if last_hash_by_key.get(key) == digest:
+                    if last_hash_by_tool.get(tool_name) == digest:
                         continue
-                    last_hash_by_key[key] = digest
+                    last_hash_by_tool[tool_name] = digest
                     versions.append(
                         HistoricalToolVersion(
                             repository_id=self.repository_id,
                             commit_sha=commit_sha,
-                            path=path,
+                            path=lineage_path,
                             tool_name=tool_name,
                             tool=canonical,
                             schema_hash=digest,
                             committed_at=committed_at,
+                            historical_path=blob_path,
                         )
                     )
         return versions
