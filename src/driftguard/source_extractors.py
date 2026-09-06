@@ -21,10 +21,7 @@ def _literal(node: ast.AST | None) -> Any:
 def _annotation_name(node: ast.AST | None) -> str:
     if node is None:
         return ""
-    try:
-        return ast.unparse(node)
-    except Exception:
-        return ""
+    return ast.unparse(node)
 
 
 def _json_schema_for_annotation(node: ast.AST | None) -> dict[str, Any]:
