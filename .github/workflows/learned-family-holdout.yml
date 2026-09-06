@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - src/driftguard/learning.py
+      - src/driftguard/features.py
       - src/driftguard/learned_family_benchmark.py
       - src/driftguard/attack_family_benchmark.py
       - src/driftguard/stateful_policy.py
