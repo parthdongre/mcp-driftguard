@@ -1,4 +1,5 @@
 name: Public Corpus Pilot
+run-name: Public Corpus Pilot ${{ github.sha }}
 
 on:
   workflow_dispatch:
