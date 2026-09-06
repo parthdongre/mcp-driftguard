@@ -50,6 +50,48 @@ async def read_file(path: str, ctx: Context) -> str:
     assert set(tool["inputSchema"]["properties"]) == {"path"}
 
 
+def test_python_extractor_resolves_literal_module_name_binding():
+    source = '''
+NAME = "workspace"
+
+@mcp.tool(name=NAME)
+def dispatch(action: str) -> str:
+    """Workspace operations."""
+    return action
+'''
+    tool = PythonDecoratorToolExtractor().extract(source)[0]
+
+    assert tool["name"] == "workspace"
+    assert tool["description"] == "Workspace operations."
+
+
+def test_python_extractor_unwraps_annotated_and_field_description():
+    source = '''
+from typing import Annotated
+from pydantic import Field
+
+@mcp.tool()
+def store(
+    information: Annotated[str, Field(description="Text to store")],
+    limit: Annotated[int, Field(description="Maximum results")] = 10,
+) -> str:
+    return information
+'''
+    tool = PythonDecoratorToolExtractor().extract(source)[0]
+    properties = tool["inputSchema"]["properties"]
+
+    assert properties["information"] == {
+        "type": "string",
+        "description": "Text to store",
+    }
+    assert properties["limit"] == {
+        "type": "integer",
+        "description": "Maximum results",
+        "default": 10,
+    }
+    assert tool["inputSchema"]["required"] == ["information"]
+
+
 def test_source_history_miner_tracks_decorator_changes(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
