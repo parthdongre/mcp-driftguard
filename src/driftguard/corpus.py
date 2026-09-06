@@ -74,6 +74,8 @@ def historical_versions_to_candidates(
                 source_path=old.path,
                 old_version_id=old.commit_sha,
                 new_version_id=new.commit_sha,
+                old_committed_at=old.committed_at,
+                new_committed_at=new.committed_at,
                 old_tool=old.tool,
                 new_tool=new.tool,
                 suggested_evidence=_evidence_suggestions(old, new),
