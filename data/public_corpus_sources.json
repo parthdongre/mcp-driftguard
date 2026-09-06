@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "selection_date": "2026-09-06",
+  "purpose": "Public repositories selected for static MCP tool-definition history mining. Repository code must never be imported or executed during corpus construction.",
+  "selection_policy": {
+    "include": [
+      "public MCP server or official SDK repository",
+      "non-trivial Git history",
+      "tool definitions or registrations visible in source or manifests",
+      "mix of Python and TypeScript ecosystems",
+      "mix of direct SDK usage and abstraction-heavy registration patterns"
+    ],
+    "exclude": [
+      "repositories requiring execution to discover tool definitions",
+      "generated dependency/vendor trees",
+      "private or unpublished attack corpora"
+    ]
+  },
+  "repositories": [
+    {
+      "repository_id": "datalayer/jupyter-mcp-server",
+      "clone_url": "https://github.com/datalayer/jupyter-mcp-server.git",
+      "primary_language": "python",
+      "priority": "A",
+      "registration_pattern": "direct @mcp.tool decorators",
+      "extractor_readiness": "ready",
+      "verified_paths": [
+        "jupyter_mcp_server/server.py",
+        "extensions/sandboxes/jupyter_mcp_sandboxes/extension.py"
+      ],
+      "notes": "High-value real server with many tools and documented decorator-to-tool source mapping."
+    },
+    {
+      "repository_id": "modelcontextprotocol/python-sdk",
+      "clone_url": "https://github.com/modelcontextprotocol/python-sdk.git",
+      "primary_language": "python",
+      "priority": "B",
+      "registration_pattern": "official SDK decorator examples",
+      "extractor_readiness": "ready",
+      "verified_paths": [],
+      "notes": "Reference implementation/examples; useful for parser validation and benign SDK evolution, but not treated as an independent production server population."
+    },
+    {
+      "repository_id": "modelcontextprotocol/typescript-sdk",
+      "clone_url": "https://github.com/modelcontextprotocol/typescript-sdk.git",
+      "primary_language": "typescript",
+      "priority": "B",
+      "registration_pattern": "direct server.registerTool calls with Zod schemas",
+      "extractor_readiness": "ready",
+      "verified_paths": [
+        "examples/tools/server.ts",
+        "examples/hono/server.ts",
+        "examples/gateway/server.ts"
+      ],
+      "notes": "Reference implementation/examples for TypeScript parser validation; not counted as a production-server repository in final generalization claims."
+    },
+    {
+      "repository_id": "mobile-next/mobile-mcp",
+      "clone_url": "https://github.com/mobile-next/mobile-mcp.git",
+      "primary_language": "typescript",
+      "priority": "A",
+      "registration_pattern": "mix of direct registerTool and local wrapper registration",
+      "extractor_readiness": "partial",
+      "verified_paths": [
+        "src/server.ts"
+      ],
+      "notes": "Direct literal registrations are mineable now; wrapper-registered tools should be reported as extractor coverage gaps rather than silently omitted."
+    },
+    {
+      "repository_id": "qdrant/mcp-server-qdrant",
+      "clone_url": "https://github.com/qdrant/mcp-server-qdrant.git",
+      "primary_language": "python",
+      "priority": "A",
+      "registration_pattern": "self.tool(function, ...) registration",
+      "extractor_readiness": "adapter_required",
+      "verified_paths": [
+        "src/mcp_server_qdrant/mcp_server.py"
+      ],
+      "notes": "Important abstraction pattern not handled by the first decorator-only Python extractor."
+    },
+    {
+      "repository_id": "dbt-labs/dbt-mcp",
+      "clone_url": "https://github.com/dbt-labs/dbt-mcp.git",
+      "primary_language": "python",
+      "priority": "A",
+      "registration_pattern": "FastMCP plus custom ToolDefinition/registration layer",
+      "extractor_readiness": "adapter_required",
+      "verified_paths": [
+        "src/dbt_mcp/tools/definitions.py",
+        "src/dbt_mcp/tools/register.py",
+        "src/dbt_mcp/mcp/server.py"
+      ],
+      "notes": "Strong test of abstraction-aware extraction; do not infer schemas by importing the package."
+    },
+    {
+      "repository_id": "mapbox/mcp-server",
+      "clone_url": "https://github.com/mapbox/mcp-server.git",
+      "primary_language": "typescript",
+      "priority": "A",
+      "registration_pattern": "BaseTool abstraction calling server.registerTool",
+      "extractor_readiness": "adapter_required",
+      "verified_paths": [
+        "src/tools/BaseTool.ts"
+      ],
+      "notes": "Useful abstraction-heavy TypeScript target. Tool names/configs originate outside the literal registerTool call."
+    },
+    {
+      "repository_id": "mongodb-js/mongodb-mcp-server",
+      "clone_url": "https://github.com/mongodb-js/mongodb-mcp-server.git",
+      "primary_language": "typescript",
+      "priority": "A",
+      "registration_pattern": "tool classes/registry abstraction",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Large vendor-maintained server selected to measure extractor coverage on a production-style architecture."
+    },
+    {
+      "repository_id": "zilliztech/mcp-server-milvus",
+      "clone_url": "https://github.com/zilliztech/mcp-server-milvus.git",
+      "primary_language": "python",
+      "priority": "A",
+      "registration_pattern": "discovery required",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Database/vector-search server selected for domain diversity."
+    },
+    {
+      "repository_id": "MariaDB/mcp",
+      "clone_url": "https://github.com/MariaDB/mcp.git",
+      "primary_language": "python",
+      "priority": "A",
+      "registration_pattern": "discovery required",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Vendor-maintained database target selected for domain and organization diversity."
+    },
+    {
+      "repository_id": "haris-musa/excel-mcp-server",
+      "clone_url": "https://github.com/haris-musa/excel-mcp-server.git",
+      "primary_language": "python",
+      "priority": "B",
+      "registration_pattern": "discovery required",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Smaller independent server useful for balancing large vendor repositories."
+    },
+    {
+      "repository_id": "makeplane/plane-mcp-server",
+      "clone_url": "https://github.com/makeplane/plane-mcp-server.git",
+      "primary_language": "python",
+      "priority": "B",
+      "registration_pattern": "discovery required",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Project-management domain target for broader semantic coverage."
+    }
+  ]
+}
