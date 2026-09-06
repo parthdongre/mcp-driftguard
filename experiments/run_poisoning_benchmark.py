@@ -6,9 +6,10 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from driftguard.calibration import binary_calibration_metrics
 from driftguard.evaluation import binary_metrics
-from driftguard.hybrid_detector import HybridPoisoningDetector
 from driftguard.models import ChangeClass
+from driftguard.poisoning import PoisoningDetector
 from driftguard.poisoning_benchmark import build_development_poisoning_benchmark
 from driftguard.poisoning_challenges import build_structural_challenge_records
 from driftguard.splits import (
@@ -19,8 +20,12 @@ from driftguard.splits import (
 from driftguard.thresholds import tune_margin_threshold
 
 
+def _truth(records):
+    return [record.label is ChangeClass.MALICIOUS_DRIFT for record in records]
+
+
 def _metrics(records, probabilities, threshold):
-    truth = [record.label is ChangeClass.MALICIOUS_DRIFT for record in records]
+    truth = _truth(records)
     predicted = [score >= threshold for score in probabilities]
     result = binary_metrics(truth, predicted)
     payload = result.__dict__.copy()
@@ -41,6 +46,12 @@ def _metrics(records, probabilities, threshold):
     return payload
 
 
+def _calibration(records, probabilities):
+    if not records:
+        return None
+    return binary_calibration_metrics(_truth(records), probabilities).__dict__
+
+
 def _family_stats(records, probabilities, threshold):
     buckets = defaultdict(list)
     for record, probability in zip(records, probabilities, strict=True):
@@ -57,6 +68,12 @@ def _family_stats(records, probabilities, threshold):
             "alert_rate": round(sum(value >= threshold for value in values) / len(values), 6),
         }
     return result
+
+
+def _hybrid_probabilities(detector, records):
+    """Use the deployed hybrid score, including invariant overrides, for evaluation."""
+
+    return [detector.assess(record).risk_score / 100.0 for record in records]
 
 
 def main() -> None:
@@ -89,8 +106,8 @@ def main() -> None:
     )
     split = apply_split_manifest(records, manifest)
 
-    detector = HybridPoisoningDetector().fit(split.train)
-    validation_probabilities = detector.predict_proba(split.validation)
+    detector = PoisoningDetector().fit(split.train)
+    validation_probabilities = _hybrid_probabilities(detector, split.validation)
     threshold_selection = tune_margin_threshold(
         validation_probabilities,
         [record.label for record in split.validation],
@@ -99,9 +116,9 @@ def main() -> None:
     calibrated_threshold = threshold_selection.threshold
     fixed_threshold = 0.5
 
-    test_probabilities = detector.predict_proba(split.test)
+    test_probabilities = _hybrid_probabilities(detector, split.test)
     held_out = held_out_family_test_records(records, manifest)
-    held_out_probabilities = detector.predict_proba(held_out)
+    held_out_probabilities = _hybrid_probabilities(detector, held_out)
 
     result = {
         "benchmark_kind": "controlled_development_benchmark",
@@ -124,7 +141,10 @@ def main() -> None:
             "method": threshold_selection.objective,
             "threshold": calibrated_threshold,
             "separation_margin": threshold_selection.objective_value,
-            "metrics": threshold_selection.metrics.__dict__,
+            "threshold_metrics": threshold_selection.metrics.__dict__,
+            "probability_calibration": _calibration(
+                split.validation, validation_probabilities
+            ),
         },
         "validation_fixed_0_5_metrics": _metrics(
             split.validation, validation_probabilities, fixed_threshold
@@ -133,12 +153,14 @@ def main() -> None:
             split.test, test_probabilities, calibrated_threshold
         ),
         "test_fixed_0_5_metrics": _metrics(split.test, test_probabilities, fixed_threshold),
+        "test_probability_calibration": _calibration(split.test, test_probabilities),
         "held_out_calibrated_metrics": (
             _metrics(held_out, held_out_probabilities, calibrated_threshold) if held_out else None
         ),
         "held_out_fixed_0_5_metrics": (
             _metrics(held_out, held_out_probabilities, fixed_threshold) if held_out else None
         ),
+        "held_out_probability_calibration": _calibration(held_out, held_out_probabilities),
         "test_family_probability_stats": _family_stats(
             split.test, test_probabilities, calibrated_threshold
         ),
