@@ -44,6 +44,29 @@ server.registerTool(
     assert paths["json"] == ["tools.json"]
 
 
+def test_discovery_finds_bare_nested_python_tool_decorator(tmp_path):
+    (tmp_path / "server.py").write_text(
+        '''
+class DemoServer:
+    def register(self):
+        @self.mcp.tool
+        async def list_databases() -> list[str]:
+            """List databases."""
+            return []
+''',
+        encoding="utf-8",
+    )
+
+    discoveries = discover_mcp_sources(tmp_path)
+
+    assert len(discoveries) == 1
+    discovery = discoveries[0]
+    assert discovery.kind == "python"
+    assert discovery.status == "extractable"
+    assert discovery.extracted_tools == 1
+    assert discovery.hint_count == 1
+
+
 def test_discovery_reports_unsupported_python_registration_pattern(tmp_path):
     (tmp_path / "wrapped.py").write_text(
         '''
