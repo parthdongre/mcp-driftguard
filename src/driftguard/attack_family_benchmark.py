@@ -26,7 +26,6 @@ from .trajectory_benchmark import (
     trajectory_signal_trace,
 )
 
-
 MALICIOUS_ATTACK_FAMILIES: tuple[str, ...] = tuple(
     mutation.attack_family
     for mutation in CONTROLLED_MUTATIONS
