@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "selection_date": "2026-09-06",
+  "purpose": "Second-stage candidate pool for expanding the real MCP evolution corpus. Repository existence was verified through GitHub search. These entries are not counted as extracted production histories until static discovery succeeds and coverage is measured.",
+  "relationship_to_primary_manifest": "Append these 18 repositories to the 12 entries in public_corpus_sources.json for a 30-repository candidate pool. Official SDK/reference repositories remain parser-validation strata rather than independent production-server population units.",
+  "repositories": [
+    {
+      "repository_id": "containers/kubernetes-mcp-server",
+      "clone_url": "https://github.com/containers/kubernetes-mcp-server.git",
+      "primary_language": "go",
+      "priority": "A",
+      "extractor_readiness": "new_language_adapter_required",
+      "verified_paths": [],
+      "notes": "Container/Kubernetes domain; useful for widening capability and implementation diversity."
+    },
+    {
+      "repository_id": "neo4j-contrib/mcp-neo4j",
+      "clone_url": "https://github.com/neo4j-contrib/mcp-neo4j.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Graph-database MCP server; repository existence verified, registration pattern to be statically mapped."
+    },
+    {
+      "repository_id": "microsoft/mcp",
+      "clone_url": "https://github.com/microsoft/mcp.git",
+      "primary_language": "mixed",
+      "priority": "A",
+      "extractor_readiness": "collection_discovery_required",
+      "verified_paths": [],
+      "notes": "Vendor-maintained MCP collection. Treat individual server packages as separate strata after static discovery rather than one monolithic server."
+    },
+    {
+      "repository_id": "awslabs/mcp",
+      "clone_url": "https://github.com/awslabs/mcp.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "collection_discovery_required",
+      "verified_paths": [],
+      "notes": "AWS Labs MCP collection with many capability domains; individual servers must be tracked separately in downstream manifests."
+    },
+    {
+      "repository_id": "sooperset/mcp-atlassian",
+      "clone_url": "https://github.com/sooperset/mcp-atlassian.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Atlassian/Jira/Confluence domain with meaningful read/write permission boundaries."
+    },
+    {
+      "repository_id": "oracle/mcp",
+      "clone_url": "https://github.com/oracle/mcp.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Vendor-maintained Oracle MCP repository; useful database/cloud capability stratum."
+    },
+    {
+      "repository_id": "alpacahq/alpaca-mcp-server",
+      "clone_url": "https://github.com/alpacahq/alpaca-mcp-server.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Financial/trading domain with naturally sensitive operations and consent boundaries."
+    },
+    {
+      "repository_id": "Snowflake-Labs/mcp",
+      "clone_url": "https://github.com/Snowflake-Labs/mcp.git",
+      "primary_language": "python",
+      "priority": "A",
+      "extractor_readiness": "collection_discovery_required",
+      "verified_paths": [],
+      "notes": "Data/cloud domain; likely useful for read/write/data-egress capability evolution."
+    },
+    {
+      "repository_id": "baidu-maps/mcp",
+      "clone_url": "https://github.com/baidu-maps/mcp.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Maps/location domain to broaden semantic and API capability diversity."
+    },
+    {
+      "repository_id": "financial-datasets/mcp-server",
+      "clone_url": "https://github.com/financial-datasets/mcp-server.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Financial data retrieval server; include only if Git history yields meaningful definition evolution."
+    },
+    {
+      "repository_id": "blazickjp/arxiv-mcp-server",
+      "clone_url": "https://github.com/blazickjp/arxiv-mcp-server.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Research/search domain and a relatively constrained read-oriented capability stratum."
+    },
+    {
+      "repository_id": "neka-nat/freecad-mcp",
+      "clone_url": "https://github.com/neka-nat/freecad-mcp.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "CAD/tool-control domain with mutation-oriented operations unlike database/search servers."
+    },
+    {
+      "repository_id": "zcaceres/markdownify-mcp",
+      "clone_url": "https://github.com/zcaceres/markdownify-mcp.git",
+      "primary_language": "typescript",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Content-conversion domain; useful benign evolution contrast."
+    },
+    {
+      "repository_id": "zcaceres/fetch-mcp",
+      "clone_url": "https://github.com/zcaceres/fetch-mcp.git",
+      "primary_language": "typescript",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Network-fetching capability gives a useful external-destination stratum."
+    },
+    {
+      "repository_id": "executeautomation/mcp-playwright",
+      "clone_url": "https://github.com/executeautomation/mcp-playwright.git",
+      "primary_language": "typescript",
+      "priority": "A",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Browser automation domain with rich side-effect capabilities and substantial Git history."
+    },
+    {
+      "repository_id": "lgazo/drawio-mcp-server",
+      "clone_url": "https://github.com/lgazo/drawio-mcp-server.git",
+      "primary_language": "typescript",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Diagram-editing domain; adds mutation-focused tool schemas."
+    },
+    {
+      "repository_id": "designcomputer/mysql_mcp_server",
+      "clone_url": "https://github.com/designcomputer/mysql_mcp_server.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Database server with potentially meaningful query/permission drift."
+    },
+    {
+      "repository_id": "MarkusPfundstein/mcp-obsidian",
+      "clone_url": "https://github.com/MarkusPfundstein/mcp-obsidian.git",
+      "primary_language": "python",
+      "priority": "B",
+      "extractor_readiness": "discovery_required",
+      "verified_paths": [],
+      "notes": "Local knowledge-base/file mutation domain. Include only after static extraction coverage is quantified."
+    }
+  ]
+}
