@@ -58,10 +58,10 @@ def test_aggregate_trajectory_metrics_reports_detection_delay():
         TrajectoryRun(
             trajectory_id="attack-2",
             positive_onset_step=2,
-            first_alert_step=None,
+            first_alert_step=1,
             first_post_onset_alert_step=None,
             detection_delay=None,
-            false_alarm=False,
+            false_alarm=True,
             detected=False,
         ),
         TrajectoryRun(
@@ -80,6 +80,10 @@ def test_aggregate_trajectory_metrics_reports_detection_delay():
     assert metrics.benign_trajectories == 1
     assert metrics.detected_positive_trajectories == 1
     assert metrics.detection_rate == 0.5
-    assert metrics.false_alarm_trajectories == 1
-    assert metrics.false_alarm_rate == 0.333333
+    assert metrics.false_alarm_trajectories == 2
+    assert metrics.false_alarm_rate == 0.666667
+    assert metrics.benign_false_alarm_trajectories == 1
+    assert metrics.benign_false_alarm_rate == 1.0
+    assert metrics.pre_onset_false_alarm_trajectories == 1
+    assert metrics.pre_onset_false_alarm_rate == 0.5
     assert metrics.average_detection_delay == 1.0
