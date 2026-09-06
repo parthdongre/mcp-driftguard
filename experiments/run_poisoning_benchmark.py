@@ -8,8 +8,8 @@ from pathlib import Path
 
 from driftguard.calibration import binary_calibration_metrics
 from driftguard.evaluation import binary_metrics
+from driftguard.hybrid_detector import HybridPoisoningDetector
 from driftguard.models import ChangeClass
-from driftguard.poisoning import PoisoningDetector
 from driftguard.poisoning_benchmark import build_development_poisoning_benchmark
 from driftguard.poisoning_challenges import build_structural_challenge_records
 from driftguard.splits import (
@@ -70,12 +70,6 @@ def _family_stats(records, probabilities, threshold):
     return result
 
 
-def _hybrid_probabilities(detector, records):
-    """Use the deployed hybrid score, including invariant overrides, for evaluation."""
-
-    return [detector.assess(record).risk_score / 100.0 for record in records]
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repositories", type=int, default=80)
@@ -106,8 +100,8 @@ def main() -> None:
     )
     split = apply_split_manifest(records, manifest)
 
-    detector = PoisoningDetector().fit(split.train)
-    validation_probabilities = _hybrid_probabilities(detector, split.validation)
+    detector = HybridPoisoningDetector().fit(split.train)
+    validation_probabilities = detector.predict_proba(split.validation)
     threshold_selection = tune_margin_threshold(
         validation_probabilities,
         [record.label for record in split.validation],
@@ -116,9 +110,9 @@ def main() -> None:
     calibrated_threshold = threshold_selection.threshold
     fixed_threshold = 0.5
 
-    test_probabilities = _hybrid_probabilities(detector, split.test)
+    test_probabilities = detector.predict_proba(split.test)
     held_out = held_out_family_test_records(records, manifest)
-    held_out_probabilities = _hybrid_probabilities(detector, held_out)
+    held_out_probabilities = detector.predict_proba(held_out)
 
     result = {
         "benchmark_kind": "controlled_development_benchmark",
