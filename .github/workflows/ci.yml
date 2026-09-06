@@ -18,6 +18,17 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]" "scikit-learn>=1.5"
       - name: Lint
-        run: ruff check src tests
+        shell: bash
+        run: |
+          set -o pipefail
+          ruff check src tests --output-format=concise | tee ruff-report.txt
+      - name: Upload lint diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-report
+          path: ruff-report.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Test
         run: pytest -q
