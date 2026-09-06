@@ -1,21 +1,102 @@
-MIT License
+MCP DRIFTGUARD PROPRIETARY RESEARCH LICENSE v1.0
 
-Copyright (c) 2026 Parth Dongre
+Copyright (c) 2026 Parth Dongre. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software, source code, documentation, models, datasets, experiment artifacts,
+and associated materials (collectively, the "Materials") are proprietary and
+confidential research materials unless a specific file states otherwise.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. NO OPEN-SOURCE LICENSE
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The Materials are not open source. No license or permission is granted under any
+open-source license, including but not limited to the MIT, Apache, BSD, GPL,
+LGPL, AGPL, MPL, or similar licenses.
+
+2. LIMITED AUTHORIZED RESEARCH USE
+
+Only persons expressly authorized in writing by the copyright holder may access,
+run, reproduce, or modify the Materials, and only for internal academic research,
+evaluation, or development of the MCP DriftGuard research project.
+
+Authorization does not grant ownership or any right to distribute the Materials.
+
+3. PROHIBITED ACTIVITIES
+
+Without prior written permission from the copyright holder, you may not:
+
+(a) publish, distribute, disclose, transmit, mirror, sublicense, sell, rent, lease,
+    or otherwise make any portion of the Materials available to any third party;
+(b) create or distribute derivative works based on the Materials;
+(c) use the Materials, in whole or in part, in a commercial product, hosted
+    service, paid consultancy, security product, or other commercial activity;
+(d) incorporate the Materials into another public or private software project;
+(e) use the Materials to train, fine-tune, distill, or evaluate a model or system
+    for redistribution or commercial deployment;
+(f) remove, alter, or obscure copyright, attribution, confidentiality, or
+    proprietary notices;
+(g) claim authorship, ownership, inventorship, or exclusive rights over the
+    Materials or research contributions embodied in them; or
+(h) publicly disclose unpublished implementation details, unpublished datasets,
+    unpublished experimental results, or unpublished research artifacts obtained
+    through access to this repository without prior written permission.
+
+4. ACADEMIC PUBLICATION
+
+Nothing in this license prevents the copyright holder from publishing papers,
+preprints, patents, technical reports, datasets, or software derived from the
+Materials. Authorized collaborators may publish project results only in accordance
+with the authorship, disclosure, and submission decisions agreed by the project
+team and the copyright holder.
+
+5. THIRD-PARTY MATERIALS
+
+Third-party software, datasets, models, benchmarks, papers, or other materials
+remain subject to their respective licenses and terms. This license does not
+expand or restrict rights granted by third parties.
+
+6. PRIOR RELEASES
+
+This license governs the version of the Materials distributed with this license
+and later versions unless stated otherwise. Any copy of an earlier version that
+was lawfully obtained under a different license remains subject to the terms that
+applied to that earlier copy. Changing the license does not withdraw rights that
+were already granted for earlier copies.
+
+7. CONFIDENTIALITY
+
+Authorized collaborators must take reasonable steps to prevent unauthorized
+access to the Materials and must promptly notify the copyright holder of any
+known unauthorized disclosure.
+
+8. TERMINATION
+
+Any permission granted under this license terminates automatically upon breach.
+Upon termination, the recipient must cease use of and delete all copies of the
+Materials in their possession or control, except where retention is required by
+law or an academic institution's formal records policy.
+
+9. NO WARRANTY
+
+THE MATERIALS ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, ACCURACY, SECURITY, OR NON-INFRINGEMENT.
+
+10. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES ARISING FROM ACCESS TO OR USE OF THE MATERIALS.
+
+11. NO PATENT OR TRADEMARK LICENSE
+
+No patent, trademark, service mark, trade name, or other intellectual-property
+license is granted except the limited copyright permission expressly stated in
+Section 2.
+
+12. PERMISSION REQUESTS
+
+All permissions not expressly granted are reserved. Requests for additional use,
+collaboration, reproduction, or publication rights must be approved in writing by
+the copyright holder.
+
+MCP DriftGuard is proprietary research software. All rights reserved.
