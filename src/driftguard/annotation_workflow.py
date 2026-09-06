@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +44,37 @@ class AnnotationAgreement:
     cohen_kappa: float
     disagreements: int
     c2_c3_disagreements: int
+
+
+def _read_jsonl(path: str | Path, model_type: type[BaseModel]) -> list[BaseModel]:
+    records: list[BaseModel] = []
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                value = json.loads(line)
+                records.append(model_type.model_validate(value))
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise ValueError(f"Invalid annotation JSONL at line {line_number}: {exc}") from exc
+    return records
+
+
+def read_human_annotations_jsonl(path: str | Path) -> list[HumanAnnotation]:
+    return [
+        record
+        for record in _read_jsonl(path, HumanAnnotation)
+        if isinstance(record, HumanAnnotation)
+    ]
+
+
+def read_adjudications_jsonl(path: str | Path) -> list[AdjudicationRecord]:
+    return [
+        record
+        for record in _read_jsonl(path, AdjudicationRecord)
+        if isinstance(record, AdjudicationRecord)
+    ]
 
 
 def _by_candidate(annotations: Iterable[HumanAnnotation]) -> dict[str, HumanAnnotation]:
