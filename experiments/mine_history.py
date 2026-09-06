@@ -7,7 +7,10 @@ from pathlib import Path
 from driftguard.corpus import historical_versions_to_candidates
 from driftguard.dataset import write_jsonl
 from driftguard.history import GitManifestHistoryMiner, GitSourceHistoryMiner
-from driftguard.source_extractors import PythonDecoratorToolExtractor
+from driftguard.source_extractors import (
+    PythonDecoratorToolExtractor,
+    TypeScriptRegisterToolExtractor,
+)
 
 
 def main() -> None:
@@ -21,7 +24,7 @@ def main() -> None:
     parser.add_argument("--repository-id", required=True, help="Stable owner/repository identifier")
     parser.add_argument(
         "--kind",
-        choices=["json", "python"],
+        choices=["json", "python", "typescript"],
         required=True,
         help="Static extraction mode",
     )
@@ -47,11 +50,16 @@ def main() -> None:
             manifest_paths=args.paths,
         )
     else:
+        extractor = (
+            PythonDecoratorToolExtractor()
+            if args.kind == "python"
+            else TypeScriptRegisterToolExtractor()
+        )
         miner = GitSourceHistoryMiner(
             args.repository,
             repository_id=args.repository_id,
             source_paths=args.paths,
-            extractor=PythonDecoratorToolExtractor(),
+            extractor=extractor,
         )
 
     versions = miner.mine()
