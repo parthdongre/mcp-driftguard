@@ -6,7 +6,14 @@ from dataclasses import asdict
 from pathlib import Path
 
 from driftguard.dataset import read_pair_jsonl
-from driftguard.evaluation import evaluate_binary_baseline, evaluate_standard_baselines
+from driftguard.evaluation import (
+    evaluate_binary_baseline,
+    evaluate_standard_baselines,
+    hash_alert,
+    lexical_alert,
+    multiclass_metrics,
+    rule_alert,
+)
 from driftguard.learning import LogisticPairClassifier, repository_group_split
 from driftguard.models import ChangeClass
 
@@ -42,19 +49,16 @@ def main() -> None:
         lexical_threshold=args.lexical_threshold,
         rule_threshold=args.rule_threshold,
     )
+    predictors = {
+        "hash_any_change": hash_alert,
+        "lexical_threshold": lambda r: lexical_alert(r, threshold=args.lexical_threshold),
+        "rule_risk": lambda r: rule_alert(r, risk_threshold=args.rule_threshold),
+    }
     malicious_only = [
         evaluate_binary_baseline(
             result.name,
             split.test,
-            {
-                "hash_any_change": lambda r: r.old_tool != r.new_tool,
-                "lexical_threshold": lambda r: __import__(
-                    "driftguard.evaluation", fromlist=["lexical_alert"]
-                ).lexical_alert(r, threshold=args.lexical_threshold),
-                "rule_risk": lambda r: __import__(
-                    "driftguard.evaluation", fromlist=["rule_alert"]
-                ).rule_alert(r, risk_threshold=args.rule_threshold),
-            }[result.name],
+            predictors[result.name],
             positive_labels=(ChangeClass.MALICIOUS_DRIFT,),
         )
         for result in standard
@@ -84,8 +88,6 @@ def main() -> None:
             raise SystemExit("Training split is empty")
         classifier = LogisticPairClassifier().fit(split.train)
         predictions = [classifier.assess(record).change_class for record in split.test]
-        from driftguard.evaluation import multiclass_metrics
-
         payload["logistic_pair_classifier"] = multiclass_metrics(
             [record.label for record in split.test],
             predictions,
