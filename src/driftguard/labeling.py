@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
 
 from .models import ChangeClass
 
@@ -115,7 +115,9 @@ def recommended_label(
                 "Transition expands effective capability or scope and should cross the "
                 "re-consent boundary unless independent evidence establishes malicious intent."
             ),
-            requires_second_review=known_legitimate_change is None or bool(tags & high_risk_capability_tags),
+            requires_second_review=(
+                known_legitimate_change is None or bool(tags & high_risk_capability_tags)
+            ),
         )
 
     if tags <= equivalent_tags:
@@ -140,12 +142,10 @@ def recommended_label(
     )
 
 
-def inter_annotator_agreement(labels_a: Iterable[ChangeClass], labels_b: Iterable[ChangeClass]) -> float:
-    """Return raw agreement for two aligned annotation sequences.
-
-    Cohen's kappa is computed in the experiment layer when scikit-learn is available;
-    this dependency-free statistic is useful during data collection.
-    """
+def inter_annotator_agreement(
+    labels_a: Iterable[ChangeClass], labels_b: Iterable[ChangeClass]
+) -> float:
+    """Return raw agreement for two aligned annotation sequences."""
 
     left = list(labels_a)
     right = list(labels_b)
