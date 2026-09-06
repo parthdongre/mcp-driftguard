@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from random import Random
 
@@ -40,6 +41,29 @@ class SplitManifest(BaseModel):
             *self.validation_repositories,
             *self.test_repositories,
         }
+
+
+class TemporalCutoffManifest(BaseModel):
+    """Frozen chronological split for future-version generalization experiments."""
+
+    validation_start: str
+    test_start: str
+
+    @model_validator(mode="after")
+    def validate_order(self) -> TemporalCutoffManifest:
+        validation = _parse_timestamp(self.validation_start)
+        test = _parse_timestamp(self.test_start)
+        if validation >= test:
+            raise ValueError("validation_start must be earlier than test_start")
+        return self
+
+
+def _parse_timestamp(value: str) -> datetime:
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid ISO-8601 timestamp: {value}") from exc
 
 
 def build_split_manifest(
@@ -106,6 +130,43 @@ def apply_split_manifest(
         ],
         test=[record for record in records if record.repository_id in test_repositories],
     )
+
+
+def apply_temporal_cutoff_manifest(
+    records: Iterable[PairDatasetRecord],
+    manifest: TemporalCutoffManifest,
+    *,
+    require_all_timestamps: bool = True,
+) -> GroupedSplit:
+    """Chronologically split reviewed pairs by the new-version commit timestamp.
+
+    This is a separate evaluation regime from repository-disjoint testing. Its purpose is
+    to measure future-version generalization. Paper experiments should report both rather
+    than presenting this chronological split as repository-independent evidence.
+    """
+
+    validation_start = _parse_timestamp(manifest.validation_start)
+    test_start = _parse_timestamp(manifest.test_start)
+    train: list[PairDatasetRecord] = []
+    validation: list[PairDatasetRecord] = []
+    test: list[PairDatasetRecord] = []
+
+    for record in records:
+        if not record.new_committed_at:
+            if require_all_timestamps:
+                raise ValueError(
+                    f"Record {record.record_id} lacks new_committed_at required for temporal split"
+                )
+            continue
+        timestamp = _parse_timestamp(record.new_committed_at)
+        if timestamp < validation_start:
+            train.append(record)
+        elif timestamp < test_start:
+            validation.append(record)
+        else:
+            test.append(record)
+
+    return GroupedSplit(train=train, validation=validation, test=test)
 
 
 def held_out_family_test_records(
