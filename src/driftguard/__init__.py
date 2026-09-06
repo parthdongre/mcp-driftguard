@@ -1,22 +1,26 @@
 """MCP DriftGuard research core package."""
 
 from .canonicalize import make_snapshot
+from .corpus import historical_versions_to_candidates
 from .diff import build_delta
 from .evaluation import evaluate_standard_baselines
 from .features import extract_pair_features
-from .history import GitManifestHistoryMiner, adjacent_version_pairs
+from .history import GitManifestHistoryMiner, GitSourceHistoryMiner, adjacent_version_pairs
 from .labeling import EvidenceTag, LabelDecision, recommended_label
 from .learning import LogisticPairClassifier, record_features, repository_group_split
 from .models import ChangeClass, ToolDelta, ToolSnapshot
 from .mutations import build_low_and_slow_trajectory
+from .source_extractors import PythonDecoratorToolExtractor
 from .temporal import SequentialDriftMonitor, TemporalConfig
 
 __all__ = [
     "ChangeClass",
     "EvidenceTag",
     "GitManifestHistoryMiner",
+    "GitSourceHistoryMiner",
     "LabelDecision",
     "LogisticPairClassifier",
+    "PythonDecoratorToolExtractor",
     "SequentialDriftMonitor",
     "TemporalConfig",
     "ToolDelta",
@@ -26,6 +30,7 @@ __all__ = [
     "build_low_and_slow_trajectory",
     "evaluate_standard_baselines",
     "extract_pair_features",
+    "historical_versions_to_candidates",
     "make_snapshot",
     "recommended_label",
     "record_features",
