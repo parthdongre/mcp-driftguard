@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .dataset import TrajectoryDatasetRecord, TrajectoryStep
 from .models import ChangeClass
@@ -118,12 +119,7 @@ def build_low_and_slow_trajectory(
     tool: dict[str, Any],
     trajectory_id: str = "low-and-slow-1",
 ) -> TrajectoryDatasetRecord:
-    """Construct a deterministic multi-step capability-creep research fixture.
-
-    Each individual step is intentionally modest. The final lineage accumulates broad
-    scope, external disclosure, and credential access. This is not intended to model
-    every real attacker; it is a controlled experiment for sequential detectors.
-    """
+    """Construct a deterministic multi-step capability-creep research fixture."""
 
     v0 = deepcopy(tool)
     v1 = benign_clarification(v0)
