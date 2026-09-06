@@ -55,10 +55,14 @@ def _approved_index(trajectory: TrajectoryDatasetRecord) -> int:
 def _attack_onset(trajectory: TrajectoryDatasetRecord, approved_index: int) -> int | None:
     if trajectory.final_label is not ChangeClass.MALICIOUS_DRIFT:
         return None
-    for absolute_index, step in enumerate(trajectory.steps[approved_index + 1 :], start=approved_index + 1):
+    for absolute_index, step in enumerate(
+        trajectory.steps[approved_index + 1 :], start=approved_index + 1
+    ):
         if step.attack_family:
             return absolute_index - approved_index - 1
-    for absolute_index, step in enumerate(trajectory.steps[approved_index + 1 :], start=approved_index + 1):
+    for absolute_index, step in enumerate(
+        trajectory.steps[approved_index + 1 :], start=approved_index + 1
+    ):
         if step.transition_label is ChangeClass.MALICIOUS_DRIFT:
             return absolute_index - approved_index - 1
     return None
@@ -131,7 +135,7 @@ def trajectory_signal_trace(
 def _threshold_grid(step: float = 0.05) -> tuple[float, ...]:
     if not 0.0 < step <= 1.0:
         raise ValueError("step must be in (0, 1]")
-    count = int(round(1.0 / step))
+    count = round(1.0 / step)
     return tuple(round(index * step, 6) for index in range(1, count + 1))
 
 
@@ -288,7 +292,9 @@ def _capability_trajectory(
     )
 
 
-def controlled_temporal_split() -> tuple[list[TrajectoryDatasetRecord], list[TrajectoryDatasetRecord]]:
+def controlled_temporal_split() -> tuple[
+    list[TrajectoryDatasetRecord], list[TrajectoryDatasetRecord]
+]:
     """Return repository-disjoint validation/test lineages for development experiments.
 
     This intentionally small deterministic suite exists to test the experimental plumbing
