@@ -3,6 +3,7 @@ from __future__ import annotations
 from driftguard.consent_policy import (
     ConsentPolicyThresholds,
     SequenceRiskTrace,
+    consent_security_pareto_frontier,
     evaluate_consent_policy,
     select_consent_policy,
 )
@@ -70,3 +71,15 @@ def test_policy_selection_uses_security_constraints() -> None:
     assert selected.feasible
     assert selected.metrics.malicious_detection_rate == 1.0
     assert selected.metrics.benign_block_rate == 0.0
+
+
+def test_pareto_frontier_contains_only_non_dominated_points() -> None:
+    frontier = consent_security_pareto_frontier(
+        _traces(),
+        reconsent_grid=(0.30, 0.50, 0.70),
+        block_grid=(0.45, 0.55, 0.75),
+    )
+    assert frontier
+    assert any(item.metrics.malicious_detection_rate == 1.0 for item in frontier)
+    thresholds = {item.thresholds for item in frontier}
+    assert len(thresholds) == len(frontier)
