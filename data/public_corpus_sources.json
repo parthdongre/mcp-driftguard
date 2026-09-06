@@ -119,20 +119,24 @@
       "clone_url": "https://github.com/zilliztech/mcp-server-milvus.git",
       "primary_language": "python",
       "priority": "A",
-      "registration_pattern": "discovery required",
-      "extractor_readiness": "discovery_required",
-      "verified_paths": [],
-      "notes": "Database/vector-search server selected for domain diversity."
+      "registration_pattern": "direct @mcp.tool decorators",
+      "extractor_readiness": "ready",
+      "verified_paths": [
+        "src/mcp_server_milvus/server.py"
+      ],
+      "notes": "Vector-database server with direct decorated tool definitions, providing a high-value production-style Python history target."
     },
     {
       "repository_id": "MariaDB/mcp",
       "clone_url": "https://github.com/MariaDB/mcp.git",
       "primary_language": "python",
       "priority": "A",
-      "registration_pattern": "discovery required",
-      "extractor_readiness": "discovery_required",
-      "verified_paths": [],
-      "notes": "Vendor-maintained database target selected for domain and organization diversity."
+      "registration_pattern": "nested @self.mcp.tool decorators",
+      "extractor_readiness": "ready",
+      "verified_paths": [
+        "src/server.py"
+      ],
+      "notes": "Vendor-maintained database server. The AST extractor recognizes attribute decorators such as @self.mcp.tool without executing server initialization."
     },
     {
       "repository_id": "haris-musa/excel-mcp-server",
