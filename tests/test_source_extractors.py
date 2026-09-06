@@ -1,6 +1,6 @@
 import subprocess
 
-from driftguard.history import GitSourceHistoryMiner, adjacent_version_pairs
+from driftguard.history import adjacent_version_pairs, GitSourceHistoryMiner
 from driftguard.source_extractors import PythonDecoratorToolExtractor
 
 
