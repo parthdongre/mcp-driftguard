@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from random import Random
 from statistics import mean
-from typing import Callable, Sequence
 
 
 @dataclass(frozen=True)
