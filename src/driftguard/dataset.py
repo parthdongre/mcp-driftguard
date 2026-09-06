@@ -50,6 +50,10 @@ class PairDatasetRecord(BaseModel):
         "real_incident",
     ]
     attack_family: str | None = None
+    old_version_id: str | None = None
+    new_version_id: str | None = None
+    old_committed_at: str | None = None
+    new_committed_at: str | None = None
     annotators: list[str] = Field(default_factory=list)
     notes: str | None = None
 
