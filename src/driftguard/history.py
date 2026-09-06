@@ -16,11 +16,11 @@ from .source_extractors import SourceToolExtractor
 class HistoricalToolVersion:
     repository_id: str
     commit_sha: str
-    committed_at: str | None
     path: str
     tool_name: str
     tool: dict[str, Any]
     schema_hash: str
+    committed_at: str | None = None
 
 
 def _looks_like_tool(value: Any) -> bool:
@@ -117,11 +117,11 @@ class _GitHistoryBase:
                         HistoricalToolVersion(
                             repository_id=self.repository_id,
                             commit_sha=commit_sha,
-                            committed_at=committed_at,
                             path=path,
                             tool_name=tool_name,
                             tool=canonical,
                             schema_hash=digest,
+                            committed_at=committed_at,
                         )
                     )
         return versions
