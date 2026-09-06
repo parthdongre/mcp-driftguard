@@ -30,6 +30,10 @@ class TrajectoryMetrics:
     detection_rate: float
     false_alarm_trajectories: int
     false_alarm_rate: float
+    benign_false_alarm_trajectories: int
+    benign_false_alarm_rate: float
+    pre_onset_false_alarm_trajectories: int
+    pre_onset_false_alarm_rate: float
     average_detection_delay: float | None
 
 
@@ -107,18 +111,26 @@ def aggregate_trajectory_metrics(runs: Iterable[TrajectoryRun]) -> TrajectoryMet
     benign = [run for run in runs if run.positive_onset_step is None]
     detected = [run for run in positive if run.detected]
     false_alarms = [run for run in runs if run.false_alarm]
+    benign_false_alarms = [run for run in benign if run.false_alarm]
+    pre_onset_false_alarms = [run for run in positive if run.false_alarm]
     delays = [run.detection_delay for run in detected if run.detection_delay is not None]
 
-    detection_rate = len(detected) / len(positive) if positive else 0.0
-    false_alarm_rate = len(false_alarms) / len(runs) if runs else 0.0
     return TrajectoryMetrics(
         trajectories=len(runs),
         positive_trajectories=len(positive),
         benign_trajectories=len(benign),
         detected_positive_trajectories=len(detected),
-        detection_rate=round(detection_rate, 6),
+        detection_rate=round(len(detected) / len(positive), 6) if positive else 0.0,
         false_alarm_trajectories=len(false_alarms),
-        false_alarm_rate=round(false_alarm_rate, 6),
+        false_alarm_rate=round(len(false_alarms) / len(runs), 6),
+        benign_false_alarm_trajectories=len(benign_false_alarms),
+        benign_false_alarm_rate=(
+            round(len(benign_false_alarms) / len(benign), 6) if benign else 0.0
+        ),
+        pre_onset_false_alarm_trajectories=len(pre_onset_false_alarms),
+        pre_onset_false_alarm_rate=(
+            round(len(pre_onset_false_alarms) / len(positive), 6) if positive else 0.0
+        ),
         average_detection_delay=round(mean(delays), 6) if delays else None,
     )
 
