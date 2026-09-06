@@ -56,6 +56,71 @@ class ToolDelta(BaseModel):
     lexical_change_ratio: float = 0.0
 
 
+class SemanticViews(BaseModel):
+    """Field-aware textual views used by the future embedding pipeline."""
+
+    purpose: str
+    input_contract: str
+    output_contract: str
+    capability_safety: str
+    full_schema: str
+
+
+class CapabilityProfile(BaseModel):
+    """A deterministic approximation of the effective capability surface of a tool.
+
+    This is deliberately an interpretable intermediate representation. Later learned
+    models can consume it as structured features without treating it as ground truth.
+    """
+
+    operations: list[str] = Field(default_factory=list)
+    resources: list[str] = Field(default_factory=list)
+    effects: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=list)
+    destinations: list[str] = Field(default_factory=list)
+    sensitivity: list[str] = Field(default_factory=list)
+    evidence: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class CapabilityDelta(BaseModel):
+    """Added/removed effective-capability signals between two tool versions."""
+
+    operations_added: list[str] = Field(default_factory=list)
+    operations_removed: list[str] = Field(default_factory=list)
+    resources_added: list[str] = Field(default_factory=list)
+    resources_removed: list[str] = Field(default_factory=list)
+    effects_added: list[str] = Field(default_factory=list)
+    effects_removed: list[str] = Field(default_factory=list)
+    scopes_added: list[str] = Field(default_factory=list)
+    scopes_removed: list[str] = Field(default_factory=list)
+    destinations_added: list[str] = Field(default_factory=list)
+    destinations_removed: list[str] = Field(default_factory=list)
+    sensitivity_added: list[str] = Field(default_factory=list)
+    sensitivity_removed: list[str] = Field(default_factory=list)
+
+
+class PairFeatures(BaseModel):
+    """Model-ready deterministic features for one old/new schema pair."""
+
+    view_lexical_drift: dict[str, float] = Field(default_factory=dict)
+    structural_counts: dict[str, float] = Field(default_factory=dict)
+    capability_delta: CapabilityDelta
+    capability_escalation_score: float = Field(ge=0.0, le=1.0)
+    lexical_change_ratio: float = Field(ge=0.0, le=1.0)
+
+
+class TemporalAssessment(BaseModel):
+    """Stateful assessment for a version sequence of one tool."""
+
+    tool_name: str
+    versions_seen: int
+    step_risk: float = Field(ge=0.0, le=1.0)
+    baseline_risk: float = Field(ge=0.0, le=1.0)
+    cusum_score: float = Field(ge=0.0)
+    alerted: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
 class RiskAssessment(BaseModel):
     """Model-agnostic assessment returned by the detector pipeline."""
 
