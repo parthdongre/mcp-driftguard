@@ -15,7 +15,7 @@ from driftguard.splits import (
     build_split_manifest,
     held_out_family_test_records,
 )
-from driftguard.thresholds import tune_binary_threshold
+from driftguard.thresholds import tune_margin_threshold
 
 
 def _metrics(records, probabilities, threshold):
@@ -26,12 +26,13 @@ def _metrics(records, probabilities, threshold):
     try:
         from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
-        payload["balanced_accuracy"] = round(
-            float(balanced_accuracy_score(truth, predicted)), 6
-        )
         if len(set(truth)) > 1:
+            payload["balanced_accuracy"] = round(
+                float(balanced_accuracy_score(truth, predicted)), 6
+            )
             payload["roc_auc"] = round(float(roc_auc_score(truth, probabilities)), 6)
         else:
+            payload["balanced_accuracy"] = None
             payload["roc_auc"] = None
     except (ImportError, ValueError):
         payload["balanced_accuracy"] = None
@@ -60,12 +61,16 @@ def _family_stats(records, probabilities, threshold):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repositories", type=int, default=80)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=20260906)
     parser.add_argument("--output", type=Path, default=Path("artifacts/poisoning_benchmark.json"))
     parser.add_argument(
         "--held-out-family",
         action="append",
-        default=["paraphrased_override", "unicode_concealment", "default_endpoint_hijack"],
+        default=[
+            "authority_supersession",
+            "default_endpoint_hijack",
+            "annotation_deception",
+        ],
     )
     args = parser.parse_args()
 
@@ -82,13 +87,12 @@ def main() -> None:
 
     detector = PoisoningDetector().fit(split.train)
     validation_probabilities = detector.predict_proba(split.validation)
-    threshold_selection = tune_binary_threshold(
+    threshold_selection = tune_margin_threshold(
         validation_probabilities,
         [record.label for record in split.validation],
         positive_labels=(ChangeClass.MALICIOUS_DRIFT,),
-        objective="f1",
     )
-    tuned_threshold = threshold_selection.threshold
+    calibrated_threshold = threshold_selection.threshold
     fixed_threshold = 0.5
 
     test_probabilities = detector.predict_proba(split.test)
@@ -110,24 +114,30 @@ def main() -> None:
         "test_records": len(split.test),
         "held_out_attack_families": manifest.held_out_attack_families,
         "held_out_family_test_records": len(held_out),
-        "validation_tuned_threshold": tuned_threshold,
-        "validation_tuned_metrics": threshold_selection.metrics.__dict__,
+        "validation_calibration": {
+            "method": threshold_selection.objective,
+            "threshold": calibrated_threshold,
+            "separation_margin": threshold_selection.objective_value,
+            "metrics": threshold_selection.metrics.__dict__,
+        },
         "validation_fixed_0_5_metrics": _metrics(
             split.validation, validation_probabilities, fixed_threshold
         ),
-        "test_tuned_metrics": _metrics(split.test, test_probabilities, tuned_threshold),
+        "test_calibrated_metrics": _metrics(
+            split.test, test_probabilities, calibrated_threshold
+        ),
         "test_fixed_0_5_metrics": _metrics(split.test, test_probabilities, fixed_threshold),
-        "held_out_tuned_metrics": (
-            _metrics(held_out, held_out_probabilities, tuned_threshold) if held_out else None
+        "held_out_calibrated_metrics": (
+            _metrics(held_out, held_out_probabilities, calibrated_threshold) if held_out else None
         ),
         "held_out_fixed_0_5_metrics": (
             _metrics(held_out, held_out_probabilities, fixed_threshold) if held_out else None
         ),
         "test_family_probability_stats": _family_stats(
-            split.test, test_probabilities, fixed_threshold
+            split.test, test_probabilities, calibrated_threshold
         ),
     }
-    # Keep JSON standards-compliant even if a future metric library returns NaN.
+
     def scrub(value):
         if isinstance(value, float) and not math.isfinite(value):
             return None
