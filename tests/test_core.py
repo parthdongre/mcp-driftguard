@@ -25,7 +25,7 @@ def _tool(description: str = "Search a repository", *, extra_properties=None, re
     }
 
 
-def test_canonicalization_ignores_key_order_and_whitespace():
+def test_canonicalization_ignores_key_order_and_description_whitespace():
     first = {
         "name": "x",
         "description": "Search   files\n safely",
@@ -35,6 +35,62 @@ def test_canonicalization_ignores_key_order_and_whitespace():
         "inputSchema": {"properties": {}, "type": "object"},
         "description": "Search files safely",
         "name": "x",
+    }
+
+    assert canonical_json(first) == canonical_json(second)
+
+
+def test_canonicalization_preserves_literal_whitespace():
+    first = {
+        "name": "x",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "string",
+                    "default": "a  b",
+                    "pattern": "^a  b$",
+                }
+            },
+        },
+    }
+    second = {
+        "name": "x",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "string",
+                    "default": "a b",
+                    "pattern": "^a b$",
+                }
+            },
+        },
+    }
+
+    assert canonical_json(first) != canonical_json(second)
+
+
+def test_canonicalization_normalizes_set_like_schema_arrays():
+    first = {
+        "name": "x",
+        "inputSchema": {
+            "type": "object",
+            "required": ["b", "a"],
+            "properties": {
+                "mode": {"type": "string", "enum": ["json", "text"]},
+            },
+        },
+    }
+    second = {
+        "name": "x",
+        "inputSchema": {
+            "type": "object",
+            "required": ["a", "b"],
+            "properties": {
+                "mode": {"type": "string", "enum": ["text", "json"]},
+            },
+        },
     }
 
     assert canonical_json(first) == canonical_json(second)
