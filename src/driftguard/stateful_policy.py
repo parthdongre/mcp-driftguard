@@ -52,6 +52,19 @@ class StatefulPolicySelection:
     feasible: bool
 
 
+@dataclass(frozen=True)
+class PreparedTrajectory:
+    """Threshold-independent pair features for one version lineage."""
+
+    trace_id: str
+    final_label: ChangeClass
+    attack_onset: int | None
+    version_ids: tuple[str, ...]
+    local_risks: tuple[float, ...]
+    pair_risks: dict[tuple[int, int], float]
+    pair_capabilities: dict[tuple[int, int], float]
+
+
 def _approved_index(trajectory: TrajectoryDatasetRecord) -> int:
     for index, step in enumerate(trajectory.steps):
         if step.version_id == trajectory.approved_version_id:
@@ -78,40 +91,66 @@ def _attack_onset(trajectory: TrajectoryDatasetRecord, approved_index: int) -> i
     return None
 
 
-def simulate_stateful_policy(
-    trajectory: TrajectoryDatasetRecord,
+def prepare_stateful_trajectory(trajectory: TrajectoryDatasetRecord) -> PreparedTrajectory:
+    """Compute each possible approved-to-current pair once before threshold search."""
+
+    approved_index = _approved_index(trajectory)
+    lineage_steps = trajectory.steps[approved_index:]
+    if len(lineage_steps) < 2:
+        raise ValueError("Trajectory has no observations after its approved version")
+
+    snapshots = [
+        make_snapshot(
+            server_id=trajectory.server_id,
+            tool=step.tool,
+            approval_state="approved" if index == 0 else "observed",
+        )
+        for index, step in enumerate(lineage_steps)
+    ]
+    pair_risks: dict[tuple[int, int], float] = {}
+    pair_capabilities: dict[tuple[int, int], float] = {}
+    for old_index in range(len(snapshots) - 1):
+        for new_index in range(old_index + 1, len(snapshots)):
+            features = extract_pair_features(
+                build_delta(snapshots[old_index], snapshots[new_index])
+            )
+            key = (old_index, new_index)
+            pair_risks[key] = research_risk_signal(features)
+            pair_capabilities[key] = float(features.capability_escalation_score)
+
+    local_risks = tuple(
+        pair_risks[(index - 1, index)] for index in range(1, len(snapshots))
+    )
+    return PreparedTrajectory(
+        trace_id=trajectory.trajectory_id,
+        final_label=trajectory.final_label,
+        attack_onset=_attack_onset(trajectory, approved_index),
+        version_ids=tuple(step.version_id for step in lineage_steps[1:]),
+        local_risks=local_risks,
+        pair_risks=pair_risks,
+        pair_capabilities=pair_capabilities,
+    )
+
+
+def _simulate_prepared(
+    prepared: PreparedTrajectory,
     strategy: TemporalStrategy,
     thresholds: ConsentPolicyThresholds,
     *,
     temporal_config: TemporalConfig | None = None,
 ) -> StatefulTrajectoryOutcome:
-    """Apply a consent policy while honoring re-consent as a new trusted baseline.
-
-    Static risk traces are useful diagnostics, but an MCP host that re-consents to a C2
-    update should not keep comparing every later version to the obsolete pre-consent
-    snapshot. This simulator resets the approved baseline and sequential memory after each
-    re-consent, then continues monitoring subsequent updates. A block terminates the trace.
-    """
-
     cfg = temporal_config or TemporalConfig()
-    approved_index = _approved_index(trajectory)
-    approved_step = trajectory.steps[approved_index]
-    approved = make_snapshot(
-        server_id=trajectory.server_id,
-        tool=approved_step.tool,
-        approval_state="approved",
-    )
-    previous = approved
+    approved_snapshot_index = 0
     cusum = 0.0
     events: list[PolicyActionEvent] = []
     observations_seen = 0
 
-    for observation_index, step in enumerate(trajectory.steps[approved_index + 1 :]):
-        current = make_snapshot(server_id=trajectory.server_id, tool=step.tool)
-        local_features = extract_pair_features(build_delta(previous, current))
-        baseline_features = extract_pair_features(build_delta(approved, current))
-        local_risk = research_risk_signal(local_features)
-        baseline_risk = research_risk_signal(baseline_features)
+    for observation_index, version_id in enumerate(prepared.version_ids):
+        snapshot_index = observation_index + 1
+        local_risk = prepared.local_risks[observation_index]
+        pair_key = (approved_snapshot_index, snapshot_index)
+        baseline_risk = prepared.pair_risks[pair_key]
+        capability = prepared.pair_capabilities[pair_key]
         cusum = max(
             0.0,
             cfg.memory_decay * cusum + (local_risk - cfg.reference_drift),
@@ -126,13 +165,12 @@ def simulate_stateful_policy(
         else:  # pragma: no cover
             raise ValueError(f"Unsupported temporal strategy: {strategy}")
 
-        capability = float(baseline_features.capability_escalation_score)
         observations_seen += 1
         if malicious >= thresholds.block_threshold:
             events.append(
                 PolicyActionEvent(
                     observation_index=observation_index,
-                    version_id=step.version_id,
+                    version_id=version_id,
                     action=PolicyAction.BLOCK,
                     malicious_score=round(float(malicious), 6),
                     capability_score=round(capability, 6),
@@ -144,51 +182,44 @@ def simulate_stateful_policy(
             events.append(
                 PolicyActionEvent(
                     observation_index=observation_index,
-                    version_id=step.version_id,
+                    version_id=version_id,
                     action=PolicyAction.RECONSENT,
                     malicious_score=round(float(malicious), 6),
                     capability_score=round(capability, 6),
                 )
             )
-            approved = make_snapshot(
-                server_id=trajectory.server_id,
-                tool=step.tool,
-                approval_state="approved",
-            )
-            previous = approved
+            approved_snapshot_index = snapshot_index
             cusum = 0.0
-            continue
-
-        previous = current
 
     return StatefulTrajectoryOutcome(
-        trace_id=trajectory.trajectory_id,
-        final_label=trajectory.final_label,
-        attack_onset=_attack_onset(trajectory, approved_index),
+        trace_id=prepared.trace_id,
+        final_label=prepared.final_label,
+        attack_onset=prepared.attack_onset,
         events=tuple(events),
         observations_seen=observations_seen,
     )
 
 
-def evaluate_stateful_policy(
-    trajectories: list[TrajectoryDatasetRecord],
+def simulate_stateful_policy(
+    trajectory: TrajectoryDatasetRecord,
     strategy: TemporalStrategy,
     thresholds: ConsentPolicyThresholds,
     *,
     temporal_config: TemporalConfig | None = None,
-) -> StatefulPolicyMetrics:
-    if not trajectories:
-        raise ValueError("At least one trajectory is required")
+) -> StatefulTrajectoryOutcome:
+    """Apply a policy while treating every C2 re-consent as a new trusted baseline."""
 
-    outcomes = [
-        simulate_stateful_policy(
-            item,
-            strategy,
-            thresholds,
-            temporal_config=temporal_config,
-        )
-        for item in trajectories
-    ]
+    return _simulate_prepared(
+        prepare_stateful_trajectory(trajectory),
+        strategy,
+        thresholds,
+        temporal_config=temporal_config,
+    )
+
+
+def _metrics_from_outcomes(
+    outcomes: list[StatefulTrajectoryOutcome],
+) -> StatefulPolicyMetrics:
     malicious = [item for item in outcomes if item.final_label is ChangeClass.MALICIOUS_DRIFT]
     c2 = [item for item in outcomes if item.final_label is ChangeClass.CAPABILITY_EXPANSION]
     benign = [
@@ -205,12 +236,10 @@ def evaluate_stateful_policy(
         if outcome.attack_onset is None:
             continue
         onset = outcome.attack_onset
-        pre_blocks = [
-            event
+        if any(
+            event.action is PolicyAction.BLOCK and event.observation_index < onset
             for event in outcome.events
-            if event.action is PolicyAction.BLOCK and event.observation_index < onset
-        ]
-        if pre_blocks:
+        ):
             pre_block += 1
 
         post_events = [
@@ -252,6 +281,43 @@ def evaluate_stateful_policy(
     )
 
 
+def _evaluate_prepared_policy(
+    prepared: list[PreparedTrajectory],
+    strategy: TemporalStrategy,
+    thresholds: ConsentPolicyThresholds,
+    *,
+    temporal_config: TemporalConfig | None = None,
+) -> StatefulPolicyMetrics:
+    outcomes = [
+        _simulate_prepared(
+            item,
+            strategy,
+            thresholds,
+            temporal_config=temporal_config,
+        )
+        for item in prepared
+    ]
+    return _metrics_from_outcomes(outcomes)
+
+
+def evaluate_stateful_policy(
+    trajectories: list[TrajectoryDatasetRecord],
+    strategy: TemporalStrategy,
+    thresholds: ConsentPolicyThresholds,
+    *,
+    temporal_config: TemporalConfig | None = None,
+) -> StatefulPolicyMetrics:
+    if not trajectories:
+        raise ValueError("At least one trajectory is required")
+    prepared = [prepare_stateful_trajectory(item) for item in trajectories]
+    return _evaluate_prepared_policy(
+        prepared,
+        strategy,
+        thresholds,
+        temporal_config=temporal_config,
+    )
+
+
 def _objective(metrics: StatefulPolicyMetrics, *, delay_weight: float) -> float:
     delay = metrics.mean_post_onset_block_delay or 0.0
     return (
@@ -284,14 +350,15 @@ def select_stateful_policy(
     if not 0.0 < threshold_step <= 1.0:
         raise ValueError("threshold_step must be in (0, 1]")
 
+    prepared = [prepare_stateful_trajectory(item) for item in validation]
     count = round(1.0 / threshold_step)
     grid = tuple(round(index * threshold_step, 6) for index in range(1, count + 1))
     candidates: list[StatefulPolicySelection] = []
     for reconsent in grid:
         for block in grid:
             thresholds = ConsentPolicyThresholds(reconsent, block)
-            metrics = evaluate_stateful_policy(
-                validation,
+            metrics = _evaluate_prepared_policy(
+                prepared,
                 strategy,
                 thresholds,
                 temporal_config=temporal_config,
