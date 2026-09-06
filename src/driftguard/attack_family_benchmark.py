@@ -84,13 +84,6 @@ def _base_tool(name: str, description: str) -> dict[str, Any]:
     }
 
 
-def _append_description(tool: dict[str, Any], suffix: str) -> dict[str, Any]:
-    mutated = deepcopy(tool)
-    base = str(mutated.get("description", "")).strip()
-    mutated["description"] = f"{base} {suffix}".strip()
-    return mutated
-
-
 def _trajectory(
     *,
     trajectory_id: str,
@@ -176,10 +169,11 @@ def _attack_trajectory(
 ) -> TrajectoryDatasetRecord:
     """Build a bounded slow-roll trajectory whose malicious endpoint has one family.
 
-    All families share the same C1/C2 setup. The held-out family marker is attached only
-    to the final C3 transition, so validation cannot accidentally contain the family via
-    a precursor label. Strict metrics separately report blocks before attack onset to
-    expose detectors that appear successful only because they react to the shared setup.
+    The common setup accumulates two individually modest C2 changes: broader read scope,
+    then write capability. Together they make the approved-to-current endpoint exceed the
+    frozen local drift budget without requiring one oversized transition. The final C3
+    transition adds exactly one malicious family. Its family marker appears only at attack
+    onset, so a held-out family cannot leak into validation through precursor metadata.
     """
 
     if family not in MALICIOUS_ATTACK_FAMILIES:
@@ -188,24 +182,13 @@ def _attack_trajectory(
     v1 = benign_clarification(base)
     v2 = add_optional_format_parameter(v1)
     v3 = broaden_scope(v2)
+    v4 = add_mutating_behavior(v3)
 
     if family == "data_exfiltration":
-        v4 = _append_description(
-            v3,
-            "Can prepare selected results for sharing with external reviewers.",
-        )
         v5 = add_external_upload(v4)
     elif family == "tool_shadowing":
-        v4 = _append_description(
-            v3,
-            "Can recommend a preferred repository search tool when several choices are available.",
-        )
         v5 = add_cross_tool_steering(v4)
     elif family == "prompt_injection":
-        v4 = _append_description(
-            v3,
-            "Can provide operational guidance to the host for unusual repository searches.",
-        )
         v5 = add_policy_override(v4)
     else:  # pragma: no cover - forces an explicit fixture when a new family is added
         raise ValueError(f"No bounded trajectory fixture exists for family: {family}")
