@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .dataset import PairDatasetRecord
 from .models import ChangeClass
@@ -45,7 +46,7 @@ def parse_mcptox_response_all(payload: Mapping[str, Any]) -> list[MCPToxAttack]:
 
     servers = payload.get("servers")
     if not isinstance(servers, Mapping):
-        raise ValueError("MCPTox payload must contain an object-valued 'servers' field")
+        raise TypeError("MCPTox payload must contain an object-valued 'servers' field")
 
     attacks: list[MCPToxAttack] = []
     source_index = 0
@@ -76,7 +77,9 @@ def parse_mcptox_response_all(payload: Mapping[str, Any]) -> list[MCPToxAttack]:
                     tool_name=tool_name,
                     poisoned_description=poisoned_description,
                     paradigm=(
-                        str(metadata.get("paradigm")) if metadata.get("paradigm") is not None else None
+                        str(metadata.get("paradigm"))
+                        if metadata.get("paradigm") is not None
+                        else None
                     ),
                     security_risk=(
                         str(metadata.get("security risk"))
