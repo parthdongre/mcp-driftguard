@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .canonicalize import canonicalize_tool, schema_hash
 
@@ -120,5 +122,5 @@ def adjacent_version_pairs(
         grouped.setdefault(key, []).append(version)
     pairs: list[tuple[HistoricalToolVersion, HistoricalToolVersion]] = []
     for lineage in grouped.values():
-        pairs.extend(zip(lineage, lineage[1:]))
+        pairs.extend(pairwise(lineage))
     return pairs
