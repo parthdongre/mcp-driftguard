@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" "scikit-learn>=1.5"
       - name: Lint
         run: ruff check src tests
       - name: Test
