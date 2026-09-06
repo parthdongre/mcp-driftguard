@@ -1,0 +1,46 @@
+name: Attack Family Holdout Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/driftguard/attack_family_benchmark.py
+      - src/driftguard/bounded_drift.py
+      - src/driftguard/consent_policy.py
+      - src/driftguard/mutations.py
+      - src/driftguard/temporal.py
+      - src/driftguard/trajectory_benchmark.py
+      - experiments/run_attack_family_holdout.py
+      - tests/test_attack_family_benchmark.py
+      - .github/workflows/attack-family-holdout.yml
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Test attack-family holdout invariants
+        run: pytest -q tests/test_attack_family_benchmark.py
+      - name: Run repository and family disjoint benchmark
+        shell: bash
+        run: |
+          set -o pipefail
+          python experiments/run_attack_family_holdout.py | tee attack-family-holdout.json
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: attack-family-holdout
+          path: attack-family-holdout.json
+          if-no-files-found: error
+          retention-days: 30
