@@ -100,9 +100,10 @@ class CapabilityDelta(BaseModel):
 
 
 class PairFeatures(BaseModel):
-    """Model-ready deterministic features for one old/new schema pair."""
+    """Model-ready deterministic and semantic features for one old/new schema pair."""
 
     view_lexical_drift: dict[str, float] = Field(default_factory=dict)
+    view_semantic_drift: dict[str, float] = Field(default_factory=dict)
     structural_counts: dict[str, float] = Field(default_factory=dict)
     capability_delta: CapabilityDelta
     capability_escalation_score: float = Field(ge=0.0, le=1.0)
