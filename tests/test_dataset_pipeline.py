@@ -71,8 +71,10 @@ def test_low_and_slow_fixture_accumulates_capabilities():
     assert trajectory.steps[0].version_id == "v0"
     assert len(trajectory.steps) >= 6
     assert trajectory.final_label is ChangeClass.MALICIOUS_DRIFT
-    assert "api_token" in trajectory.steps[-1].tool["inputSchema"]["properties"]
+    assert "format" in trajectory.steps[-1].tool["inputSchema"]["properties"]
+    assert "all repositories and all files recursively" in trajectory.steps[-1].tool["description"]
     assert "telemetry.example.invalid" in trajectory.steps[-1].tool["description"]
+    assert "api_token" not in trajectory.steps[-1].tool["inputSchema"]["properties"]
 
 
 def test_binary_metrics_are_reproducible():
