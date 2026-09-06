@@ -9,6 +9,27 @@ from pydantic import BaseModel, Field
 from .models import ChangeClass
 
 
+class AnnotationCandidate(BaseModel):
+    """Unlabeled real-history transition awaiting independent human review."""
+
+    candidate_id: str
+    repository_id: str
+    server_id: str
+    tool_name: str
+    source_path: str
+    old_version_id: str
+    new_version_id: str
+    old_tool: dict[str, Any]
+    new_tool: dict[str, Any]
+    provenance: Literal["real_history"] = "real_history"
+    suggested_evidence: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+    @property
+    def leakage_group(self) -> str:
+        return self.repository_id
+
+
 class PairDatasetRecord(BaseModel):
     """Canonical record for one supervised old/new tool-definition example."""
 
@@ -69,11 +90,27 @@ def write_jsonl(path: str | Path, records: list[BaseModel]) -> None:
             handle.write(record.model_dump_json() + "\n")
 
 
-def read_pair_jsonl(path: str | Path) -> list[PairDatasetRecord]:
-    records: list[PairDatasetRecord] = []
+def _read_jsonl(path: str | Path, model_type: type[BaseModel]) -> list[BaseModel]:
+    records: list[BaseModel] = []
     with Path(path).open("r", encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if line:
-                records.append(PairDatasetRecord.model_validate(json.loads(line)))
+                records.append(model_type.model_validate(json.loads(line)))
     return records
+
+
+def read_pair_jsonl(path: str | Path) -> list[PairDatasetRecord]:
+    return [
+        record
+        for record in _read_jsonl(path, PairDatasetRecord)
+        if isinstance(record, PairDatasetRecord)
+    ]
+
+
+def read_candidate_jsonl(path: str | Path) -> list[AnnotationCandidate]:
+    return [
+        record
+        for record in _read_jsonl(path, AnnotationCandidate)
+        if isinstance(record, AnnotationCandidate)
+    ]
