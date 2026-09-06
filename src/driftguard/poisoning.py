@@ -60,6 +60,59 @@ _SENSITIVE_PARAM_TERMS = (
     "private_key",
 )
 
+# Concept groups intentionally contain several surface forms. The resulting feature is
+# relational: an authority concept must be paired with an override action and conflict/
+# self-reference context. This is more robust than keying on one malicious sentence and
+# less prone to flag benign occurrences of words such as "policy" or "priority".
+_STRONG_OVERRIDE_ACTIONS = (
+    "ignore",
+    "disregard",
+    "bypass",
+    "override",
+    "supersede",
+    "takes precedence",
+    "take precedence",
+    "precedence over",
+)
+_WEAK_PRIORITY_ACTIONS = ("prioritize", "prefer")
+_AUTHORITY_CONCEPTS = (
+    "instruction",
+    "instructions",
+    "guidance",
+    "policy",
+    "policies",
+    "rule",
+    "rules",
+    "guardrail",
+    "guardrails",
+    "host",
+    "system",
+    "developer",
+    "controller",
+    "approval",
+)
+_CONFLICT_CONCEPTS = (
+    "conflict",
+    "conflicts",
+    "conflicting",
+    "differs",
+    "different from",
+    "contrary",
+    "inconsistent",
+    "incompatible",
+)
+_SELF_DEFINITION_CONCEPTS = (
+    "this definition",
+    "this tool definition",
+    "tool definition",
+    "this tool description",
+    "tool description",
+    "this specification",
+    "this tool specification",
+    "tool specification",
+    "current definition",
+)
+
 
 def _flatten_strings(value: Any) -> list[str]:
     if isinstance(value, str):
@@ -85,6 +138,35 @@ def _text(tool: dict[str, Any]) -> str:
 def _count_patterns(text: str, patterns: tuple[str, ...]) -> int:
     lowered = text.lower()
     return sum(lowered.count(pattern) for pattern in patterns)
+
+
+def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in phrases)
+
+
+def _authority_override_concept_count(value: Any) -> int:
+    """Count strings that semantically express an authority-precedence attack.
+
+    Strong override verbs require an authority concept plus either explicit conflict or
+    self-definition context. Ambiguous verbs such as "prioritize" require all three.
+    This deliberately avoids treating a benign phrase like "prioritize results according
+    to the user-selected policy" as a host-instruction override.
+    """
+
+    count = 0
+    for raw_text in _flatten_strings(value):
+        text = raw_text.lower()
+        authority = _contains_any(text, _AUTHORITY_CONCEPTS)
+        conflict = _contains_any(text, _CONFLICT_CONCEPTS)
+        self_definition = _contains_any(text, _SELF_DEFINITION_CONCEPTS)
+        strong_action = _contains_any(text, _STRONG_OVERRIDE_ACTIONS)
+        weak_action = _contains_any(text, _WEAK_PRIORITY_ACTIONS)
+        if authority and strong_action and (conflict or self_definition):
+            count += 1
+        elif authority and conflict and self_definition and weak_action:
+            count += 1
+    return count
 
 
 def _unicode_security_counts(text: str) -> dict[str, float]:
@@ -162,10 +244,20 @@ def poisoning_security_features(record: PairDatasetRecord) -> dict[str, float]:
             max(0, _count_patterns(new_text, patterns) - _count_patterns(old_text, patterns))
         )
 
+    result["security__authority_override_concept_added"] = float(
+        max(
+            0,
+            _authority_override_concept_count(record.new_tool)
+            - _authority_override_concept_count(record.old_tool),
+        )
+    )
+
+    old_unicode = _unicode_security_counts(old_text)
+    new_unicode = _unicode_security_counts(new_text)
     result.update(
         {
-            f"security__new_{key}": max(0.0, value - _unicode_security_counts(old_text)[key])
-            for key, value in _unicode_security_counts(new_text).items()
+            f"security__new_{key}": max(0.0, value - old_unicode[key])
+            for key, value in new_unicode.items()
         }
     )
 
@@ -202,6 +294,9 @@ def poisoning_security_features(record: PairDatasetRecord) -> dict[str, float]:
     result["interaction__steering_x_override"] = (
         result["security__steering_added"] * result["security__override_added"]
     )
+    result["interaction__authority_override"] = result[
+        "security__authority_override_concept_added"
+    ]
     result["interaction__destructive_change"] = max(mutation_added, destroy_added)
     return result
 
@@ -309,18 +404,33 @@ class PoisoningDetector:
         malicious_index = classes.index(True)
         return [float(row[malicious_index]) for row in probabilities]
 
-    def predict(self, records: Iterable[PairDatasetRecord], *, threshold: float | None = None) -> list[bool]:
+    def predict(
+        self,
+        records: Iterable[PairDatasetRecord],
+        *,
+        threshold: float | None = None,
+    ) -> list[bool]:
         cutoff = self.threshold if threshold is None else float(threshold)
         return [probability >= cutoff for probability in self.predict_proba(records)]
 
-    def assess(self, record: PairDatasetRecord, *, threshold: float | None = None) -> RiskAssessment:
+    def assess(
+        self,
+        record: PairDatasetRecord,
+        *,
+        threshold: float | None = None,
+    ) -> RiskAssessment:
         probability = self.predict_proba([record])[0]
         cutoff = self.threshold if threshold is None else float(threshold)
         poisoned = probability >= cutoff
         return RiskAssessment(
-            change_class=(ChangeClass.MALICIOUS_DRIFT if poisoned else ChangeClass.BENIGN_MAINTENANCE),
+            change_class=(
+                ChangeClass.MALICIOUS_DRIFT if poisoned else ChangeClass.BENIGN_MAINTENANCE
+            ),
             risk_score=round(100.0 * probability, 2),
             probabilities={"C3": round(probability, 6), "not_C3": round(1.0 - probability, 6)},
-            reasons=["Hybrid poisoning model: word/character drift plus structural capability features."],
+            reasons=[
+                "Hybrid poisoning model: lexical/character drift plus structural and "
+                "relational security features."
+            ],
             recommended_action="quarantine" if poisoned else "allow_or_apply_consent_policy",
         )
