@@ -12,7 +12,7 @@ from .source_extractors import PythonDecoratorToolExtractor, TypeScriptRegisterT
 SourceKind = Literal["json", "python", "typescript"]
 DiscoveryStatus = Literal["extractable", "unsupported_pattern", "parse_error"]
 
-_PYTHON_TOOL_HINT = re.compile(r"(?:@|\b)[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.tool\s*\(")
+_PYTHON_TOOL_HINT = re.compile(r"(?:@|\b)[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.tool\b")
 _TYPESCRIPT_TOOL_HINT = re.compile(r"\b[A-Za-z_$][\w$]*\.registerTool\s*\(")
 _IGNORED_PARTS = {
     ".git",
