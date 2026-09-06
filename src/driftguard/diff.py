@@ -46,6 +46,24 @@ IMPERATIVE_TERMS = {
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _TOOL_REF_RE = re.compile(r"(?:tool|function)\s+[`'\"]?([A-Za-z0-9_.:-]+)", re.IGNORECASE)
+_TOOL_REF_STOPWORDS = {
+    "a",
+    "an",
+    "automatically",
+    "can",
+    "executes",
+    "for",
+    "is",
+    "object",
+    "that",
+    "the",
+    "this",
+    "to",
+    "used",
+    "which",
+    "will",
+    "with",
+}
 
 
 def _input_schema(tool: dict[str, Any]) -> dict[str, Any]:
@@ -73,6 +91,17 @@ def _flatten_text(value: Any) -> str:
     return ""
 
 
+def _iter_strings(value: Any):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _iter_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_strings(child)
+
+
 def _new_terms(old_text: str, new_text: str, vocabulary: set[str]) -> list[str]:
     old_lower = old_text.lower()
     new_lower = new_text.lower()
@@ -83,10 +112,18 @@ def _new_urls(old_text: str, new_text: str) -> list[str]:
     return sorted(set(_URL_RE.findall(new_text)) - set(_URL_RE.findall(old_text)))
 
 
-def _new_tool_refs(old_text: str, new_text: str) -> list[str]:
-    old_refs = {match.lower() for match in _TOOL_REF_RE.findall(old_text)}
-    new_refs = {match.lower() for match in _TOOL_REF_RE.findall(new_text)}
-    return sorted(new_refs - old_refs)
+def _tool_refs(value: Any) -> set[str]:
+    refs: set[str] = set()
+    for text in _iter_strings(value):
+        for match in _TOOL_REF_RE.findall(text):
+            candidate = match.lower()
+            if candidate not in _TOOL_REF_STOPWORDS:
+                refs.add(candidate)
+    return refs
+
+
+def _new_tool_refs(old_value: Any, new_value: Any) -> list[str]:
+    return sorted(_tool_refs(new_value) - _tool_refs(old_value))
 
 
 def structural_delta(old: ToolSnapshot, new: ToolSnapshot) -> StructuralDelta:
@@ -135,7 +172,7 @@ def structural_delta(old: ToolSnapshot, new: ToolSnapshot) -> StructuralDelta:
         enum_changes=enum_changes,
         sensitive_terms_added=_new_terms(old_text, new_text, SENSITIVE_TERMS),
         urls_added=_new_urls(old_text, new_text),
-        cross_tool_references_added=_new_tool_refs(old_text, new_text),
+        cross_tool_references_added=_new_tool_refs(old_tool, new_tool),
         imperative_terms_added=_new_terms(old_text, new_text, IMPERATIVE_TERMS),
     )
 
