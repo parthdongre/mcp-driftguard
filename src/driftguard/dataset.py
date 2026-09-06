@@ -19,6 +19,8 @@ class AnnotationCandidate(BaseModel):
     source_path: str
     old_version_id: str
     new_version_id: str
+    old_committed_at: str | None = None
+    new_committed_at: str | None = None
     old_tool: dict[str, Any]
     new_tool: dict[str, Any]
     provenance: Literal["real_history"] = "real_history"
