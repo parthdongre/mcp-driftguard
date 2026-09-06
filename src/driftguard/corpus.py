@@ -10,16 +10,9 @@ from .history import HistoricalToolVersion, adjacent_version_pairs
 
 
 def _candidate_id(old: HistoricalToolVersion, new: HistoricalToolVersion) -> str:
-    material = "|".join(
-        [
-            old.repository_id,
-            old.path,
-            old.tool_name,
-            old.commit_sha,
-            new.commit_sha,
-            old.schema_hash,
-            new.schema_hash,
-        ]
+    material = (
+        f"{old.repository_id}|{old.path}|{old.tool_name}|{old.commit_sha}|"
+        f"{new.commit_sha}|{old.schema_hash}|{new.schema_hash}"
     )
     return "hist-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
 
