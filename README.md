@@ -21,7 +21,7 @@ The current paper direction is:
 
 > **DriftGuard: Capability-Aware Temporal Detection of Low-and-Slow Rug Pulls in Model Context Protocol Tool Definitions**
 
-See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md) for the literature-backed novelty analysis and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the research engineering roadmap.
+See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md), [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md), and [`docs/LABELING_GUIDE.md`](docs/LABELING_GUIDE.md).
 
 ## Core task
 
@@ -47,23 +47,32 @@ These remain hypotheses until validated experimentally and re-checked against th
 
 ## Implemented research core
 
-The first research-engineering milestone is implemented and Phase 2 has started:
+Current prototype version: **0.4.0**
+
+Implemented:
 
 - deterministic canonical tool snapshots and SHA-256 identity
 - typed structural old/new deltas
 - five field-aware views: purpose, input contract, output contract, capability/safety metadata, and full schema
 - interpretable effective-capability profiles across operation/resource/effect/scope/destination/sensitivity dimensions
 - capability-delta extraction and a transparent capability-escalation feature
-- stable pairwise numeric feature extraction for later sklearn/XGBoost models
-- embedding-provider protocol, embedding cache, cosine-distance utilities, and a lazy SentenceTransformer adapter
-- optional field-aware semantic drift features fused into the pair feature vector
-- a stateful approved-baseline lineage monitor
-- a deterministic CUSUM-style low-and-slow baseline plus approved-to-current cumulative risk
-- dataset schemas for pairwise and trajectory experiments with repository-level leakage grouping
-- unit tests covering structural, capability, embedding, temporal, and dataset behavior
-- a runnable low-and-slow trajectory demo under `examples/`
+- stable model-ready pair features
+- embedding-provider protocol, cache, cosine-distance utilities, and lazy SentenceTransformer adapter
+- optional field-aware semantic drift features
+- first learned C0-C3 logistic-regression pair classifier
+- repository-disjoint train/validation/test splitting
+- formal C0/C1/C2/C3 labeling framework and evidence tags
+- controlled benign/malicious mutation primitives
+- deterministic low-and-slow capability-creep trajectory generator
+- Git-backed JSON tool-manifest history miner that does not execute repository code
+- adjacent historical version-pair extraction
+- dependency-free hash, lexical, and rule-risk baseline evaluation harness
+- C2+C3 consent-significant and C3-only metrics
+- reproducible experiment JSON output
+- approved-baseline lineage monitor and deterministic CUSUM-style temporal baseline
+- tests for structural, capability, embedding, labeling, history, leakage, evaluation, and temporal behavior
 
-The current capability extractor and temporal risk function are intentionally transparent baselines. They are **not** the final learned detector.
+The current capability extractor, mutation fixtures, and temporal risk scalar are intentionally transparent research baselines. They are **not** presented as learned ground truth or proof of runtime behavior.
 
 ## Planned pipeline
 
@@ -99,44 +108,19 @@ semantic views      structural deltas
 
 ## Baselines
 
-The paper will compare DriftGuard against progressively stronger baselines rather than only showing raw model accuracy:
+The paper will compare DriftGuard against progressively stronger baselines:
 
 1. hash-only change detection
-2. textual diff / edit-distance rules
+2. textual diff / edit-distance threshold
 3. regex / risk dictionary
 4. full-schema cosine threshold
 5. field-aware cosine threshold
 6. single-snapshot semantic classifier
 7. LLM-as-judge on the current schema
 8. LLM-as-judge on the old/new pair
-9. proposed capability-aware pair classifier
-10. proposed pair classifier + sequential drift detector
-
-## Features under study
-
-### Semantic views
-
-- tool purpose / description drift
-- parameter-description drift
-- input contract drift
-- output contract drift
-- capability / annotation drift
-- full canonical schema drift
-
-### Structural and capability deltas
-
-- parameters added, removed, or renamed
-- required-set changes
-- type changes
-- enum expansion / restriction
-- default-value changes
-- output-schema changes
-- safety annotation changes
-- newly introduced URLs / domains
-- sensitive-resource and action changes
-- cross-tool references / tool-selection manipulation
-- imperative / override language
-- inferred effective capability changes such as read/write/delete/send/execute across local or external scopes
+9. pairwise logistic regression
+10. pairwise XGBoost / stronger learned model
+11. proposed capability-aware pair classifier + sequential drift detector
 
 ## Main research questions
 
@@ -163,17 +147,18 @@ mcp-driftguard/
 
 ## Immediate next milestones
 
-1. run and benchmark an actual local sentence-transformer on the five schema views
-2. private data ingestion and labeling pipeline for real MCP repository histories
-3. hash / lexical / cosine / regex baseline experiment harness
-4. first C0-C3 logistic-regression and XGBoost pair classifiers
-5. probability calibration and consent-policy thresholds
-6. controlled low-and-slow trajectory generator
-7. comparison of drift budget, multivariate CUSUM, and Bayesian change-point detection
+1. curate real MCP repositories and run the history miner
+2. add Python and TypeScript source extractors for tool registrations that do not use JSON manifests
+3. benchmark a real local sentence-transformer on the five schema views
+4. build the first manually reviewed real-benign dataset subset
+5. add full-schema and field-aware cosine baselines to the experiment runner
+6. train/evaluate logistic regression and XGBoost on the same frozen repository-disjoint split
+7. expand low-and-slow trajectories and compare drift budget, CUSUM, and Bayesian change-point detection
+8. add calibrated re-consent thresholds and false re-consent metrics
 
 ## Research status
 
-**Phase 1 complete; Phase 2 semantic feature pipeline in progress.** Dataset acquisition and learned pair-classifier work are next.
+**Deterministic core, first learned pair baseline, labeling protocol, controlled mutation generator, history-ingestion foundation, and baseline experiment harness are implemented. Real-corpus construction is the next major phase.**
 
 ## License and confidentiality
 
