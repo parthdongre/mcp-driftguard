@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - src/driftguard/attack_family_benchmark.py
+      - src/driftguard/attack_family_stateful.py
+      - src/driftguard/stateful_policy.py
       - src/driftguard/bounded_drift.py
       - src/driftguard/consent_policy.py
       - src/driftguard/mutations.py
