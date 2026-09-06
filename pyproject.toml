@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-driftguard"
-version = "0.1.0"
-description = "Capability-aware temporal semantic drift detection for MCP tool definitions"
+version = "0.2.0"
+description = "Proprietary research prototype for consent-aware temporal MCP tool-definition security"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary - All Rights Reserved" }
@@ -19,6 +19,7 @@ ml = [
   "numpy>=1.26",
   "scikit-learn>=1.5",
   "sentence-transformers>=3.0",
+  "xgboost>=2.1",
 ]
 api = [
   "fastapi>=0.115",
