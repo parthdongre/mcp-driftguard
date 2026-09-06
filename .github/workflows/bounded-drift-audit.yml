@@ -1,0 +1,36 @@
+name: Bounded Drift Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/driftguard/bounded_drift.py
+      - src/driftguard/mutations.py
+      - experiments/run_bounded_drift_audit.py
+      - .github/workflows/bounded-drift-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Audit controlled low-and-slow trajectory
+        run: python experiments/run_bounded_drift_audit.py | tee bounded-drift-audit.json
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-drift-audit
+          path: bounded-drift-audit.json
+          if-no-files-found: error
+          retention-days: 30
