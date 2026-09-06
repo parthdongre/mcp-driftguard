@@ -25,28 +25,47 @@ The capability extractor and temporal scalar risk function are transparent basel
 
 ## Phase 2 - Semantic feature pipeline
 
-Status: next
+Status: **foundation implemented; real-model benchmarking pending**
 
-- define an embedding-provider protocol
-- use one local baseline encoder initially
-- embed purpose, input contract, output contract, capability/safety view, and full schema separately
-- cache embeddings by snapshot hash
-- compute old/new cosine drift per view
-- export a deterministic feature matrix with explicit feature names
-- add latency measurements
+Implemented:
+
+- embedding-provider protocol
+- lazy local SentenceTransformer adapter
+- five separate semantic views
+- embedding cache
+- field-wise cosine drift
+- fusion into the model-ready pair feature vector
+
+Pending:
+
+- benchmark a real local encoder over representative MCP schemas
+- record encoding/inference latency
+- compare full-schema-only vs field-aware semantic features
+- evaluate at least one stronger encoder if the baseline is insufficient
 
 Primary ablation: full-schema-only embedding vs field-aware embeddings.
 
 ## Phase 3 - Temporal dataset construction
 
-- mine real MCP server version histories
+Status: **in progress**
+
+Implemented:
+
+- formal C0/C1/C2/C3 labeling guide and evidence tags
+- two-annotator/adjudication protocol design
+- controlled benign and malicious schema-valid mutation primitives
+- deterministic low-and-slow capability-creep trajectory fixture
+- JSON-manifest history parser
+- Git-backed version miner that reads historical manifests without executing repository code
+- adjacent version-pair extraction
+
+Next:
+
+- identify and clone a curated set of real MCP server repositories
+- add source-code extractors for Python/TypeScript tool registrations where JSON manifests are absent
 - preserve repository, server, tool, commit, and timestamp lineage
-- extract only actual tool-definition changes
 - manually label a reviewed subset
-- define C0/C1/C2/C3 annotation rules
-- generate controlled benign transformations
-- generate schema-valid malicious transformations from documented attack families
-- construct multi-step low-and-slow trajectories
+- construct broader malicious trajectories from documented attack families
 - keep repository-disjoint train/validation/test groups
 - hold out attack families for robustness evaluation
 
@@ -54,20 +73,32 @@ No private or unpublished attack corpus should be committed to a public reposito
 
 ## Phase 4 - Baseline experiment harness
 
-Implement comparable evaluators for:
+Status: **first harness implemented**
 
-1. hash-only
-2. edit-distance / lexical drift
-3. regex / risk dictionary
-4. full-schema cosine threshold
-5. field-aware cosine threshold
-6. single-snapshot classifier
-7. pairwise logistic regression
-8. pairwise XGBoost
+Implemented:
+
+1. hash-only change alert
+2. edit-distance / lexical threshold
+3. transparent rule-risk baseline
+4. shared binary metrics for C2+C3 and C3-only views
+5. repository-disjoint split integration
+6. first C0-C3 logistic-regression baseline
+7. reproducible JSON experiment output
+
+Pending:
+
+- full-schema cosine threshold
+- field-aware cosine threshold
+- single-snapshot classifier
+- XGBoost pair classifier
+- calibrated probabilities
+- attack-family-held-out evaluation
 
 All baselines must consume the same split manifest where possible.
 
 ## Phase 5 - Consent-aware pair classifier
+
+Status: **logistic baseline implemented; main model pending**
 
 Target output:
 
@@ -88,6 +119,8 @@ Research requirements:
 - inference latency
 
 ## Phase 6 - Low-and-slow sequential models
+
+Status: **CUSUM-style baseline implemented; comparative study pending**
 
 Compare at least:
 
