@@ -84,6 +84,39 @@ def lexical_alert(record: PairDatasetRecord, *, threshold: float = 0.12) -> bool
     return _delta(record).lexical_change_ratio >= threshold
 
 
+def semantic_drift_scores(
+    record: PairDatasetRecord,
+    *,
+    embedding_provider: EmbeddingProvider,
+    embedding_cache: EmbeddingCache | None = None,
+) -> dict[str, float]:
+    """Return all five field-aware semantic cosine distances for one version pair."""
+
+    features = extract_pair_features(
+        _delta(record),
+        embedding_provider=embedding_provider,
+        embedding_cache=embedding_cache,
+    )
+    return features.view_semantic_drift
+
+
+def full_schema_semantic_alert(
+    record: PairDatasetRecord,
+    *,
+    embedding_provider: EmbeddingProvider,
+    embedding_cache: EmbeddingCache | None = None,
+    threshold: float = 0.20,
+) -> bool:
+    """Cosine baseline that embeds only the full canonical schema view."""
+
+    scores = semantic_drift_scores(
+        record,
+        embedding_provider=embedding_provider,
+        embedding_cache=embedding_cache,
+    )
+    return scores.get("full_schema", 0.0) >= threshold
+
+
 def field_semantic_alert(
     record: PairDatasetRecord,
     *,
@@ -91,12 +124,14 @@ def field_semantic_alert(
     embedding_cache: EmbeddingCache | None = None,
     threshold: float = 0.20,
 ) -> bool:
-    features = extract_pair_features(
-        _delta(record),
+    """Field-aware cosine baseline that alerts when any schema view crosses threshold."""
+
+    scores = semantic_drift_scores(
+        record,
         embedding_provider=embedding_provider,
         embedding_cache=embedding_cache,
     )
-    return max(features.view_semantic_drift.values(), default=0.0) >= threshold
+    return max(scores.values(), default=0.0) >= threshold
 
 
 def evaluate_binary_baseline(
@@ -140,6 +175,48 @@ def evaluate_standard_baselines(
             "rule_risk",
             records,
             lambda record: rule_alert(record, risk_threshold=rule_threshold),
+        ),
+    ]
+
+
+def evaluate_semantic_baselines(
+    records: Iterable[PairDatasetRecord],
+    *,
+    embedding_provider: EmbeddingProvider,
+    embedding_cache: EmbeddingCache | None = None,
+    full_schema_threshold: float = 0.20,
+    field_threshold: float = 0.20,
+    positive_labels: tuple[ChangeClass, ...] = (
+        ChangeClass.CAPABILITY_EXPANSION,
+        ChangeClass.MALICIOUS_DRIFT,
+    ),
+) -> list[BaselineResult]:
+    """Compare full-schema-only and field-aware cosine baselines on identical records."""
+
+    records = list(records)
+    cache = embedding_cache or EmbeddingCache()
+    return [
+        evaluate_binary_baseline(
+            "full_schema_cosine",
+            records,
+            lambda record: full_schema_semantic_alert(
+                record,
+                embedding_provider=embedding_provider,
+                embedding_cache=cache,
+                threshold=full_schema_threshold,
+            ),
+            positive_labels=positive_labels,
+        ),
+        evaluate_binary_baseline(
+            "field_aware_cosine",
+            records,
+            lambda record: field_semantic_alert(
+                record,
+                embedding_provider=embedding_provider,
+                embedding_cache=cache,
+                threshold=field_threshold,
+            ),
+            positive_labels=positive_labels,
         ),
     ]
 
