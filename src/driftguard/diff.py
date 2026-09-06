@@ -116,8 +116,8 @@ def _tool_refs(value: Any) -> set[str]:
     refs: set[str] = set()
     for text in _iter_strings(value):
         for match in _TOOL_REF_RE.findall(text):
-            candidate = match.lower()
-            if candidate not in _TOOL_REF_STOPWORDS:
+            candidate = match.lower().rstrip(".,;:!?")
+            if candidate and candidate not in _TOOL_REF_STOPWORDS:
                 refs.add(candidate)
     return refs
 
