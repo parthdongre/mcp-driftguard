@@ -7,8 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from driftguard.evaluation import binary_metrics
+from driftguard.hybrid_detector import HybridPoisoningDetector
 from driftguard.models import ChangeClass
-from driftguard.poisoning import PoisoningDetector
 from driftguard.poisoning_benchmark import build_development_poisoning_benchmark
 from driftguard.poisoning_challenges import build_structural_challenge_records
 from driftguard.splits import (
@@ -89,7 +89,7 @@ def main() -> None:
     )
     split = apply_split_manifest(records, manifest)
 
-    detector = PoisoningDetector().fit(split.train)
+    detector = HybridPoisoningDetector().fit(split.train)
     validation_probabilities = detector.predict_proba(split.validation)
     threshold_selection = tune_margin_threshold(
         validation_probabilities,
@@ -106,6 +106,7 @@ def main() -> None:
     result = {
         "benchmark_kind": "controlled_development_benchmark",
         "benchmark_protocol": "fresh_structural_holdout_v1",
+        "detector": "hybrid_ml_plus_structural_invariants",
         "paper_claim_eligible": False,
         "warning": (
             "Synthetic/development result only. Do not report this accuracy as real-world MCP "
