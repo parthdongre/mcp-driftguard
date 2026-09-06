@@ -21,7 +21,7 @@ The current paper direction is:
 
 > **DriftGuard: Capability-Aware Temporal Detection of Low-and-Slow Rug Pulls in Model Context Protocol Tool Definitions**
 
-See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md) for the current literature-backed novelty analysis, research questions, evaluation design, and publication plan.
+See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md) for the literature-backed novelty analysis and [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the research engineering roadmap.
 
 ## Core task
 
@@ -36,12 +36,31 @@ Given a trusted schema `T_old` and a newly observed schema `T_new`, DriftGuard c
 
 A sequential detector then reasons over `T0 -> T1 -> ... -> Tn` so an attacker cannot evade review simply by spreading a dangerous change across many individually small updates.
 
-## Proposed research contributions
+## Research contributions under evaluation
 
 1. **Capability-aware version-pair representation** combining field-level semantic drift with typed schema deltas and inferred effective-capability changes.
 2. **Consent-aware change classification** that explicitly separates benign maintenance from legitimate but security-significant capability expansion.
 3. **Sequential drift budget / change-point detection** for low-and-slow multi-version rug pulls.
 4. **Temporal MCP Tool-Evolution Benchmark** built from real benign version histories plus schema-valid malicious evolution trajectories with repository-disjoint and attack-family-held-out evaluation.
+
+These remain hypotheses until validated experimentally and re-checked against the literature before publication.
+
+## Implemented research core
+
+The first research-engineering milestone is now implemented:
+
+- deterministic canonical tool snapshots and SHA-256 identity
+- typed structural old/new deltas
+- five field-aware views: purpose, input contract, output contract, capability/safety metadata, and full schema
+- interpretable effective-capability profiles across operation/resource/effect/scope/destination/sensitivity dimensions
+- capability-delta extraction and a transparent capability-escalation feature
+- stable pairwise numeric feature extraction for later sklearn/XGBoost models
+- a stateful approved-baseline lineage monitor
+- a deterministic CUSUM-style low-and-slow baseline plus approved-to-current cumulative risk
+- dataset schemas for pairwise and trajectory experiments with repository-level leakage grouping
+- unit tests covering structural, capability, temporal, and dataset behavior
+
+The current temporal risk function is intentionally a transparent baseline. It is **not** the final learned detector.
 
 ## Planned pipeline
 
@@ -129,7 +148,7 @@ The paper will compare DriftGuard against progressively stronger baselines rathe
 
 ```text
 mcp-driftguard/
-├── src/driftguard/       # core Python package
+├── src/driftguard/       # research core package
 ├── tests/                # unit/integration tests
 ├── examples/             # benign and malicious schema evolution demos
 ├── data/                 # private dataset manifests / generated samples
@@ -139,9 +158,19 @@ mcp-driftguard/
 └── pyproject.toml
 ```
 
+## Immediate next milestones
+
+1. embedding provider abstraction + field-aware sentence-transformer features
+2. private data ingestion and labeling pipeline for real MCP repository histories
+3. hash / lexical / cosine / regex baseline experiment harness
+4. first C0-C3 logistic-regression and XGBoost pair classifiers
+5. probability calibration and consent-policy thresholds
+6. controlled low-and-slow trajectory generator
+7. comparison of drift budget, multivariate CUSUM, and Bayesian change-point detection
+
 ## Research status
 
-Early implementation and dataset-design phase. Novelty claims are research hypotheses until validated experimentally and re-checked against the literature immediately before submission.
+**Phase 1: deterministic research core implemented.** Dataset acquisition and learned pair-classifier work are next.
 
 ## License and confidentiality
 
