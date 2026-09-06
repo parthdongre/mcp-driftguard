@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from driftguard.bounded_drift import audit_bounded_drift_trajectory
+from driftguard.bounded_drift import analyze_bounded_trajectory
 from driftguard.models import ChangeClass
 from driftguard.trajectory_benchmark import (
     TemporalStrategy,
@@ -33,7 +33,7 @@ def main() -> None:
     for trajectory in validation + test:
         if trajectory.final_label is not ChangeClass.MALICIOUS_DRIFT:
             continue
-        report = audit_bounded_drift_trajectory(trajectory)
+        report = analyze_bounded_trajectory(trajectory)
         bounded_audits.append(asdict(report))
 
     payload = {
