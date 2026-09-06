@@ -71,12 +71,12 @@
       "clone_url": "https://github.com/qdrant/mcp-server-qdrant.git",
       "primary_language": "python",
       "priority": "A",
-      "registration_pattern": "self.tool(function, ...) registration",
+      "registration_pattern": "self.tool(function, ...) registration with wrapped or partially bound callables",
       "extractor_readiness": "adapter_required",
       "verified_paths": [
         "src/mcp_server_qdrant/mcp_server.py"
       ],
-      "notes": "Important abstraction pattern not handled by the first decorator-only Python extractor."
+      "notes": "Important abstraction pattern. Effective signatures can depend on static wrapper/partial configuration, so the decorator-only extractor must not pretend complete coverage."
     },
     {
       "repository_id": "dbt-labs/dbt-mcp",
@@ -139,20 +139,26 @@
       "clone_url": "https://github.com/haris-musa/excel-mcp-server.git",
       "primary_language": "python",
       "priority": "B",
-      "registration_pattern": "discovery required",
-      "extractor_readiness": "discovery_required",
-      "verified_paths": [],
-      "notes": "Smaller independent server useful for balancing large vendor repositories."
+      "registration_pattern": "direct @mcp.tool decorators",
+      "extractor_readiness": "ready",
+      "verified_paths": [
+        "src/excel_mcp/server.py"
+      ],
+      "notes": "Direct decorated tools are statically mineable. Dynamic ToolAnnotations constructor values may be omitted by the conservative extractor while names, descriptions and function signatures remain recoverable."
     },
     {
       "repository_id": "makeplane/plane-mcp-server",
       "clone_url": "https://github.com/makeplane/plane-mcp-server.git",
       "primary_language": "python",
       "priority": "B",
-      "registration_pattern": "discovery required",
-      "extractor_readiness": "discovery_required",
-      "verified_paths": [],
-      "notes": "Project-management domain target for broader semantic coverage."
+      "registration_pattern": "@mcp.tool decorators with module constants and helper-built descriptions",
+      "extractor_readiness": "partial",
+      "verified_paths": [
+        "plane_mcp/tools/workspace.py",
+        "plane_mcp/tools/get_pql_reference.py",
+        "plane_mcp/tools/workitem_activity.py"
+      ],
+      "notes": "The static binding resolver recovers literal module-level tool names such as NAME. Helper-built descriptions and annotations remain intentionally partial and must be reported as extraction coverage limits."
     }
   ]
 }
