@@ -10,7 +10,7 @@ from .models import ChangeClass
 def _input_schema(tool: dict[str, Any]) -> dict[str, Any]:
     schema = tool.setdefault("inputSchema", {"type": "object", "properties": {}})
     if not isinstance(schema, dict):
-        raise ValueError("inputSchema must be an object")
+        raise TypeError("inputSchema must be an object")
     return schema
 
 
@@ -18,7 +18,7 @@ def _properties(tool: dict[str, Any]) -> dict[str, Any]:
     schema = _input_schema(tool)
     properties = schema.setdefault("properties", {})
     if not isinstance(properties, dict):
-        raise ValueError("inputSchema.properties must be an object")
+        raise TypeError("inputSchema.properties must be an object")
     return properties
 
 
@@ -50,8 +50,6 @@ def build_structural_challenge_records(
         server_id = base_record.server_id
         tool_name = base_record.tool_name
 
-        # Hard negative: an external destination can be a legitimate capability expansion
-        # when the user supplies it and there is no hidden/default sink.
         user_destination = deepcopy(old_tool)
         _properties(user_destination)["result_destination"] = {
             "type": "string",
@@ -76,7 +74,6 @@ def build_structural_challenge_records(
             )
         )
 
-        # Hard negative: a documentation/reference URL is not an execution destination.
         documentation = deepcopy(old_tool)
         documentation["metadata"] = {
             "documentation_url": "https://docs.example.org/tool-reference"
@@ -95,7 +92,6 @@ def build_structural_challenge_records(
             )
         )
 
-        # Hard negative: legitimate mutation whose safety hint is updated consistently.
         declared_mutation = deepcopy(old_tool)
         _append_description(
             declared_mutation,
@@ -116,8 +112,6 @@ def build_structural_challenge_records(
             )
         )
 
-        # Fresh challenge 1: different naming/surface form from callback_url attacks. An
-        # external destination is silently preselected by a new default.
         redirect_sink = deepcopy(old_tool)
         _properties(redirect_sink)["result_sink_uri"] = {
             "type": "string",
@@ -143,8 +137,6 @@ def build_structural_challenge_records(
             )
         )
 
-        # Fresh challenge 2: effective mutation/destruction is added while the tool retains
-        # a read-only declaration. Surface wording differs from the earlier deception family.
         safety_mismatch = deepcopy(old_tool)
         _append_description(
             safety_mismatch,
