@@ -64,7 +64,9 @@ class PolicySelection:
     feasible: bool
 
 
-def _first_action(trace: SequenceRiskTrace, thresholds: ConsentPolicyThresholds) -> tuple[int, PolicyAction] | None:
+def _first_action(
+    trace: SequenceRiskTrace, thresholds: ConsentPolicyThresholds
+) -> tuple[int, PolicyAction] | None:
     for index, (malicious, capability) in enumerate(
         zip(trace.malicious_scores, trace.capability_scores, strict=True)
     ):
@@ -131,6 +133,17 @@ def evaluate_consent_policy(
     )
 
 
+def _policy_objective(metrics: ConsentPolicyMetrics, *, delay_weight: float) -> float:
+    delay = metrics.mean_detection_delay or 0.0
+    return (
+        metrics.benign_reconsent_rate
+        + 2.0 * metrics.benign_block_rate
+        + delay_weight * delay
+        + 0.10 * (1.0 - metrics.c2_reconsent_rate)
+        + 5.0 * (1.0 - metrics.malicious_detection_rate)
+    )
+
+
 def select_consent_policy(
     validation_traces: list[SequenceRiskTrace],
     *,
@@ -161,19 +174,11 @@ def select_consent_policy(
                 and metrics.benign_block_rate <= max_benign_block_rate
                 and metrics.benign_reconsent_rate <= max_benign_reconsent_rate
             )
-            delay = metrics.mean_detection_delay or 0.0
-            objective = (
-                metrics.benign_reconsent_rate
-                + 2.0 * metrics.benign_block_rate
-                + delay_weight * delay
-                + 0.10 * (1.0 - metrics.c2_reconsent_rate)
-                + 5.0 * (1.0 - metrics.malicious_detection_rate)
-            )
             candidates.append(
                 PolicySelection(
                     thresholds=thresholds,
                     metrics=metrics,
-                    objective=round(objective, 8),
+                    objective=round(_policy_objective(metrics, delay_weight=delay_weight), 8),
                     feasible=feasible,
                 )
             )
@@ -181,3 +186,72 @@ def select_consent_policy(
     feasible_candidates = [candidate for candidate in candidates if candidate.feasible]
     pool = feasible_candidates or candidates
     return min(pool, key=lambda candidate: (candidate.objective, candidate.thresholds.block_threshold))
+
+
+def consent_security_pareto_frontier(
+    traces: list[SequenceRiskTrace],
+    *,
+    reconsent_grid: tuple[float, ...] = (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
+    block_grid: tuple[float, ...] = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+) -> list[PolicySelection]:
+    """Return non-dominated security/usability policy operating points.
+
+    A point is dominated when another policy has at least as much malicious detection and
+    C2 re-consent, no more benign intervention, and no more detection delay, with at least
+    one strict improvement. The final paper can plot this frontier against simple policies
+    such as reapprove-on-any-change rather than cherry-picking one threshold pair.
+    """
+
+    if not traces:
+        raise ValueError("At least one trace is required")
+
+    candidates: list[PolicySelection] = []
+    for reconsent in reconsent_grid:
+        for block in block_grid:
+            thresholds = ConsentPolicyThresholds(reconsent, block)
+            metrics = evaluate_consent_policy(traces, thresholds)
+            candidates.append(
+                PolicySelection(
+                    thresholds=thresholds,
+                    metrics=metrics,
+                    objective=round(_policy_objective(metrics, delay_weight=0.02), 8),
+                    feasible=True,
+                )
+            )
+
+    def dominates(left: PolicySelection, right: PolicySelection) -> bool:
+        left_delay = left.metrics.mean_detection_delay or 0.0
+        right_delay = right.metrics.mean_detection_delay or 0.0
+        left_benign = left.metrics.benign_reconsent_rate + left.metrics.benign_block_rate
+        right_benign = right.metrics.benign_reconsent_rate + right.metrics.benign_block_rate
+        no_worse = (
+            left.metrics.malicious_detection_rate >= right.metrics.malicious_detection_rate
+            and left.metrics.c2_reconsent_rate >= right.metrics.c2_reconsent_rate
+            and left_benign <= right_benign
+            and left_delay <= right_delay
+        )
+        strictly_better = (
+            left.metrics.malicious_detection_rate > right.metrics.malicious_detection_rate
+            or left.metrics.c2_reconsent_rate > right.metrics.c2_reconsent_rate
+            or left_benign < right_benign
+            or left_delay < right_delay
+        )
+        return no_worse and strictly_better
+
+    frontier = [
+        candidate
+        for candidate in candidates
+        if not any(
+            dominates(other, candidate)
+            for other in candidates
+            if other.thresholds != candidate.thresholds
+        )
+    ]
+    return sorted(
+        frontier,
+        key=lambda item: (
+            -item.metrics.malicious_detection_rate,
+            item.metrics.benign_reconsent_rate + item.metrics.benign_block_rate,
+            item.thresholds.block_threshold,
+        ),
+    )
