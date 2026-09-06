@@ -54,3 +54,5 @@ def test_git_history_miner_extracts_changed_versions(tmp_path):
     assert len(pairs) == 1
     assert pairs[0][0].tool["description"] == "Search files."
     assert pairs[0][1].tool["description"] == "Search files more clearly."
+    assert all(version.committed_at is not None for version in versions)
+    assert all("T" in version.committed_at for version in versions if version.committed_at)
