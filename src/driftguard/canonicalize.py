@@ -9,29 +9,50 @@ from typing import Any
 from .models import ToolSnapshot
 
 _WHITESPACE = re.compile(r"\s+")
+_TEXT_FIELDS = {"description", "title"}
+_SET_LIKE_ARRAY_FIELDS = {"required", "enum"}
 
 
 def _normalize_text(value: str) -> str:
-    """Collapse insignificant whitespace without rewriting semantic content."""
+    """Collapse presentation-only whitespace in human-facing schema text."""
 
     return _WHITESPACE.sub(" ", value).strip()
 
 
-def _canonicalize(value: Any) -> Any:
-    """Recursively create a deterministic representation of JSON-compatible data."""
+def _stable_sort_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _canonicalize(value: Any, *, field_name: str | None = None) -> Any:
+    """Create a deterministic representation without changing schema semantics.
+
+    Only human-facing ``description`` and ``title`` strings receive whitespace
+    normalization. Literal-bearing values such as defaults, regex patterns, enum
+    members, examples, paths, and tool names are preserved byte-for-byte because
+    whitespace can be meaningful there.
+
+    JSON Schema ``required`` and ``enum`` arrays are set-like for validation, so their
+    ordering is normalized after recursively canonicalizing their members. Other arrays
+    preserve order because ordering can affect meaning or downstream presentation.
+    """
 
     if isinstance(value, dict):
-        return {key: _canonicalize(value[key]) for key in sorted(value)}
+        return {
+            key: _canonicalize(value[key], field_name=key)
+            for key in sorted(value)
+        }
     if isinstance(value, list):
-        # Array order can be semantically relevant in JSON Schema, so preserve it.
-        return [_canonicalize(item) for item in value]
-    if isinstance(value, str):
+        items = [_canonicalize(item) for item in value]
+        if field_name in _SET_LIKE_ARRAY_FIELDS:
+            return sorted(items, key=_stable_sort_key)
+        return items
+    if isinstance(value, str) and field_name in _TEXT_FIELDS:
         return _normalize_text(value)
     return value
 
 
 def canonicalize_tool(tool: dict[str, Any]) -> dict[str, Any]:
-    """Return a canonical copy while retaining security-relevant fields and values."""
+    """Return a canonical copy while retaining security-relevant literal values."""
 
     return _canonicalize(deepcopy(tool))
 
