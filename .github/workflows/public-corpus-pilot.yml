@@ -2,6 +2,11 @@ name: Public Corpus Pilot
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/public-corpus-pilot.yml
 
 permissions:
   contents: read
