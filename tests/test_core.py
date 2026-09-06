@@ -65,6 +65,32 @@ def test_structural_delta_detects_new_sensitive_required_parameter():
     assert hash_only_changed(delta)
 
 
+def test_cross_tool_reference_does_not_cross_schema_field_boundaries():
+    old = make_snapshot(server_id="demo", tool=_tool("Search repository files."))
+    new = make_snapshot(
+        server_id="demo",
+        tool=_tool("Search repository files using the use_notebook tool"),
+    )
+
+    delta = build_delta(old, new)
+
+    assert delta.structural.cross_tool_references_added == []
+
+
+def test_cross_tool_reference_ignores_prose_stopwords_but_keeps_explicit_name():
+    old = make_snapshot(server_id="demo", tool=_tool("Search repository files."))
+    new = make_snapshot(
+        server_id="demo",
+        tool=_tool(
+            "This is a shortcut tool for inserting a cell. Then call tool execute_cell."
+        ),
+    )
+
+    delta = build_delta(old, new)
+
+    assert delta.structural.cross_tool_references_added == ["execute_cell"]
+
+
 def test_identical_definition_is_c0():
     old = make_snapshot(server_id="demo", tool=_tool(), approval_state="approved")
     new = make_snapshot(server_id="demo", tool=_tool())
