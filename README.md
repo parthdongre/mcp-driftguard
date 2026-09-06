@@ -1,23 +1,31 @@
 # MCP DriftGuard
 
-Version-aware semantic drift detection for MCP tool poisoning, rug pulls, capability escalation, and schema evolution.
+**Proprietary research project. Not open source.**
 
-## Why this project exists
+Capability-aware temporal semantic drift detection for MCP tool poisoning, capability escalation, and low-and-slow rug pulls.
 
-Model Context Protocol (MCP) clients discover tools through tool definitions containing natural-language descriptions and structured schemas. Those definitions become part of the model's reasoning context. A tool may therefore be safe when first approved and later change in a security-significant way.
+## Research thesis
 
-Traditional integrity checks can tell that a definition changed, but not whether the change is:
+Model Context Protocol (MCP) clients discover tools through tool definitions containing natural-language descriptions and structured schemas. Those definitions become part of the model's reasoning context and can evolve after a user or host has already approved the tool.
+
+Traditional integrity checks can tell that a definition changed, but they do not tell whether the update is:
 
 - semantically equivalent,
 - benign maintenance,
 - a legitimate capability expansion that should require re-consent, or
 - malicious tool poisoning / rug-pull behavior.
 
-MCP DriftGuard treats **the change between a previously trusted tool definition and its current definition as the primary security object**.
+MCP DriftGuard treats **the evolution of an approved tool definition across versions as the primary security object**.
 
-## Core research task
+The current paper direction is:
 
-Given a trusted tool schema `T_old` and a newly observed schema `T_new`, DriftGuard computes field-aware semantic and structural deltas and predicts one of four operational classes:
+> **DriftGuard: Capability-Aware Temporal Detection of Low-and-Slow Rug Pulls in Model Context Protocol Tool Definitions**
+
+See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md) for the current literature-backed novelty analysis, research questions, evaluation design, and publication plan.
+
+## Core task
+
+Given a trusted schema `T_old` and a newly observed schema `T_new`, DriftGuard computes field-aware semantic, structural, and effective-capability deltas and predicts one of four operational classes:
 
 | Class | Meaning | Default action |
 |---|---|---|
@@ -26,45 +34,74 @@ Given a trusted tool schema `T_old` and a newly observed schema `T_new`, DriftGu
 | `C2` | Legitimate capability expansion | Require re-consent |
 | `C3` | Malicious / suspicious semantic drift | Quarantine / block |
 
-## Planned detection pipeline
+A sequential detector then reasons over `T0 -> T1 -> ... -> Tn` so an attacker cannot evade review simply by spreading a dangerous change across many individually small updates.
+
+## Proposed research contributions
+
+1. **Capability-aware version-pair representation** combining field-level semantic drift with typed schema deltas and inferred effective-capability changes.
+2. **Consent-aware change classification** that explicitly separates benign maintenance from legitimate but security-significant capability expansion.
+3. **Sequential drift budget / change-point detection** for low-and-slow multi-version rug pulls.
+4. **Temporal MCP Tool-Evolution Benchmark** built from real benign version histories plus schema-valid malicious evolution trajectories with repository-disjoint and attack-family-held-out evaluation.
+
+## Planned pipeline
 
 ```text
-MCP Server
-   |
-   v
-Discovery Interceptor (tools/list)
-   |
-   v
-Canonicalizer + Field Splitter
-   |-----------------------> Trusted Snapshot Store
-   v
-Pairwise Delta Engine
-   |-- semantic distances
-   |-- typed structural deltas
-   |-- sensitive capability signals
-   |-- instruction / override signals
-   v
-Drift Classifier
-   |
-   v
-Calibrated Risk Score (0-100)
-   |
-   v
-Policy Layer (allow / log / re-consent / quarantine)
+MCP tools/list or tools/list_changed
+              |
+              v
+     Raw + canonical snapshot
+              |
+       version lineage store
+              |
+              v
+   Field-aware delta extraction
+      /                  \
+semantic views      structural deltas
+      \                  /
+       capability-delta encoder
+              |
+              v
+     Pairwise change classifier
+      C0 / C1 / C2 / C3
+              |
+      calibrated probabilities
+              |
+      +--------------------+
+      | sequential history |
+      v                    |
+ drift budget / CUSUM / change point
+              |
+              v
+      policy + re-consent gate
 ```
 
-## Features we intend to model
+## Baselines
 
-### Semantic change
+The paper will compare DriftGuard against progressively stronger baselines rather than only showing raw model accuracy:
 
-- purpose / description drift
+1. hash-only change detection
+2. textual diff / edit-distance rules
+3. regex / risk dictionary
+4. full-schema cosine threshold
+5. field-aware cosine threshold
+6. single-snapshot semantic classifier
+7. LLM-as-judge on the current schema
+8. LLM-as-judge on the old/new pair
+9. proposed capability-aware pair classifier
+10. proposed pair classifier + sequential drift detector
+
+## Features under study
+
+### Semantic views
+
+- tool purpose / description drift
 - parameter-description drift
 - input contract drift
 - output contract drift
 - capability / annotation drift
 - full canonical schema drift
 
-### Structural change
+### Structural and capability deltas
 
 - parameters added, removed, or renamed
 - required-set changes
@@ -74,57 +111,42 @@ Policy Layer (allow / log / re-consent / quarantine)
 - output-schema changes
 - safety annotation changes
 - newly introduced URLs / domains
-- newly introduced sensitive-capability terms
-- cross-tool references
-- imperative / instruction-like language
+- sensitive-resource and action changes
+- cross-tool references / tool-selection manipulation
+- imperative / override language
+- inferred effective capability changes such as read/write/delete/send/execute across local or external scopes
 
-## Model progression
+## Main research questions
 
-We will compare progressively stronger baselines:
+1. Does approved-vs-current classification reduce benign-update false positives compared with exact-change, cosine-only, single-snapshot, and LLM-judge baselines?
+2. Does a capability-aware representation improve detection beyond embeddings-only and structure-only features?
+3. Can legitimate capability expansion be separated reliably from malicious permission escalation?
+4. Can sequential detection catch low-and-slow tool-definition rug pulls where every local update remains below a pairwise alert threshold?
+5. How well does the detector generalize to unseen repositories and unseen poisoning families?
+6. What latency and false re-consent rate are achievable before tool invocation?
 
-1. hash-only change detection
-2. regex / risk-dictionary detector
-3. cosine-distance threshold
-4. single-snapshot semantic classifier
-5. **pairwise classifier** over semantic + structural deltas
-6. optional Siamese / pair encoder
-
-The initial proposed model is a lightweight pairwise classifier over field-level embedding distances and structural delta features. This keeps inference fast and model/provider agnostic.
-
-## Additional novelty we plan to explore
-
-- **Drift budget / trust decay:** detect slow multi-version rug pulls where every individual update appears small.
-- **Counterfactual explanations:** identify the minimum changed fields responsible for a risk decision.
-- **Cross-tool shadowing graph:** detect new influence or redirection between tools.
-- **Uncertainty-aware abstention:** escalate out-of-distribution or low-confidence changes for review.
-- **Adversarial paraphrase hardening:** test against stealthy wording changes and unseen attack families.
-
-## Repository roadmap
+## Repository structure
 
 ```text
 mcp-driftguard/
 ├── src/driftguard/       # core Python package
 ├── tests/                # unit/integration tests
-├── examples/             # benign and malicious schema-pair demos
-├── data/                 # dataset manifests / generated samples
+├── examples/             # benign and malicious schema evolution demos
+├── data/                 # private dataset manifests / generated samples
 ├── experiments/          # training and evaluation entry points
-├── policies/             # OPA/Rego policy examples
-├── docs/                 # threat model, architecture, labeling guide
+├── policies/             # policy / re-consent prototypes
+├── docs/                 # threat model, research positioning, labeling guide
 └── pyproject.toml
 ```
 
-## Research questions
+## Research status
 
-1. Does pairwise schema-change classification reduce false positives compared with hash, regex, cosine-only, and single-snapshot classifiers?
-2. Which MCP tool-definition fields contribute most to malicious drift detection?
-3. How well does the detector generalize to unseen / paraphrased poisoning attacks?
-4. Can legitimate capability expansion be separated from malicious permission escalation?
-5. What latency / accuracy trade-off is achievable before tool invocation?
+Early implementation and dataset-design phase. Novelty claims are research hypotheses until validated experimentally and re-checked against the literature immediately before submission.
 
-## Status
+## License and confidentiality
 
-Project scaffold in progress.
+Copyright (c) 2026 Parth Dongre. All rights reserved.
 
-## License
+This repository is **proprietary research software** and is **not an open-source project**. Access, redistribution, derivative works, public disclosure, and commercial use are restricted by the repository's proprietary research license. See [`LICENSE`](LICENSE).
 
-MIT
+Earlier copies that were lawfully obtained while an earlier revision was distributed under different terms remain governed by the terms that applied to those copies.
