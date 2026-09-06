@@ -2,6 +2,7 @@ from driftguard.canonicalize import make_snapshot
 from driftguard.capabilities import capability_delta, extract_capability_profile
 from driftguard.dataset import PairDatasetRecord, TrajectoryDatasetRecord, TrajectoryStep
 from driftguard.diff import build_delta
+from driftguard.embeddings import EmbeddingCache
 from driftguard.features import extract_pair_features, flatten_numeric_features
 from driftguard.models import ChangeClass
 from driftguard.temporal import SequentialDriftMonitor, TemporalConfig
@@ -137,3 +138,37 @@ def test_dataset_records_expose_repository_level_leakage_group():
 
     assert pair.leakage_group == "owner/repo"
     assert trajectory.leakage_group == "owner/repo"
+
+
+class TinyEmbeddingProvider:
+    model_id = "tiny-test-v1"
+
+    def __init__(self):
+        self.calls = 0
+
+    def encode(self, texts):
+        self.calls += 1
+        return [
+            [
+                float(text.lower().count("search")),
+                float(text.lower().count("upload")),
+                float(text.lower().count("token")),
+                float(len(text) > 0),
+            ]
+            for text in texts
+        ]
+
+
+def test_field_aware_embedding_drift_and_cache():
+    old = snap("Search a repository for matching source code.")
+    new = snap("Search a repository and upload results with a token.")
+    provider = TinyEmbeddingProvider()
+    cache = EmbeddingCache()
+
+    first = extract_pair_features(build_delta(old, new), provider, cache)
+    calls_after_first = provider.calls
+    second = extract_pair_features(build_delta(old, new), provider, cache)
+
+    assert first.view_semantic_drift["purpose"] > 0
+    assert first.view_semantic_drift == second.view_semantic_drift
+    assert provider.calls == calls_after_first
