@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from driftguard.corpus import historical_versions_to_candidates
-from driftguard.corpus_discovery import discover_mcp_sources, extractable_paths_by_kind
+from driftguard.corpus_discovery import SourceKind, discover_mcp_sources, extractable_paths_by_kind
 from driftguard.dataset import AnnotationCandidate, write_jsonl
 from driftguard.history import (
     GitManifestHistoryMiner,
@@ -19,6 +19,8 @@ from driftguard.source_extractors import (
     PythonDecoratorToolExtractor,
     TypeScriptRegisterToolExtractor,
 )
+
+_TS_SUFFIXES = {".ts", ".tsx", ".js", ".mjs", ".cjs"}
 
 
 def _run(command: list[str], *, cwd: Path | None = None) -> None:
@@ -57,12 +59,50 @@ def _ensure_repository(
     return target
 
 
+def _kind_for_path(path: str) -> SourceKind | None:
+    suffix = Path(path).suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix == ".py":
+        return "python"
+    if suffix in _TS_SUFFIXES:
+        return "typescript"
+    return None
+
+
+def _paths_for_mining(
+    entry: dict[str, Any],
+    discoveries: list[dict[str, Any]],
+) -> tuple[dict[SourceKind, list[str]], str]:
+    verified = entry.get("verified_paths")
+    if isinstance(verified, list) and verified:
+        paths: dict[SourceKind, list[str]] = {
+            "json": [],
+            "python": [],
+            "typescript": [],
+        }
+        for raw_path in verified:
+            if not isinstance(raw_path, str):
+                continue
+            kind = _kind_for_path(raw_path)
+            if kind is not None:
+                paths[kind].append(raw_path)
+        return paths, "verified_manifest_paths"
+
+    from driftguard.corpus_discovery import SourceDiscovery
+
+    discovery_objects = [SourceDiscovery(**item) for item in discoveries]
+    return extractable_paths_by_kind(discovery_objects), "auto_discovery"
+
+
 def _mine_repository(
     repository_path: Path,
     repository_id: str,
-) -> tuple[list[HistoricalToolVersion], list[dict[str, Any]]]:
-    discoveries = discover_mcp_sources(repository_path)
-    paths = extractable_paths_by_kind(discoveries)
+    entry: dict[str, Any],
+) -> tuple[list[HistoricalToolVersion], list[dict[str, Any]], dict[SourceKind, list[str]], str]:
+    discovery_objects = discover_mcp_sources(repository_path)
+    discoveries = [asdict(item) for item in discovery_objects]
+    paths, selection_mode = _paths_for_mining(entry, discoveries)
     versions: list[HistoricalToolVersion] = []
 
     if paths["json"]:
@@ -92,7 +132,7 @@ def _mine_repository(
             ).mine()
         )
 
-    return versions, [asdict(item) for item in discoveries]
+    return versions, discoveries, paths, selection_mode
 
 
 def _load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -136,7 +176,7 @@ def main() -> None:
         "--only",
         action="append",
         default=[],
-        help="Repository id to process; repeat to select multiple repositories",
+        help="Repository id to process; repeat for multiple repositories",
     )
     parser.add_argument("--max-repos", type=int, default=None)
     parser.add_argument("--no-network", action="store_true")
@@ -163,7 +203,11 @@ def main() -> None:
             no_network=args.no_network,
             refresh=args.refresh,
         )
-        versions, discoveries = _mine_repository(repo_path, repository_id)
+        versions, discoveries, mined_paths, selection_mode = _mine_repository(
+            repo_path,
+            repository_id,
+            entry,
+        )
         candidates = historical_versions_to_candidates(versions)
         all_candidates.extend(candidates)
 
@@ -181,6 +225,8 @@ def main() -> None:
                 "repository_id": repository_id,
                 "priority": entry.get("priority"),
                 "declared_extractor_readiness": entry.get("extractor_readiness"),
+                "path_selection_mode": selection_mode,
+                "mined_paths": mined_paths,
                 "discovered_source_files": len(discoveries),
                 "extractable_source_files": len(extractable),
                 "unsupported_pattern_files": len(unsupported),
