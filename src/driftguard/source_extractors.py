@@ -19,10 +19,67 @@ def _literal(node: ast.AST | None) -> Any:
         return None
 
 
+def _static_value(node: ast.AST | None, bindings: dict[str, Any]) -> Any:
+    if node is None:
+        return None
+    if isinstance(node, ast.Name):
+        return bindings.get(node.id)
+    value = _literal(node)
+    if value is not None:
+        return value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _static_value(node.left, bindings)
+        right = _static_value(node.right, bindings)
+        if isinstance(left, str) and isinstance(right, str):
+            return left + right
+    return None
+
+
+def _literal_bindings(tree: ast.Module) -> dict[str, Any]:
+    bindings: dict[str, Any] = {}
+    for statement in tree.body:
+        name: str | None = None
+        value_node: ast.AST | None = None
+        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+            target = statement.targets[0]
+            if isinstance(target, ast.Name):
+                name = target.id
+                value_node = statement.value
+        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+            name = statement.target.id
+            value_node = statement.value
+        if name is None or value_node is None:
+            continue
+        value = _static_value(value_node, bindings)
+        if value is not None:
+            bindings[name] = value
+    return bindings
+
+
 def _annotation_name(node: ast.AST | None) -> str:
     if node is None:
         return ""
     return ast.unparse(node)
+
+
+def _annotated_description(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Tuple):
+        return None
+    for metadata in node.elts[1:]:
+        if not isinstance(metadata, ast.Call):
+            continue
+        target = metadata.func
+        name = target.id if isinstance(target, ast.Name) else ""
+        if isinstance(target, ast.Attribute):
+            name = target.attr
+        if name != "Field":
+            continue
+        for keyword in metadata.keywords:
+            if keyword.arg == "description":
+                value = _literal(keyword.value)
+                if isinstance(value, str):
+                    return value
+    return None
 
 
 def _json_schema_for_annotation(node: ast.AST | None) -> dict[str, Any]:
@@ -49,9 +106,17 @@ def _json_schema_for_annotation(node: ast.AST | None) -> dict[str, Any]:
             }
         if base in {"dict", "Dict", "Mapping"}:
             return {"type": "object"}
-        if base in {"Optional"}:
+        if base == "Optional":
             return _json_schema_for_annotation(node.slice)
-        if base in {"Literal"}:
+        if base == "Annotated":
+            target = node.slice
+            first = target.elts[0] if isinstance(target, ast.Tuple) else target
+            schema = _json_schema_for_annotation(first)
+            description = _annotated_description(target)
+            if description:
+                schema["description"] = description
+            return schema
+        if base == "Literal":
             values: list[Any] = []
             target = node.slice
             elements = target.elts if isinstance(target, ast.Tuple) else [target]
@@ -81,7 +146,10 @@ def _json_schema_for_annotation(node: ast.AST | None) -> dict[str, Any]:
     return {}
 
 
-def _decorator_info(node: ast.AST) -> tuple[bool, dict[str, Any]]:
+def _decorator_info(
+    node: ast.AST,
+    bindings: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
     target = node.func if isinstance(node, ast.Call) else node
     is_tool = isinstance(target, ast.Attribute) and target.attr == "tool"
     if not is_tool:
@@ -91,7 +159,7 @@ def _decorator_info(node: ast.AST) -> tuple[bool, dict[str, Any]]:
     if isinstance(node, ast.Call):
         for keyword in node.keywords:
             if keyword.arg:
-                value = _literal(keyword.value)
+                value = _static_value(keyword.value, bindings)
                 if value is not None:
                     kwargs[keyword.arg] = value
     return True, kwargs
@@ -141,6 +209,7 @@ class PythonDecoratorToolExtractor:
 
     def extract(self, text: str) -> list[dict[str, Any]]:
         tree = ast.parse(text)
+        bindings = _literal_bindings(tree)
         tools: list[dict[str, Any]] = []
 
         for node in ast.walk(tree):
@@ -148,7 +217,7 @@ class PythonDecoratorToolExtractor:
                 continue
             decorator_kwargs: dict[str, Any] | None = None
             for decorator in node.decorator_list:
-                is_tool, kwargs = _decorator_info(decorator)
+                is_tool, kwargs = _decorator_info(decorator, bindings)
                 if is_tool:
                     decorator_kwargs = kwargs
                     break
