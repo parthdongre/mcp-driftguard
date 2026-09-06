@@ -38,6 +38,17 @@ def extract_pair_features(
     cap_delta = capability_delta(old_capability, new_capability)
     s = delta.structural
 
+    sensitive_terms_added = float(len(s.sensitive_terms_added))
+    urls_added = float(len(s.urls_added))
+    cross_tool_references_added = float(len(s.cross_tool_references_added))
+    imperative_terms_added = float(len(s.imperative_terms_added))
+    security_event_count = (
+        sensitive_terms_added
+        + urls_added
+        + cross_tool_references_added
+        + imperative_terms_added
+    )
+
     structural_counts = {
         "parameters_added": float(len(s.parameters_added)),
         "parameters_removed": float(len(s.parameters_removed)),
@@ -46,10 +57,11 @@ def extract_pair_features(
         "type_changes": float(len(s.type_changes)),
         "default_changes": float(len(s.default_changes)),
         "enum_changes": float(len(s.enum_changes)),
-        "sensitive_terms_added": float(len(s.sensitive_terms_added)),
-        "urls_added": float(len(s.urls_added)),
-        "cross_tool_references_added": float(len(s.cross_tool_references_added)),
-        "imperative_terms_added": float(len(s.imperative_terms_added)),
+        "sensitive_terms_added": sensitive_terms_added,
+        "urls_added": urls_added,
+        "cross_tool_references_added": cross_tool_references_added,
+        "imperative_terms_added": imperative_terms_added,
+        "security_event_count": security_event_count,
     }
 
     semantic_drift = (
