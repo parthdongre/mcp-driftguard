@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+from collections import defaultdict
 from pathlib import Path
 
 from driftguard.evaluation import binary_metrics
@@ -27,11 +29,32 @@ def _metrics(records, probabilities, threshold):
         payload["balanced_accuracy"] = round(
             float(balanced_accuracy_score(truth, predicted)), 6
         )
-        payload["roc_auc"] = round(float(roc_auc_score(truth, probabilities)), 6)
+        if len(set(truth)) > 1:
+            payload["roc_auc"] = round(float(roc_auc_score(truth, probabilities)), 6)
+        else:
+            payload["roc_auc"] = None
     except (ImportError, ValueError):
         payload["balanced_accuracy"] = None
         payload["roc_auc"] = None
     return payload
+
+
+def _family_stats(records, probabilities, threshold):
+    buckets = defaultdict(list)
+    for record, probability in zip(records, probabilities, strict=True):
+        family = record.attack_family or f"negative:{record.label.value}"
+        buckets[family].append(float(probability))
+
+    result = {}
+    for family, values in sorted(buckets.items()):
+        result[family] = {
+            "count": len(values),
+            "min_probability": round(min(values), 6),
+            "mean_probability": round(sum(values) / len(values), 6),
+            "max_probability": round(max(values), 6),
+            "alert_rate": round(sum(value >= threshold for value in values) / len(values), 6),
+        }
+    return result
 
 
 def main() -> None:
@@ -65,7 +88,8 @@ def main() -> None:
         positive_labels=(ChangeClass.MALICIOUS_DRIFT,),
         objective="f1",
     )
-    threshold = threshold_selection.threshold
+    tuned_threshold = threshold_selection.threshold
+    fixed_threshold = 0.5
 
     test_probabilities = detector.predict_proba(split.test)
     held_out = held_out_family_test_records(records, manifest)
@@ -86,13 +110,34 @@ def main() -> None:
         "test_records": len(split.test),
         "held_out_attack_families": manifest.held_out_attack_families,
         "held_out_family_test_records": len(held_out),
-        "validation_threshold": threshold,
-        "validation_metrics": threshold_selection.metrics.__dict__,
-        "test_metrics": _metrics(split.test, test_probabilities, threshold),
-        "held_out_family_metrics": (
-            _metrics(held_out, held_out_probabilities, threshold) if held_out else None
+        "validation_tuned_threshold": tuned_threshold,
+        "validation_tuned_metrics": threshold_selection.metrics.__dict__,
+        "validation_fixed_0_5_metrics": _metrics(
+            split.validation, validation_probabilities, fixed_threshold
+        ),
+        "test_tuned_metrics": _metrics(split.test, test_probabilities, tuned_threshold),
+        "test_fixed_0_5_metrics": _metrics(split.test, test_probabilities, fixed_threshold),
+        "held_out_tuned_metrics": (
+            _metrics(held_out, held_out_probabilities, tuned_threshold) if held_out else None
+        ),
+        "held_out_fixed_0_5_metrics": (
+            _metrics(held_out, held_out_probabilities, fixed_threshold) if held_out else None
+        ),
+        "test_family_probability_stats": _family_stats(
+            split.test, test_probabilities, fixed_threshold
         ),
     }
+    # Keep JSON standards-compliant even if a future metric library returns NaN.
+    def scrub(value):
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        if isinstance(value, dict):
+            return {key: scrub(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [scrub(item) for item in value]
+        return value
+
+    result = scrub(result)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True))
