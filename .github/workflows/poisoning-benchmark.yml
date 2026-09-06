@@ -1,0 +1,36 @@
+name: Poisoning Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/driftguard/poisoning.py
+      - src/driftguard/poisoning_benchmark.py
+      - experiments/run_poisoning_benchmark.py
+      - .github/workflows/poisoning-benchmark.yml
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]" "scikit-learn>=1.5"
+      - name: Run leakage-aware benchmark
+        run: python experiments/run_poisoning_benchmark.py --repositories 80
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: poisoning-benchmark
+          path: artifacts/poisoning_benchmark.json
+          if-no-files-found: error
+          retention-days: 30
