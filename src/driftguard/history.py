@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .canonicalize import canonicalize_tool, schema_hash
+from .source_extractors import SourceToolExtractor
 
 
 @dataclass(frozen=True)
@@ -47,21 +48,19 @@ def parse_tool_manifest(text: str) -> list[dict[str, Any]]:
     return extract_tools_from_json(json.loads(text))
 
 
-class GitManifestHistoryMiner:
-    """Mine versioned JSON MCP tool definitions without executing repository code."""
-
+class _GitHistoryBase:
     def __init__(
         self,
         repository_path: str | Path,
         *,
         repository_id: str,
-        manifest_paths: Iterable[str],
+        paths: Iterable[str],
     ) -> None:
         self.repository_path = Path(repository_path).resolve()
         self.repository_id = repository_id
-        self.manifest_paths = tuple(dict.fromkeys(str(path) for path in manifest_paths))
-        if not self.manifest_paths:
-            raise ValueError("At least one manifest path is required")
+        self.paths = tuple(dict.fromkeys(str(path) for path in paths))
+        if not self.paths:
+            raise ValueError("At least one path is required")
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -72,7 +71,7 @@ class GitManifestHistoryMiner:
         )
 
     def commits(self) -> list[str]:
-        result = self._git("rev-list", "--reverse", "HEAD", "--", *self.manifest_paths)
+        result = self._git("rev-list", "--reverse", "HEAD", "--", *self.paths)
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     def _file_at_commit(self, commit_sha: str, path: str) -> str | None:
@@ -81,21 +80,22 @@ class GitManifestHistoryMiner:
             return None
         return result.stdout
 
-    def mine(self) -> list[HistoricalToolVersion]:
+    def _collect(self, extractor: SourceToolExtractor) -> list[HistoricalToolVersion]:
         versions: list[HistoricalToolVersion] = []
         last_hash_by_key: dict[tuple[str, str], str] = {}
         for commit_sha in self.commits():
-            for path in self.manifest_paths:
+            for path in self.paths:
                 text = self._file_at_commit(commit_sha, path)
                 if text is None:
                     continue
                 try:
-                    tools = parse_tool_manifest(text)
-                except json.JSONDecodeError:
+                    tools = extractor.extract(text)
+                except (SyntaxError, ValueError, json.JSONDecodeError):
                     continue
                 for tool in tools:
-                    tool_name = str(tool["name"])
-                    digest = schema_hash(tool)
+                    canonical = canonicalize_tool(tool)
+                    tool_name = str(canonical["name"])
+                    digest = schema_hash(canonical)
                     key = (path, tool_name)
                     if last_hash_by_key.get(key) == digest:
                         continue
@@ -106,11 +106,66 @@ class GitManifestHistoryMiner:
                             commit_sha=commit_sha,
                             path=path,
                             tool_name=tool_name,
-                            tool=tool,
+                            tool=canonical,
                             schema_hash=digest,
                         )
                     )
         return versions
+
+
+class _JsonExtractor:
+    def extract(self, text: str) -> list[dict[str, Any]]:
+        return parse_tool_manifest(text)
+
+
+class GitManifestHistoryMiner(_GitHistoryBase):
+    """Mine versioned JSON MCP tool definitions without executing repository code."""
+
+    def __init__(
+        self,
+        repository_path: str | Path,
+        *,
+        repository_id: str,
+        manifest_paths: Iterable[str],
+    ) -> None:
+        super().__init__(
+            repository_path,
+            repository_id=repository_id,
+            paths=manifest_paths,
+        )
+
+    @property
+    def manifest_paths(self) -> tuple[str, ...]:
+        return self.paths
+
+    def mine(self) -> list[HistoricalToolVersion]:
+        return self._collect(_JsonExtractor())
+
+
+class GitSourceHistoryMiner(_GitHistoryBase):
+    """Mine versioned tool definitions using a static source-code extractor."""
+
+    def __init__(
+        self,
+        repository_path: str | Path,
+        *,
+        repository_id: str,
+        source_paths: Iterable[str],
+        extractor: SourceToolExtractor,
+    ) -> None:
+        super().__init__(
+            repository_path,
+            repository_id=repository_id,
+            paths=source_paths,
+        )
+        self.extractor = extractor
+
+    @property
+    def source_paths(self) -> tuple[str, ...]:
+        return self.paths
+
+    def mine(self) -> list[HistoricalToolVersion]:
+        return self._collect(self.extractor)
 
 
 def adjacent_version_pairs(
