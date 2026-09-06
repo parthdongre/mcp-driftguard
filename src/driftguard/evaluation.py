@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 from .baselines import hash_only_changed, rule_baseline
 from .canonicalize import make_snapshot
@@ -126,12 +126,7 @@ def evaluate_standard_baselines(
     lexical_threshold: float = 0.12,
     rule_threshold: float = 45.0,
 ) -> list[BaselineResult]:
-    """Evaluate dependency-free baseline detectors on a shared record list.
-
-    Two security views are useful in the paper: consent-significant (C2+C3) and
-    malicious-only (C3). The experiment script runs both; this helper returns the
-    consent-significant view by default.
-    """
+    """Evaluate dependency-free baseline detectors on a shared record list."""
 
     records = list(records)
     return [
@@ -149,11 +144,19 @@ def evaluate_standard_baselines(
     ]
 
 
-def multiclass_metrics(y_true: Iterable[ChangeClass], y_pred: Iterable[ChangeClass]) -> dict[str, object]:
+def multiclass_metrics(
+    y_true: Iterable[ChangeClass],
+    y_pred: Iterable[ChangeClass],
+) -> dict[str, object]:
     """Compute paper-ready multiclass metrics when scikit-learn is installed."""
 
     try:
-        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+        from sklearn.metrics import (
+            accuracy_score,
+            classification_report,
+            confusion_matrix,
+            f1_score,
+        )
     except ImportError as exc:
         raise RuntimeError(
             "scikit-learn is required for multiclass metrics; install mcp-driftguard[ml]"
