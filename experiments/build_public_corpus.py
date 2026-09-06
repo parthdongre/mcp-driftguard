@@ -27,6 +27,16 @@ def _run(command: list[str], *, cwd: Path | None = None) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
+def _git_output(repository_path: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repository_path), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
 def _repo_directory(workspace: Path, repository_id: str) -> Path:
     return workspace / repository_id.replace("/", "__")
 
@@ -143,6 +153,19 @@ def _load_manifest(path: Path) -> list[dict[str, Any]]:
     return [entry for entry in repositories if isinstance(entry, dict)]
 
 
+def _date_range(candidates: list[AnnotationCandidate]) -> dict[str, str | None]:
+    timestamps = [
+        timestamp
+        for candidate in candidates
+        for timestamp in (candidate.old_committed_at, candidate.new_committed_at)
+        if timestamp is not None
+    ]
+    return {
+        "earliest": min(timestamps) if timestamps else None,
+        "latest": max(timestamps) if timestamps else None,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -203,6 +226,8 @@ def main() -> None:
             no_network=args.no_network,
             refresh=args.refresh,
         )
+        source_head_sha = _git_output(repo_path, "rev-parse", "HEAD")
+        source_origin = _git_output(repo_path, "remote", "get-url", "origin")
         versions, discoveries, mined_paths, selection_mode = _mine_repository(
             repo_path,
             repository_id,
@@ -220,9 +245,14 @@ def main() -> None:
         parse_errors = [
             item for item in discoveries if item["status"] == "parse_error"
         ]
+        unique_transition_tools = {
+            candidate.tool_name for candidate in candidates
+        }
         repository_summaries.append(
             {
                 "repository_id": repository_id,
+                "source_origin": source_origin,
+                "source_head_sha": source_head_sha,
                 "priority": entry.get("priority"),
                 "declared_extractor_readiness": entry.get("extractor_readiness"),
                 "path_selection_mode": selection_mode,
@@ -233,6 +263,8 @@ def main() -> None:
                 "parse_error_files": len(parse_errors),
                 "historical_schema_versions": len(versions),
                 "annotation_candidates": len(candidates),
+                "unique_tools_with_transitions": len(unique_transition_tools),
+                "candidate_date_range": _date_range(candidates),
                 "discoveries": discoveries,
             }
         )
@@ -242,6 +274,13 @@ def main() -> None:
         "manifest": str(args.manifest),
         "repositories_processed": len(repository_summaries),
         "annotation_candidates": len(all_candidates),
+        "unique_repository_tool_lineages_with_transitions": len(
+            {
+                (candidate.repository_id, candidate.source_path, candidate.tool_name)
+                for candidate in all_candidates
+            }
+        ),
+        "candidate_date_range": _date_range(all_candidates),
         "repositories": repository_summaries,
         "safety": {
             "target_code_executed": False,
