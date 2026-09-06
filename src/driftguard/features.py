@@ -3,6 +3,7 @@ from __future__ import annotations
 from difflib import SequenceMatcher
 
 from .capabilities import capability_delta, capability_escalation_score, extract_capability_profile
+from .embeddings import EmbeddingCache, EmbeddingProvider, view_embedding_drift
 from .models import PairFeatures, SemanticViews, ToolDelta
 from .views import extract_semantic_views
 
@@ -23,8 +24,12 @@ def _view_drift(old: SemanticViews, new: SemanticViews) -> dict[str, float]:
     }
 
 
-def extract_pair_features(delta: ToolDelta) -> PairFeatures:
-    """Build the deterministic half of the future hybrid ML feature vector."""
+def extract_pair_features(
+    delta: ToolDelta,
+    embedding_provider: EmbeddingProvider | None = None,
+    embedding_cache: EmbeddingCache | None = None,
+) -> PairFeatures:
+    """Build the hybrid old/new feature vector used by research baselines and models."""
 
     old_views = extract_semantic_views(delta.old)
     new_views = extract_semantic_views(delta.new)
@@ -47,10 +52,17 @@ def extract_pair_features(delta: ToolDelta) -> PairFeatures:
         "imperative_terms_added": float(len(s.imperative_terms_added)),
     }
 
+    semantic_drift = (
+        view_embedding_drift(old_views, new_views, embedding_provider, embedding_cache)
+        if embedding_provider is not None
+        else {}
+    )
+
     return PairFeatures(
         view_lexical_drift={
             key: round(value, 6) for key, value in _view_drift(old_views, new_views).items()
         },
+        view_semantic_drift=semantic_drift,
         structural_counts=structural_counts,
         capability_delta=cap_delta,
         capability_escalation_score=capability_escalation_score(cap_delta),
@@ -59,11 +71,17 @@ def extract_pair_features(delta: ToolDelta) -> PairFeatures:
 
 
 def flatten_numeric_features(features: PairFeatures) -> dict[str, float]:
-    """Flatten deterministic features into stable scalar names for sklearn/XGBoost."""
+    """Flatten named features into stable scalar columns for sklearn/XGBoost."""
 
     result = {
         f"view_drift__{key}": value for key, value in features.view_lexical_drift.items()
     }
+    result.update(
+        {
+            f"semantic_drift__{key}": value
+            for key, value in features.view_semantic_drift.items()
+        }
+    )
     result.update(
         {f"struct__{key}": value for key, value in features.structural_counts.items()}
     )
