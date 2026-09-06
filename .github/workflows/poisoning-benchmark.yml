@@ -6,7 +6,10 @@ on:
     branches: [main]
     paths:
       - src/driftguard/poisoning.py
+      - src/driftguard/hybrid_detector.py
+      - src/driftguard/structural_security.py
       - src/driftguard/poisoning_benchmark.py
+      - src/driftguard/poisoning_challenges.py
       - experiments/run_poisoning_benchmark.py
       - .github/workflows/poisoning-benchmark.yml
 
