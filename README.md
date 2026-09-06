@@ -47,7 +47,7 @@ These remain hypotheses until validated experimentally and re-checked against th
 
 ## Implemented research core
 
-The first research-engineering milestone is now implemented:
+The first research-engineering milestone is implemented and Phase 2 has started:
 
 - deterministic canonical tool snapshots and SHA-256 identity
 - typed structural old/new deltas
@@ -55,12 +55,15 @@ The first research-engineering milestone is now implemented:
 - interpretable effective-capability profiles across operation/resource/effect/scope/destination/sensitivity dimensions
 - capability-delta extraction and a transparent capability-escalation feature
 - stable pairwise numeric feature extraction for later sklearn/XGBoost models
+- embedding-provider protocol, embedding cache, cosine-distance utilities, and a lazy SentenceTransformer adapter
+- optional field-aware semantic drift features fused into the pair feature vector
 - a stateful approved-baseline lineage monitor
 - a deterministic CUSUM-style low-and-slow baseline plus approved-to-current cumulative risk
 - dataset schemas for pairwise and trajectory experiments with repository-level leakage grouping
-- unit tests covering structural, capability, temporal, and dataset behavior
+- unit tests covering structural, capability, embedding, temporal, and dataset behavior
+- a runnable low-and-slow trajectory demo under `examples/`
 
-The current temporal risk function is intentionally a transparent baseline. It is **not** the final learned detector.
+The current capability extractor and temporal risk function are intentionally transparent baselines. They are **not** the final learned detector.
 
 ## Planned pipeline
 
@@ -160,7 +163,7 @@ mcp-driftguard/
 
 ## Immediate next milestones
 
-1. embedding provider abstraction + field-aware sentence-transformer features
+1. run and benchmark an actual local sentence-transformer on the five schema views
 2. private data ingestion and labeling pipeline for real MCP repository histories
 3. hash / lexical / cosine / regex baseline experiment harness
 4. first C0-C3 logistic-regression and XGBoost pair classifiers
@@ -170,7 +173,7 @@ mcp-driftguard/
 
 ## Research status
 
-**Phase 1: deterministic research core implemented.** Dataset acquisition and learned pair-classifier work are next.
+**Phase 1 complete; Phase 2 semantic feature pipeline in progress.** Dataset acquisition and learned pair-classifier work are next.
 
 ## License and confidentiality
 
