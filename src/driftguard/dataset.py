@@ -114,3 +114,11 @@ def read_candidate_jsonl(path: str | Path) -> list[AnnotationCandidate]:
         for record in _read_jsonl(path, AnnotationCandidate)
         if isinstance(record, AnnotationCandidate)
     ]
+
+
+def read_trajectory_jsonl(path: str | Path) -> list[TrajectoryDatasetRecord]:
+    return [
+        record
+        for record in _read_jsonl(path, TrajectoryDatasetRecord)
+        if isinstance(record, TrajectoryDatasetRecord)
+    ]
