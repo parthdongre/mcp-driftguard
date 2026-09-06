@@ -11,6 +11,7 @@ from .dataset import PairDatasetRecord
 from .diff import build_delta
 from .features import extract_pair_features, flatten_numeric_features
 from .models import ChangeClass, RiskAssessment
+from .structural_security import structural_poisoning_features
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_./:-]+")
 _OVERRIDE_PATTERNS = (
@@ -162,9 +163,9 @@ def _authority_override_concept_count(value: Any) -> int:
         self_definition = _contains_any(text, _SELF_DEFINITION_CONCEPTS)
         strong_action = _contains_any(text, _STRONG_OVERRIDE_ACTIONS)
         weak_action = _contains_any(text, _WEAK_PRIORITY_ACTIONS)
-        if authority and strong_action and (conflict or self_definition):
-            count += 1
-        elif authority and conflict and self_definition and weak_action:
+        strong_override = authority and strong_action and (conflict or self_definition)
+        weak_override = authority and conflict and self_definition and weak_action
+        if strong_override or weak_override:
             count += 1
     return count
 
@@ -228,6 +229,7 @@ def poisoning_security_features(record: PairDatasetRecord) -> dict[str, float]:
     delta = build_delta(old, new)
     features = extract_pair_features(delta)
     result = flatten_numeric_features(features)
+    result.update(structural_poisoning_features(record, features))
 
     old_text = _text(record.old_tool)
     new_text = _text(record.new_tool)
@@ -422,15 +424,16 @@ class PoisoningDetector:
         probability = self.predict_proba([record])[0]
         cutoff = self.threshold if threshold is None else float(threshold)
         poisoned = probability >= cutoff
+        reason = (
+            "Hybrid poisoning model: lexical/character drift plus structural and relational "
+            "security features."
+        )
         return RiskAssessment(
             change_class=(
                 ChangeClass.MALICIOUS_DRIFT if poisoned else ChangeClass.BENIGN_MAINTENANCE
             ),
             risk_score=round(100.0 * probability, 2),
             probabilities={"C3": round(probability, 6), "not_C3": round(1.0 - probability, 6)},
-            reasons=[
-                "Hybrid poisoning model: lexical/character drift plus structural and "
-                "relational security features."
-            ],
+            reasons=[reason],
             recommended_action="quarantine" if poisoned else "allow_or_apply_consent_policy",
         )
