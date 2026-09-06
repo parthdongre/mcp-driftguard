@@ -75,13 +75,7 @@ def record_features(
 
 
 class LogisticPairClassifier:
-    """First learned C0/C1/C2/C3 research baseline.
-
-    Scikit-learn is imported lazily so the deterministic core package remains usable
-    without optional ML dependencies. This class is intentionally simple: the paper
-    must establish whether pairwise temporal features help before increasing model
-    complexity.
-    """
+    """First learned C0/C1/C2/C3 research baseline."""
 
     def __init__(self, *, class_weight: str | dict[str, float] | None = "balanced") -> None:
         self.class_weight = class_weight
@@ -96,7 +90,7 @@ class LogisticPairClassifier:
         *,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_cache: EmbeddingCache | None = None,
-    ) -> "LogisticPairClassifier":
+    ) -> LogisticPairClassifier:
         try:
             from sklearn.feature_extraction import DictVectorizer
             from sklearn.linear_model import LogisticRegression
