@@ -126,7 +126,6 @@ class LogisticPairClassifier:
                     LogisticRegression(
                         max_iter=2000,
                         class_weight=self.class_weight,
-                        multi_class="auto",
                         random_state=42,
                     ),
                 ),
