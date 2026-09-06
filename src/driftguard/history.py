@@ -16,6 +16,7 @@ from .source_extractors import SourceToolExtractor
 class HistoricalToolVersion:
     repository_id: str
     commit_sha: str
+    committed_at: str | None
     path: str
     tool_name: str
     tool: dict[str, Any]
@@ -74,6 +75,13 @@ class _GitHistoryBase:
         result = self._git("rev-list", "--reverse", "HEAD", "--", *self.paths)
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
+    def _commit_timestamp(self, commit_sha: str) -> str | None:
+        result = self._git("show", "-s", "--format=%cI", commit_sha, check=False)
+        if result.returncode != 0:
+            return None
+        value = result.stdout.strip()
+        return value or None
+
     def _file_at_commit(self, commit_sha: str, path: str) -> str | None:
         result = self._git("show", f"{commit_sha}:{path}", check=False)
         if result.returncode != 0:
@@ -83,7 +91,12 @@ class _GitHistoryBase:
     def _collect(self, extractor: SourceToolExtractor) -> list[HistoricalToolVersion]:
         versions: list[HistoricalToolVersion] = []
         last_hash_by_key: dict[tuple[str, str], str] = {}
+        timestamp_by_commit: dict[str, str | None] = {}
         for commit_sha in self.commits():
+            committed_at = timestamp_by_commit.setdefault(
+                commit_sha,
+                self._commit_timestamp(commit_sha),
+            )
             for path in self.paths:
                 text = self._file_at_commit(commit_sha, path)
                 if text is None:
@@ -104,6 +117,7 @@ class _GitHistoryBase:
                         HistoricalToolVersion(
                             repository_id=self.repository_id,
                             commit_sha=commit_sha,
+                            committed_at=committed_at,
                             path=path,
                             tool_name=tool_name,
                             tool=canonical,
