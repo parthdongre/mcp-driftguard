@@ -1,5 +1,5 @@
-from driftguard.capabilities import capability_delta, extract_capability_profile
 from driftguard.canonicalize import make_snapshot
+from driftguard.capabilities import capability_delta, extract_capability_profile
 from driftguard.dataset import PairDatasetRecord, TrajectoryDatasetRecord, TrajectoryStep
 from driftguard.diff import build_delta
 from driftguard.features import extract_pair_features, flatten_numeric_features
