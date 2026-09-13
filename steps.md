@@ -245,9 +245,37 @@ the error to stderr.
 This raw JSON-RPC proxy is intentionally SDK-neutral and supports the stdio deployment model
 without making the research core depend on a particular MCP SDK.
 
+## Fusion / ablation experiment
+
+`fusion.py` and `fusion_evaluation.py` provide a common binary "intervention required"
+experiment across multi-revision scenarios.
+
+The same scenario is evaluated under six configurations:
+
+1. pairwise only,
+2. temporal only,
+3. graph only,
+4. pairwise + temporal,
+5. pairwise + graph,
+6. full pairwise + temporal + graph fusion.
+
+`data/fusion_synthetic_v0.jsonl` currently includes direct escalation, gradual low-and-slow
+drift, sensitive cross-tool routes, cycles, and benign controls. The report gives
+TP/FP/TN/FN, accuracy, precision, recall, and F1 for every ablation.
+
+Run:
+
+```bash
+driftguard benchmark fusion
+```
+
+The prototype temporal budget is an experimental parameter, not a production threshold.
+The purpose of this harness is to make component contribution measurable and eventually
+produce a defensible paper ablation table on a much larger corpus.
+
 ## Next priorities
 
-1. fusion/ablation experiment combining pairwise + temporal + graph signals,
+1. expand the unified multi-revision benchmark and run held-out-family ablations,
 2. Streamable HTTP gateway/interceptor for remote MCP servers,
 3. server-push subscription (SSE/WebSocket) over the cursor-based change feed,
 4. externally anchored or signed audit checkpoints,

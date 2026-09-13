@@ -157,10 +157,12 @@ The development branch now contains:
 - CLI/API status, log, and arbitrary revision comparison,
 - field-level JSON-pointer diffs and Git-style field provenance/blame.
 
-Run the current baseline benchmark with:
+Run the current research benchmarks with:
 
 ```bash
-python experiments/evaluate_rule_baseline.py
+driftguard benchmark pairwise
+driftguard benchmark graph
+driftguard benchmark fusion
 ```
 
 The benchmark labels describe intended security semantics rather than being fitted to the

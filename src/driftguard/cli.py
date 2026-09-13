@@ -8,6 +8,7 @@ from pathlib import Path
 from .blame import blame_tool
 from .changefeed import changes_after
 from .evaluation import evaluate_file
+from .fusion_evaluation import evaluate_fusion_file
 from .graph_evaluation import evaluate_graph_file
 from .render import (
     render_change_event,
@@ -50,6 +51,23 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default="data/graph_synthetic_v0.jsonl",
         help="Path to a graph-evolution JSONL benchmark.",
+    )
+
+    fusion = benchmark_sub.add_parser(
+        "fusion",
+        help="Compare pairwise, temporal, graph, and fused detector layers.",
+    )
+    fusion.add_argument(
+        "path",
+        nargs="?",
+        default="data/fusion_synthetic_v0.jsonl",
+        help="Path to a multi-revision fusion JSONL benchmark.",
+    )
+    fusion.add_argument(
+        "--temporal-budget",
+        type=float,
+        default=20.0,
+        help="Experimental cumulative drift threshold (default: 20).",
     )
 
     status = subcommands.add_parser(
@@ -126,8 +144,13 @@ def _run_benchmark(args: argparse.Namespace) -> int:
     path = Path(args.path)
     if args.benchmark_name == "pairwise":
         report = evaluate_file(path)
-    else:
+    elif args.benchmark_name == "graph":
         report = evaluate_graph_file(path)
+    else:
+        report = evaluate_fusion_file(
+            path,
+            temporal_budget=args.temporal_budget,
+        )
     print(report.model_dump_json(indent=2))
     return 0
 
