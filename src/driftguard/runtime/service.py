@@ -21,13 +21,13 @@ from ..revisions import (
     diff_revisions,
     make_discovery_revision,
 )
-from ..views import RevisionView, build_revision_view
 from ..signals import (
     CatalogChangeSignal,
     CatalogFreshnessStatus,
     catalog_freshness,
     make_catalog_change_signal,
 )
+from ..views import RevisionView, build_revision_view
 from .audit import ReviewDecision, ReviewEvent, seal_review_event
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
