@@ -22,7 +22,9 @@ driftguard proxy --db driftguard.db --server my-server -- python server.py
 ```
 
 Every intercepted `tools/list` response becomes a revision before the filtered catalog is
-forwarded to the MCP host.
+forwarded to the MCP host. Server `notifications/tools/list_changed` messages are also
+recorded immediately: DriftGuard marks the catalog dirty until the refreshed `tools/list`
+revision is observed.
 
 ## Why this project exists
 

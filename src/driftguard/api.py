@@ -10,6 +10,7 @@ from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
+from .signals import CatalogFreshnessStatus
 
 
 class InterceptRequest(BaseModel):
@@ -58,6 +59,13 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         if result is None:
             raise HTTPException(status_code=404, detail="No discovery revision exists for this server.")
         return result
+
+    @app.get(
+        "/v1/servers/{server_id}/freshness",
+        response_model=CatalogFreshnessStatus,
+    )
+    def freshness(server_id: str) -> CatalogFreshnessStatus:
+        return runtime.catalog_freshness(server_id)
 
     @app.get(
         "/v1/servers/{server_id}/revisions",

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .canonicalize import canonicalize_tool, schema_hash
 from .models import ToolSnapshot
+from .signals import CatalogFreshnessStatus
 
 
 class RevisionTool(BaseModel):
@@ -81,6 +82,7 @@ class SurfaceObservation(BaseModel):
     revision: DiscoveryRevision
     previous_delta: RevisionDelta | None = None
     trusted_status: TrustedSurfaceStatus
+    freshness: CatalogFreshnessStatus | None = None
 
 
 def _surface_tool_entries(tools: list[dict[str, Any]]) -> list[RevisionTool]:

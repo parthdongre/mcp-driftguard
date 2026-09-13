@@ -11,6 +11,7 @@ from .evaluation import evaluate_file
 from .fusion_evaluation import evaluate_fusion_file
 from .graph_evaluation import evaluate_graph_file
 from .render import (
+    render_catalog_freshness,
     render_change_event,
     render_revision_delta,
     render_revision_log,
@@ -19,6 +20,7 @@ from .render import (
 )
 from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
+from .signals import catalog_freshness
 from .stdio_proxy import run_stdio_proxy
 
 
@@ -76,6 +78,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_store_args(status)
     status.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    freshness = subcommands.add_parser(
+        "freshness",
+        help="Show whether the known tool catalog is stale after a server change notification.",
+    )
+    _add_store_args(freshness)
+    freshness.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     log = subcommands.add_parser("log", help="Show discovery revision history.")
     _add_store_args(log)
@@ -168,6 +177,10 @@ def _current_status(
         revision=latest,
         previous_delta=diff_revisions(previous, latest) if previous is not None else None,
         trusted_status=compare_to_trusted(latest, store.trusted_tools(server_id)),
+        freshness=catalog_freshness(
+            store.catalog_signals(server_id),
+            latest_revision_id=latest.revision_id,
+        ),
     )
 
 
@@ -178,6 +191,19 @@ def _json_list(items) -> str:
 def _run_revision_command(args: argparse.Namespace) -> int:
     store = SQLiteSnapshotStore(args.db)
     try:
+        if args.command == "freshness":
+            latest = store.latest_revision(args.server)
+            result = catalog_freshness(
+                store.catalog_signals(args.server),
+                latest_revision_id=latest.revision_id if latest is not None else None,
+            )
+            print(
+                result.model_dump_json(indent=2)
+                if args.json
+                else render_catalog_freshness(result)
+            )
+            return 0
+
         if args.command == "log":
             revisions = store.revision_history(args.server)
             print(_json_list(revisions) if args.json else render_revision_log(revisions))
@@ -266,7 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "benchmark":
         return _run_benchmark(args)
-    if args.command in {"status", "log", "diff", "changes", "blame"}:
+    if args.command in {"status", "freshness", "log", "diff", "changes", "blame"}:
         return _run_revision_command(args)
     if args.command == "watch":
         return _run_watch(args)

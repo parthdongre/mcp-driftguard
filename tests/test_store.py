@@ -106,3 +106,28 @@ def test_sqlite_store_persists_discovery_revision_history(tmp_path):
     assert history[1].parent_revision_id == first.revision.revision_id
     assert latest is not None
     assert latest.revision_id == second.revision.revision_id
+
+
+def test_sqlite_store_persists_catalog_change_signal_and_acknowledgement(tmp_path):
+    database = tmp_path / "signals.db"
+    store = SQLiteSnapshotStore(database)
+    service = DriftGuardService(store=store)
+
+    signal = service.mark_catalog_changed("demo")
+    assert service.catalog_freshness("demo").dirty is True
+    store.close()
+
+    reopened = SQLiteSnapshotStore(database)
+    persisted = reopened.catalog_signals("demo")
+    assert len(persisted) == 1
+    assert persisted[0].signal_id == signal.signal_id
+    assert persisted[0].acknowledged_revision_id is None
+
+    refreshed = DriftGuardService(store=reopened).observe_surface(
+        server_id="demo",
+        tools=[_tool()],
+    )
+    acknowledged = reopened.catalog_signals("demo")[0]
+    reopened.close()
+
+    assert acknowledged.acknowledged_revision_id == refreshed.revision.revision_id

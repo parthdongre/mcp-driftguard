@@ -57,7 +57,14 @@ class StdioProxyFilter:
         except (json.JSONDecodeError, TypeError):
             return line
 
-        if not isinstance(message, dict) or "id" not in message or "method" in message:
+        if not isinstance(message, dict):
+            return line
+
+        if message.get("method") == "notifications/tools/list_changed":
+            self.service.mark_catalog_changed(self.server_id)
+            return line
+
+        if "id" not in message or "method" in message:
             return line
 
         method = self._pending_methods.pop(_id_key(message["id"]), None)

@@ -20,6 +20,12 @@ from ..revisions import (
     diff_revisions,
     make_discovery_revision,
 )
+from ..signals import (
+    CatalogChangeSignal,
+    CatalogFreshnessStatus,
+    catalog_freshness,
+    make_catalog_change_signal,
+)
 from .audit import ReviewDecision, ReviewEvent, seal_review_event
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
@@ -78,6 +84,7 @@ class DriftGuardService:
             protocol_version=protocol_version,
         )
         self.store.put_revision(revision)
+        self.store.acknowledge_catalog_signals(server_id, revision.revision_id)
         previous_delta = diff_revisions(previous, revision) if previous is not None else None
         trusted_status = compare_to_trusted(
             revision,
@@ -87,6 +94,7 @@ class DriftGuardService:
             revision=revision,
             previous_delta=previous_delta,
             trusted_status=trusted_status,
+            freshness=self.catalog_freshness(server_id),
         )
 
     def current_surface_status(self, server_id: str) -> SurfaceObservation | None:
@@ -104,10 +112,23 @@ class DriftGuardService:
                 revision,
                 self.store.trusted_tools(server_id),
             ),
+            freshness=self.catalog_freshness(server_id),
         )
 
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
         return self.store.revision_history(server_id)
+
+    def mark_catalog_changed(self, server_id: str) -> CatalogChangeSignal:
+        signal = make_catalog_change_signal(server_id)
+        self.store.record_catalog_signal(signal)
+        return signal
+
+    def catalog_freshness(self, server_id: str) -> CatalogFreshnessStatus:
+        latest = self.store.latest_revision(server_id)
+        return catalog_freshness(
+            self.store.catalog_signals(server_id),
+            latest_revision_id=latest.revision_id if latest is not None else None,
+        )
 
     def change_feed(
         self,

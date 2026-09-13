@@ -207,6 +207,7 @@ Useful local commands:
 
 ```text
 driftguard status --db driftguard.db --server demo
+driftguard freshness --db driftguard.db --server demo
 driftguard log --db driftguard.db --server demo
 driftguard diff --db driftguard.db --server demo --from <rev> --to <rev>
 driftguard changes --db driftguard.db --server demo --after <rev>
@@ -221,6 +222,24 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Catalog freshness / server change signals
+
+MCP servers can announce catalog changes with `notifications/tools/list_changed`.
+DriftGuard persists each observed signal immediately and marks the known tool catalog
+**dirty** until a subsequent `tools/list` response is intercepted and committed as a new
+revision.
+
+This distinguishes two states that normal snapshot scanners often collapse:
+
+```text
+clean: latest observed revision is current as far as DriftGuard knows
+dirty: server announced a change, refreshed catalog has not been observed yet
+```
+
+One refreshed discovery revision acknowledges all pending change signals. The signal
+history remains durable in SQLite, so an operator can tell that a refresh happened in
+response to one or more server announcements.
 
 ## Transparent stdio MCP proxy
 
@@ -277,10 +296,11 @@ produce a defensible paper ablation table on a much larger corpus.
 
 1. expand the unified multi-revision benchmark and run held-out-family ablations,
 2. Streamable HTTP gateway/interceptor for remote MCP servers,
-3. server-push subscription (SSE/WebSocket) over the cursor-based change feed,
-4. externally anchored or signed audit checkpoints,
-5. configurable organization policy/thresholds,
-6. polished GitHub/Codex-like operator UI over revision history and diffs,
-7. substantially expand both pairwise and graph datasets before making accuracy claims.
+3. automatically establish the MCP tools-list-change subscription where supported,
+4. server-push subscription (SSE/WebSocket) over the DriftGuard change feed,
+5. externally anchored or signed audit checkpoints,
+6. configurable organization policy/thresholds,
+7. polished GitHub/Codex-like operator UI over revision history and diffs,
+8. substantially expand both pairwise and graph datasets before making accuracy claims.
 
 Avoid placeholder modules and dependencies that do not yet serve an executable or experimental purpose.

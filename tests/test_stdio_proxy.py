@@ -64,3 +64,25 @@ def test_stdio_proxy_passes_non_json_stdout_through():
     proxy = StdioProxyFilter(server_id="demo", service=DriftGuardService())
 
     assert proxy.process_server_line("debug output\n") == "debug output\n"
+
+
+def test_stdio_proxy_marks_catalog_dirty_on_list_changed_notification():
+    service = DriftGuardService()
+    proxy = StdioProxyFilter(server_id="demo", service=service)
+    service.observe_surface(server_id="demo", tools=[_tool()])
+
+    notification = (
+        '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n'
+    )
+    assert proxy.process_server_line(notification) == notification
+    assert service.catalog_freshness("demo").dirty is True
+
+    proxy.process_client_line(
+        '{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}\n'
+    )
+    proxy.process_server_line(
+        json.dumps({"jsonrpc": "2.0", "id": 9, "result": {"tools": [_tool()]}})
+        + "\n"
+    )
+
+    assert service.catalog_freshness("demo").dirty is False

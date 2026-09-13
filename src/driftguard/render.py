@@ -3,6 +3,7 @@ from __future__ import annotations
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
+from .signals import CatalogFreshnessStatus
 
 
 def _short(value: str | None, length: int = 10) -> str:
@@ -39,6 +40,11 @@ def render_surface_status(status: SurfaceObservation) -> str:
         f"Revision: {_short(revision.revision_id, 12)}",
         f"Tree: {_short(revision.tree_hash, 12)}",
     ]
+    if status.freshness is not None:
+        state = "DIRTY" if status.freshness.dirty else "clean"
+        lines.append(
+            f"Catalog: {state} ({status.freshness.pending_signals} pending refresh signal(s))"
+        )
 
     if status.previous_delta is None:
         lines.extend(["", "Changes since previous revision:", "Initial discovery."])
@@ -110,4 +116,16 @@ def render_tool_blame(blame: ToolBlame) -> str:
         )
     if not blame.fields:
         lines.append("No matching fields.")
+    return "\n".join(lines)
+
+
+def render_catalog_freshness(freshness: CatalogFreshnessStatus) -> str:
+    state = "DIRTY" if freshness.dirty else "clean"
+    lines = [
+        f"Catalog: {state}",
+        f"Pending change signals: {freshness.pending_signals}",
+        f"Last refreshed revision: {_short(freshness.last_refreshed_revision_id, 12)}",
+    ]
+    if freshness.last_signal_at is not None:
+        lines.append(f"Last change notification: {freshness.last_signal_at.isoformat()}")
     return "\n".join(lines)

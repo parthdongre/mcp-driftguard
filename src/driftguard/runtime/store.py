@@ -8,6 +8,7 @@ from typing import Protocol
 
 from ..models import ToolSnapshot
 from ..revisions import DiscoveryRevision
+from ..signals import CatalogChangeSignal
 from .audit import ReviewEvent
 
 ToolKey = tuple[str, str]
@@ -45,6 +46,12 @@ class SnapshotStore(Protocol):
 
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]: ...
 
+    def record_catalog_signal(self, signal: CatalogChangeSignal) -> None: ...
+
+    def catalog_signals(self, server_id: str) -> list[CatalogChangeSignal]: ...
+
+    def acknowledge_catalog_signals(self, server_id: str, revision_id: str) -> None: ...
+
 
 class InMemorySnapshotStore:
     """Small deterministic store for tests, demos, and local development."""
@@ -54,6 +61,7 @@ class InMemorySnapshotStore:
         self._history: dict[ToolKey, list[ToolSnapshot]] = defaultdict(list)
         self._reviews: dict[ToolKey, list[ReviewEvent]] = defaultdict(list)
         self._revisions: dict[str, list[DiscoveryRevision]] = defaultdict(list)
+        self._catalog_signals: dict[str, list[CatalogChangeSignal]] = defaultdict(list)
 
     @staticmethod
     def _key(server_id: str, tool_name: str) -> ToolKey:
@@ -115,6 +123,21 @@ class InMemorySnapshotStore:
 
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
         return list(self._revisions.get(server_id, []))
+
+    def record_catalog_signal(self, signal: CatalogChangeSignal) -> None:
+        self._catalog_signals[signal.server_id].append(signal)
+
+    def catalog_signals(self, server_id: str) -> list[CatalogChangeSignal]:
+        return list(self._catalog_signals.get(server_id, []))
+
+    def acknowledge_catalog_signals(self, server_id: str, revision_id: str) -> None:
+        signals = self._catalog_signals.get(server_id, [])
+        self._catalog_signals[server_id] = [
+            signal.model_copy(update={"acknowledged_revision_id": revision_id})
+            if signal.acknowledged_revision_id is None
+            else signal
+            for signal in signals
+        ]
 
 
 class SQLiteSnapshotStore:
@@ -178,6 +201,18 @@ class SQLiteSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_discovery_revisions_server
                 ON discovery_revisions(server_id, id);
+
+                CREATE TABLE IF NOT EXISTS catalog_change_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signal_id TEXT NOT NULL UNIQUE,
+                    server_id TEXT NOT NULL,
+                    received_at TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    acknowledged_revision_id TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_catalog_change_signals_server
+                ON catalog_change_signals(server_id, id);
                 """
             )
 
@@ -394,3 +429,64 @@ class SQLiteSnapshotStore:
                 (server_id,),
             ).fetchall()
         return [DiscoveryRevision.model_validate_json(row[0]) for row in rows]
+
+
+    def record_catalog_signal(self, signal: CatalogChangeSignal) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO catalog_change_signals (
+                    signal_id,
+                    server_id,
+                    received_at,
+                    method,
+                    acknowledged_revision_id
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    signal.signal_id,
+                    signal.server_id,
+                    signal.received_at.isoformat(),
+                    signal.method,
+                    signal.acknowledged_revision_id,
+                ),
+            )
+
+    def catalog_signals(self, server_id: str) -> list[CatalogChangeSignal]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT
+                    signal_id,
+                    server_id,
+                    received_at,
+                    method,
+                    acknowledged_revision_id
+                FROM catalog_change_signals
+                WHERE server_id = ?
+                ORDER BY id ASC
+                """,
+                (server_id,),
+            ).fetchall()
+        return [
+            CatalogChangeSignal(
+                signal_id=row[0],
+                server_id=row[1],
+                received_at=row[2],
+                method=row[3],
+                acknowledged_revision_id=row[4],
+            )
+            for row in rows
+        ]
+
+    def acknowledge_catalog_signals(self, server_id: str, revision_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                UPDATE catalog_change_signals
+                SET acknowledged_revision_id = ?
+                WHERE server_id = ? AND acknowledged_revision_id IS NULL
+                """,
+                (revision_id, server_id),
+            )
