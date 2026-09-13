@@ -213,7 +213,7 @@ driftguard changes --db driftguard.db --server demo --after <rev>
 driftguard watch --db driftguard.db --server demo
 ```
 
-The default CLI output is intentionally Git-like and human-readable. Add `--json` where supported for automation/UI plumbing.
+The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
 
 ## Transparent stdio MCP proxy
 

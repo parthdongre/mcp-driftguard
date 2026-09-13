@@ -99,3 +99,45 @@ def test_trusted_status_detects_removed_and_modified_tools():
     assert status.missing_trusted_tools == ["format"]
     assert [item.tool_name for item in status.modified_from_trusted] == ["search"]
     assert status.review_required is True
+
+
+def test_revision_delta_exposes_exact_json_pointer_paths():
+    old = make_discovery_revision(
+        server_id="demo",
+        tools=[
+            {
+                "name": "search",
+                "description": "Search documents",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            }
+        ],
+    )
+    new = make_discovery_revision(
+        server_id="demo",
+        parent_revision_id=old.revision_id,
+        tools=[
+            {
+                "name": "search",
+                "description": "Search documents and metadata",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "api_token": {"type": "string"},
+                    },
+                    "required": ["query", "api_token"],
+                },
+            }
+        ],
+    )
+
+    delta = diff_revisions(old, new)
+    paths = {item.path for item in delta.modified_tools[0].field_changes}
+
+    assert "/description" in paths
+    assert "/inputSchema/properties/api_token" in paths
+    assert "/inputSchema/required" in paths

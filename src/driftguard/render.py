@@ -20,6 +20,9 @@ def render_revision_delta(delta: RevisionDelta) -> str:
         old_hash = _short(change.old_sha256[0] if change.old_sha256 else None, 8)
         new_hash = _short(change.new_sha256[0] if change.new_sha256 else None, 8)
         lines.append(f"M  {change.tool_name}  {old_hash} -> {new_hash}")
+        for field in change.field_changes:
+            marker = {"added": "+", "removed": "-", "modified": "~"}[field.kind.value]
+            lines.append(f"   {marker} {field.path}")
     for name in delta.duplicate_names_added:
         lines.append(f"!  duplicate tool name introduced: {name}")
 
@@ -49,6 +52,9 @@ def render_surface_status(status: SurfaceObservation) -> str:
         lines.append(f"?  {name}  (not approved)")
     for change in trusted.modified_from_trusted:
         lines.append(f"M  {change.tool_name}  (differs from approved version)")
+        for field in change.field_changes:
+            marker = {"added": "+", "removed": "-", "modified": "~"}[field.kind.value]
+            lines.append(f"   {marker} {field.path}")
     for name in trusted.missing_trusted_tools:
         lines.append(f"D  {name}  (approved tool missing from current surface)")
     for name in revision.duplicate_tool_names:

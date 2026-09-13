@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -31,10 +32,24 @@ class DiscoveryRevision(BaseModel):
     duplicate_tool_names: list[str] = Field(default_factory=list)
 
 
+class FieldChangeKind(StrEnum):
+    ADDED = "added"
+    REMOVED = "removed"
+    MODIFIED = "modified"
+
+
+class JsonFieldChange(BaseModel):
+    """One exact JSON-pointer path changed inside a tool definition."""
+
+    path: str
+    kind: FieldChangeKind
+
+
 class ToolRevisionChange(BaseModel):
     tool_name: str
     old_sha256: list[str] = Field(default_factory=list)
     new_sha256: list[str] = Field(default_factory=list)
+    field_changes: list[JsonFieldChange] = Field(default_factory=list)
 
 
 class RevisionDelta(BaseModel):
@@ -148,11 +163,81 @@ def _hashes_by_name(revision: DiscoveryRevision) -> dict[str, list[str]]:
     return {name: sorted(hashes) for name, hashes in grouped.items()}
 
 
+def _tools_by_name(revision: DiscoveryRevision) -> dict[str, list[RevisionTool]]:
+    grouped: dict[str, list[RevisionTool]] = {}
+    for tool in revision.tools:
+        grouped.setdefault(tool.name, []).append(tool)
+    return grouped
+
+
+def _pointer_segment(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def _child_path(parent: str, key: str) -> str:
+    segment = _pointer_segment(key)
+    return f"{parent}/{segment}" if parent else f"/{segment}"
+
+
+def _diff_json(old: Any, new: Any, path: str = "") -> list[JsonFieldChange]:
+    """Return concise field paths; arrays are treated atomically to keep diffs stable."""
+
+    if isinstance(old, dict) and isinstance(new, dict):
+        changes: list[JsonFieldChange] = []
+        old_keys = set(old)
+        new_keys = set(new)
+
+        for key in sorted(new_keys - old_keys):
+            changes.append(
+                JsonFieldChange(
+                    path=_child_path(path, key),
+                    kind=FieldChangeKind.ADDED,
+                )
+            )
+        for key in sorted(old_keys - new_keys):
+            changes.append(
+                JsonFieldChange(
+                    path=_child_path(path, key),
+                    kind=FieldChangeKind.REMOVED,
+                )
+            )
+        for key in sorted(old_keys & new_keys):
+            changes.extend(
+                _diff_json(
+                    old[key],
+                    new[key],
+                    _child_path(path, key),
+                )
+            )
+        return changes
+
+    if old == new:
+        return []
+
+    return [
+        JsonFieldChange(
+            path=path or "/",
+            kind=FieldChangeKind.MODIFIED,
+        )
+    ]
+
+
+def _field_changes_for_unique_tools(
+    old_tools: list[RevisionTool],
+    new_tools: list[RevisionTool],
+) -> list[JsonFieldChange]:
+    if len(old_tools) != 1 or len(new_tools) != 1:
+        return []
+    return _diff_json(old_tools[0].canonical_tool, new_tools[0].canonical_tool)
+
+
 def diff_revisions(old: DiscoveryRevision, new: DiscoveryRevision) -> RevisionDelta:
     """Compare two full discovery revisions similarly to a repository tree diff."""
 
     old_map = _hashes_by_name(old)
     new_map = _hashes_by_name(new)
+    old_tools = _tools_by_name(old)
+    new_tools = _tools_by_name(new)
     old_names = set(old_map)
     new_names = set(new_map)
 
@@ -170,6 +255,10 @@ def diff_revisions(old: DiscoveryRevision, new: DiscoveryRevision) -> RevisionDe
                     tool_name=name,
                     old_sha256=old_map[name],
                     new_sha256=new_map[name],
+                    field_changes=_field_changes_for_unique_tools(
+                        old_tools[name],
+                        new_tools[name],
+                    ),
                 )
             )
 
@@ -197,29 +286,42 @@ def compare_to_trusted(
     """Compare the current complete surface to the currently approved tool baselines."""
 
     current = _hashes_by_name(revision)
-    trusted: dict[str, list[str]] = {}
+    current_tools = _tools_by_name(revision)
+    trusted: dict[str, list[ToolSnapshot]] = {}
     for snapshot in trusted_snapshots:
-        trusted.setdefault(snapshot.tool_name, []).append(snapshot.sha256)
-    trusted = {name: sorted(hashes) for name, hashes in trusted.items()}
+        trusted.setdefault(snapshot.tool_name, []).append(snapshot)
 
+    trusted_hashes = {
+        name: sorted(snapshot.sha256 for snapshot in snapshots)
+        for name, snapshots in trusted.items()
+    }
     current_names = set(current)
-    trusted_names = set(trusted)
+    trusted_names = set(trusted_hashes)
     untrusted = sorted(current_names - trusted_names)
     missing = sorted(trusted_names - current_names)
     unchanged: list[str] = []
     modified: list[ToolRevisionChange] = []
 
     for name in sorted(current_names & trusted_names):
-        if current[name] == trusted[name]:
+        if current[name] == trusted_hashes[name]:
             unchanged.append(name)
-        else:
-            modified.append(
-                ToolRevisionChange(
-                    tool_name=name,
-                    old_sha256=trusted[name],
-                    new_sha256=current[name],
-                )
+            continue
+
+        field_changes: list[JsonFieldChange] = []
+        if len(current_tools[name]) == 1 and len(trusted[name]) == 1:
+            field_changes = _diff_json(
+                trusted[name][0].canonical_tool,
+                current_tools[name][0].canonical_tool,
             )
+
+        modified.append(
+            ToolRevisionChange(
+                tool_name=name,
+                old_sha256=trusted_hashes[name],
+                new_sha256=current[name],
+                field_changes=field_changes,
+            )
+        )
 
     return TrustedSurfaceStatus(
         revision_id=revision.revision_id,
