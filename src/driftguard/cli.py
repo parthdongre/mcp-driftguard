@@ -1,13 +1,26 @@
 from __future__ import annotations
 
 import argparse
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from .changefeed import changes_after
 from .evaluation import evaluate_file
 from .graph_evaluation import evaluate_graph_file
-from .revisions import compare_to_trusted, diff_revisions
+from .render import (
+    render_change_event,
+    render_revision_delta,
+    render_revision_log,
+    render_surface_status,
+)
+from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
+
+
+def _add_store_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
+    command.add_argument("--server", required=True, help="MCP server identifier.")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -36,31 +49,47 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to a graph-evolution JSONL benchmark.",
     )
 
-    for command_name, help_text in (
-        ("status", "Show current discovery status against previous and trusted state."),
-        ("log", "Show discovery revision history."),
-    ):
-        command = subcommands.add_parser(command_name, help=help_text)
-        command.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
-        command.add_argument("--server", required=True, help="MCP server identifier.")
+    status = subcommands.add_parser(
+        "status",
+        help="Show current discovery status against previous and trusted state.",
+    )
+    _add_store_args(status)
+    status.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    log = subcommands.add_parser("log", help="Show discovery revision history.")
+    _add_store_args(log)
+    log.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     diff = subcommands.add_parser("diff", help="Compare two discovery revisions.")
-    diff.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
-    diff.add_argument("--server", required=True, help="MCP server identifier.")
+    _add_store_args(diff)
     diff.add_argument("--from", dest="from_revision", required=True, help="Older revision ID.")
     diff.add_argument("--to", dest="to_revision", required=True, help="Newer revision ID.")
+    diff.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    changes = subcommands.add_parser("changes", help="Show incremental discovery changes.")
+    _add_store_args(changes)
+    changes.add_argument("--after", help="Only show revisions after this revision ID.")
+    changes.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+
+    watch = subcommands.add_parser("watch", help="Continuously print new discovery revisions.")
+    _add_store_args(watch)
+    watch.add_argument("--after", help="Start after this revision ID.")
+    watch.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="Polling interval in seconds (default: 1.0).",
+    )
 
     audit = subcommands.add_parser("audit", help="Inspect durable review history.")
     audit_sub = audit.add_subparsers(dest="audit_command", required=True)
 
     verify = audit_sub.add_parser("verify", help="Verify a tool review hash chain.")
-    verify.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
-    verify.add_argument("--server", required=True, help="MCP server identifier.")
+    _add_store_args(verify)
     verify.add_argument("--tool", required=True, help="Tool name.")
 
     reviews = audit_sub.add_parser("reviews", help="Print review events for one tool.")
-    reviews.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
-    reviews.add_argument("--server", required=True, help="MCP server identifier.")
+    _add_store_args(reviews)
     reviews.add_argument("--tool", required=True, help="Tool name.")
 
     return parser
@@ -76,47 +105,81 @@ def _run_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _current_status(
+    store: SQLiteSnapshotStore,
+    server_id: str,
+) -> SurfaceObservation | None:
+    revisions = store.revision_history(server_id)
+    if not revisions:
+        return None
+    latest = revisions[-1]
+    previous = revisions[-2] if len(revisions) > 1 else None
+    return SurfaceObservation(
+        revision=latest,
+        previous_delta=diff_revisions(previous, latest) if previous is not None else None,
+        trusted_status=compare_to_trusted(latest, store.trusted_tools(server_id)),
+    )
+
+
+def _json_list(items) -> str:
+    return "[\n" + ",\n".join(item.model_dump_json(indent=2) for item in items) + "\n]"
+
+
 def _run_revision_command(args: argparse.Namespace) -> int:
     store = SQLiteSnapshotStore(args.db)
     try:
         if args.command == "log":
             revisions = store.revision_history(args.server)
-            print("[\n" + ",\n".join(item.model_dump_json(indent=2) for item in revisions) + "\n]")
+            print(_json_list(revisions) if args.json else render_revision_log(revisions))
             return 0
 
         if args.command == "status":
-            revisions = store.revision_history(args.server)
-            if not revisions:
-                print('{"error":"no revisions found"}')
+            status = _current_status(store, args.server)
+            if status is None:
+                print("No revisions found.")
                 return 1
-            latest = revisions[-1]
-            previous = revisions[-2] if len(revisions) > 1 else None
-            payload = {
-                "revision": latest.model_dump(mode="json"),
-                "previous_delta": (
-                    diff_revisions(previous, latest).model_dump(mode="json")
-                    if previous is not None
-                    else None
-                ),
-                "trusted_status": compare_to_trusted(
-                    latest,
-                    store.trusted_tools(args.server),
-                ).model_dump(mode="json"),
-            }
-            import json
+            print(status.model_dump_json(indent=2) if args.json else render_surface_status(status))
+            return 0
 
-            print(json.dumps(payload, indent=2))
+        if args.command == "changes":
+            feed = changes_after(store.revision_history(args.server), args.after)
+            if feed is None:
+                print("Unknown revision cursor.")
+                return 1
+            if args.json:
+                print(_json_list(feed))
+            else:
+                print("\n".join(render_change_event(item) for item in feed) or "No new revisions.")
             return 0
 
         old = store.get_revision(args.server, args.from_revision)
         new = store.get_revision(args.server, args.to_revision)
         if old is None or new is None:
-            print('{"error":"one or both revisions not found"}')
+            print("One or both revisions were not found.")
             return 1
-        print(diff_revisions(old, new).model_dump_json(indent=2))
+        delta = diff_revisions(old, new)
+        print(delta.model_dump_json(indent=2) if args.json else render_revision_delta(delta))
         return 0
     finally:
         store.close()
+
+
+def _run_watch(args: argparse.Namespace) -> int:
+    cursor = args.after
+    while True:
+        store = SQLiteSnapshotStore(args.db)
+        try:
+            feed = changes_after(store.revision_history(args.server), cursor)
+        finally:
+            store.close()
+
+        if feed is None:
+            print("Unknown revision cursor.")
+            return 1
+        for event in feed:
+            print(render_change_event(event), flush=True)
+            cursor = event.revision_id
+        time.sleep(max(0.1, args.interval))
 
 
 def _run_audit(args: argparse.Namespace) -> int:
@@ -124,7 +187,7 @@ def _run_audit(args: argparse.Namespace) -> int:
     try:
         events = store.reviews(args.server, args.tool)
         if args.audit_command == "reviews":
-            print("[\n" + ",\n".join(event.model_dump_json(indent=2) for event in events) + "\n]")
+            print(_json_list(events))
             return 0
 
         report = verify_review_chain(events)
@@ -140,8 +203,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "benchmark":
         return _run_benchmark(args)
-    if args.command in {"status", "log", "diff"}:
+    if args.command in {"status", "log", "diff", "changes"}:
         return _run_revision_command(args)
+    if args.command == "watch":
+        return _run_watch(args)
     if args.command == "audit":
         return _run_audit(args)
 

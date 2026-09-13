@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from ..baselines import rule_baseline
 from ..canonicalize import make_snapshot
+from ..changefeed import RevisionChangeEvent, changes_after
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
@@ -106,6 +107,17 @@ class DriftGuardService:
 
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
         return self.store.revision_history(server_id)
+
+    def change_feed(
+        self,
+        server_id: str,
+        *,
+        after_revision_id: str | None = None,
+    ) -> list[RevisionChangeEvent] | None:
+        return changes_after(
+            self.store.revision_history(server_id),
+            after_revision_id,
+        )
 
     def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
         return self.store.get_revision(server_id, revision_id)

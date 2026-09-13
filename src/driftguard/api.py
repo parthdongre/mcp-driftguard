@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
+from .changefeed import RevisionChangeEvent
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 
@@ -63,6 +64,22 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
     )
     def revisions(server_id: str) -> list[DiscoveryRevision]:
         return runtime.revision_history(server_id)
+
+    @app.get(
+        "/v1/servers/{server_id}/changes",
+        response_model=list[RevisionChangeEvent],
+    )
+    def changes(
+        server_id: str,
+        after_revision: str | None = None,
+    ) -> list[RevisionChangeEvent]:
+        result = runtime.change_feed(
+            server_id,
+            after_revision_id=after_revision,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Change-feed cursor revision not found.")
+        return result
 
     @app.get(
         "/v1/servers/{server_id}/revisions/{revision_id}",

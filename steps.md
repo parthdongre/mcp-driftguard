@@ -201,11 +201,25 @@ The API similarly exposes server status, revision history, individual revisions,
 
 A revision is an observation/commit; its `tree_hash` represents the complete tool surface. Repeated identical surfaces may therefore have different revision IDs but the same tree hash, preserving both content identity and observation history.
 
+A cursor-based change feed now derives compact events from the immutable revision chain. This supports both polling APIs and a CLI watch mode without changing the revision model.
+
+Useful local commands:
+
+```text
+driftguard status --db driftguard.db --server demo
+driftguard log --db driftguard.db --server demo
+driftguard diff --db driftguard.db --server demo --from <rev> --to <rev>
+driftguard changes --db driftguard.db --server demo --after <rev>
+driftguard watch --db driftguard.db --server demo
+```
+
+The default CLI output is intentionally Git-like and human-readable. Add `--json` where supported for automation/UI plumbing.
+
 ## Next priorities
 
 1. fusion/ablation experiment combining pairwise + temporal + graph signals,
-2. compact human-readable diff rendering for CLI/API/UI,
-3. real MCP transport proxy/host integration that continuously feeds revisions,
+2. real MCP transport proxy/host integration that continuously feeds revisions,
+3. server-push subscription (SSE/WebSocket) over the cursor-based change feed,
 4. externally anchored or signed audit checkpoints,
 5. configurable organization policy/thresholds,
 6. polished GitHub/Codex-like operator UI over revision history and diffs,
