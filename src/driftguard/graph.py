@@ -28,6 +28,34 @@ class CrossToolGraphEvidence(BaseModel):
     suspicious_sources: list[str] = Field(default_factory=list)
 
 
+class CrossToolGraphDelta(BaseModel):
+    """Topology changes between two complete MCP discovery surfaces."""
+
+    added_nodes: list[str] = Field(default_factory=list)
+    removed_nodes: list[str] = Field(default_factory=list)
+    added_edges: list[tuple[str, str]] = Field(default_factory=list)
+    removed_edges: list[tuple[str, str]] = Field(default_factory=list)
+    new_cycles: list[list[str]] = Field(default_factory=list)
+    resolved_cycles: list[list[str]] = Field(default_factory=list)
+    newly_suspicious_sources: list[str] = Field(default_factory=list)
+    resolved_suspicious_sources: list[str] = Field(default_factory=list)
+
+    @property
+    def changed(self) -> bool:
+        return any(
+            (
+                self.added_nodes,
+                self.removed_nodes,
+                self.added_edges,
+                self.removed_edges,
+                self.new_cycles,
+                self.resolved_cycles,
+                self.newly_suspicious_sources,
+                self.resolved_suspicious_sources,
+            )
+        )
+
+
 def _flatten_text(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -166,4 +194,34 @@ def analyze_tool_graph(tools: list[dict[str, Any]]) -> CrossToolGraphEvidence:
         },
         cycles=cycles,
         suspicious_sources=sorted(suspicious),
+    )
+
+
+def diff_tool_graph(
+    old: CrossToolGraphEvidence,
+    new: CrossToolGraphEvidence,
+) -> CrossToolGraphDelta:
+    """Compare two discovery graphs and expose topology-level security drift."""
+
+    old_nodes = set(old.nodes)
+    new_nodes = set(new.nodes)
+
+    old_edges = {(edge.source, edge.target) for edge in old.edges}
+    new_edges = {(edge.source, edge.target) for edge in new.edges}
+
+    old_cycles = {_canonical_cycle(cycle) for cycle in old.cycles if cycle}
+    new_cycles = {_canonical_cycle(cycle) for cycle in new.cycles if cycle}
+
+    old_suspicious = set(old.suspicious_sources)
+    new_suspicious = set(new.suspicious_sources)
+
+    return CrossToolGraphDelta(
+        added_nodes=sorted(new_nodes - old_nodes),
+        removed_nodes=sorted(old_nodes - new_nodes),
+        added_edges=sorted(new_edges - old_edges),
+        removed_edges=sorted(old_edges - new_edges),
+        new_cycles=[list(cycle) for cycle in sorted(new_cycles - old_cycles)],
+        resolved_cycles=[list(cycle) for cycle in sorted(old_cycles - new_cycles)],
+        newly_suspicious_sources=sorted(new_suspicious - old_suspicious),
+        resolved_suspicious_sources=sorted(old_suspicious - new_suspicious),
     )

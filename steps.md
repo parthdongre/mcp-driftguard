@@ -411,3 +411,34 @@ false-positive-heavy blocking rule before it has benchmark coverage.
 The next graph research step should compare graph snapshots across versions so we can
 measure **topology drift**: new edges, removed edges, new cycles, and movement toward
 sensitive tools.
+
+
+## 23. Cross-tool topology drift
+
+Added `diff_tool_graph(old, new)` so graph analysis is version-aware rather than only a
+single-snapshot visualization.
+
+The graph delta records:
+
+- tools added or removed,
+- influence edges added or removed,
+- newly introduced or resolved cycles,
+- tools that newly become suspicious,
+- tools whose graph-level suspicion is resolved.
+
+This creates a second temporal security object alongside the per-tool schema delta:
+
+```text
+Tool definition drift:
+    T_old -> T_new
+
+Discovery topology drift:
+    G_old -> G_new
+```
+
+That distinction is important for the research paper. An attacker may keep each individual
+tool definition only mildly changed while creating a dangerous new route between tools.
+A topology-drift detector can measure that system-level change directly.
+
+Graph deltas remain evidence-only for now. Before they affect blocking policy, the project
+should add labeled graph-evolution cases and measure false-positive/false-negative behavior.
