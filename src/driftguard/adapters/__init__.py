@@ -1,3 +1,3 @@
-from .mcp import extract_tools
+from .mcp import ToolsListInterception, extract_tools, intercept_tools_list
 
-__all__ = ["extract_tools"]
+__all__ = ["ToolsListInterception", "extract_tools", "intercept_tools_list"]

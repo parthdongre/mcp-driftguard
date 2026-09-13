@@ -115,3 +115,61 @@ Next additions should be driven by actual implementation needs, roughly in this 
 7. polished operator UI after the UX architecture is finalized.
 
 The repository should avoid adding placeholder folders that have no executable or documented purpose.
+
+
+## 10. Durable local trust and audit history
+
+Implemented `SQLiteSnapshotStore` as the first durable store.
+
+Why SQLite first:
+
+- it is included in Python, so no new runtime dependency is required,
+- it survives process restarts, unlike `InMemorySnapshotStore`,
+- it is easy to inspect during a college demonstration,
+- it provides a migration path to Postgres later without changing `DriftGuardService`.
+
+The database keeps two concepts separate:
+
+- **observations**: append-only tool snapshots used for version history and later experiments,
+- **trusted snapshots**: the currently approved baseline for each server/tool pair.
+
+The runtime still depends only on the `SnapshotStore` protocol. SQLite is therefore an implementation choice, not a dependency baked into the detector.
+
+## 11. First real MCP enforcement boundary
+
+Implemented `adapters.mcp.intercept_tools_list(...)`.
+
+Updated call flow:
+
+```text
+MCP server tools/list response
+  -> intercept_tools_list(...)
+      -> extract_tools(...)
+      -> DriftGuardService.observe_tool(...) for every tool
+      -> policy decision
+      -> safe tools are forwarded
+      -> re-consent/quarantine tools are withheld
+  -> filtered tools/list response reaches the host/LLM
+```
+
+Important behavior:
+
+- a first-seen tool is withheld until explicitly approved,
+- an unchanged approved tool is forwarded,
+- a suspicious changed tool is withheld again,
+- the original JSON-RPC envelope is preserved.
+
+This gives DriftGuard an executable security-control point rather than only producing an offline risk score.
+
+## 12. Research direction opened by this batch
+
+Durable version history plus an enforcement boundary now makes the next research additions practical:
+
+1. cumulative drift / drift-budget experiments over observation history,
+2. trust decay and temporal reputation,
+3. approval/audit records with reviewer identity and reason,
+4. semantic embedding detector plugged into the existing detector callable,
+5. benchmark/evaluation harness comparing hash, structural, lexical, semantic, and hybrid models,
+6. real transport proxy/host integration around this interception function.
+
+No frontend framework has been added yet; the interception result and durable history should become the stable backend contract that the later operator UI consumes.

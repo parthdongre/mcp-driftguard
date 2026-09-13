@@ -1,6 +1,6 @@
 from .policy import DefaultPolicy, EnforcementAction, PolicyDecision
 from .service import DriftGuardService, ObservationResult
-from .store import InMemorySnapshotStore, SnapshotStore
+from .store import InMemorySnapshotStore, SnapshotStore, SQLiteSnapshotStore
 
 __all__ = [
     "DefaultPolicy",
@@ -10,4 +10,5 @@ __all__ = [
     "ObservationResult",
     "PolicyDecision",
     "SnapshotStore",
+    "SQLiteSnapshotStore",
 ]
