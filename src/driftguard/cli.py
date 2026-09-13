@@ -25,7 +25,7 @@ from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
 from .signals import catalog_freshness
 from .stdio_proxy import run_stdio_proxy
-from .timeline import build_server_timeline
+from .timeline import build_server_timeline, timeline_events_after
 from .views import build_revision_view
 
 
@@ -106,9 +106,15 @@ def _build_parser() -> argparse.ArgumentParser:
     changes.add_argument("--after", help="Only show revisions after this revision ID.")
     changes.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
-    watch = subcommands.add_parser("watch", help="Continuously print new discovery revisions.")
+    watch = subcommands.add_parser(
+        "watch",
+        help="Continuously print new MCP activity events.",
+    )
     _add_store_args(watch)
-    watch.add_argument("--after", help="Start after this revision ID.")
+    watch.add_argument(
+        "--after",
+        help="Start after this timeline event ID or raw revision ID.",
+    )
     watch.add_argument(
         "--interval",
         type=float,
@@ -359,16 +365,23 @@ def _run_watch(args: argparse.Namespace) -> int:
     while True:
         store = SQLiteSnapshotStore(args.db)
         try:
-            feed = changes_after(store.revision_history(args.server), cursor)
+            timeline = build_server_timeline(
+                revisions=store.revision_history(args.server),
+                checks=store.revision_checks(args.server),
+                signals=store.catalog_signals(args.server),
+                reviews=store.server_reviews(args.server),
+                newest_first=False,
+            )
+            feed = timeline_events_after(timeline, cursor)
         finally:
             store.close()
 
         if feed is None:
-            print("Unknown revision cursor.")
+            print("Unknown timeline/revision cursor.")
             return 1
         for event in feed:
-            print(render_change_event(event), flush=True)
-            cursor = event.revision_id
+            print(render_timeline_event(event), flush=True)
+            cursor = event.event_id
         time.sleep(max(0.1, args.interval))
 
 

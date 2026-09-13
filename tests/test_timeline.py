@@ -78,3 +78,34 @@ def test_timeline_revision_event_includes_provenance_and_change_summary():
 
     assert revision_event.details["pending_change_signals"] == 1
     assert revision_event.details["added_tools"] == ["format"]
+
+
+def test_timeline_cursor_accepts_event_id_and_raw_revision_id():
+    from driftguard.timeline import build_server_timeline, timeline_events_after
+
+    service = DriftGuardService()
+    first = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    service.mark_catalog_changed("demo")
+
+    chronological = build_server_timeline(
+        revisions=service.store.revision_history("demo"),
+        checks=service.store.revision_checks("demo"),
+        signals=service.store.catalog_signals("demo"),
+        reviews=service.store.server_reviews("demo"),
+        newest_first=False,
+    )
+
+    assert first.surface is not None
+    raw_revision = first.surface.revision.revision_id
+    after_revision = timeline_events_after(chronological, raw_revision)
+    assert after_revision is not None
+    assert any(item.kind == TimelineEventKind.CATALOG_SIGNAL for item in after_revision)
+
+    cursor = chronological[0].event_id
+    after_event = timeline_events_after(chronological, cursor)
+    assert after_event == chronological[1:]
+    assert timeline_events_after(chronological, "missing") is None

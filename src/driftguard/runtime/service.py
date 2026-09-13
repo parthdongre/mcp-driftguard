@@ -30,7 +30,7 @@ from ..signals import (
     catalog_freshness,
     make_catalog_change_signal,
 )
-from ..timeline import TimelineEvent, build_server_timeline
+from ..timeline import TimelineEvent, build_server_timeline, timeline_events_after
 from ..views import RevisionView, build_revision_view
 from .audit import ReviewDecision, ReviewEvent, seal_review_event
 from .policy import DefaultPolicy, PolicyDecision
@@ -138,13 +138,24 @@ class DriftGuardService:
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
         return self.store.revision_history(server_id)
 
-    def timeline(self, server_id: str) -> list[TimelineEvent]:
-        return build_server_timeline(
+    def timeline(
+        self,
+        server_id: str,
+        *,
+        after_event_id: str | None = None,
+        newest_first: bool = True,
+    ) -> list[TimelineEvent] | None:
+        chronological = build_server_timeline(
             revisions=self.store.revision_history(server_id),
             checks=self.store.revision_checks(server_id),
             signals=self.store.catalog_signals(server_id),
             reviews=self.store.server_reviews(server_id),
+            newest_first=False,
         )
+        selected = timeline_events_after(chronological, after_event_id)
+        if selected is None:
+            return None
+        return list(reversed(selected)) if newest_first else selected
 
     def mark_catalog_changed(self, server_id: str) -> CatalogChangeSignal:
         signal = make_catalog_change_signal(server_id)

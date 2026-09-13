@@ -161,7 +161,8 @@ The development branch now contains:
 - immutable per-revision security checks similar to GitHub Checks,
 - a Git-show-style revision view combining metadata, exact parent diff, security verdict, and freshness,
 - revision provenance recording whether discovery came from the API, direct adapter, or stdio proxy and whether it was a normal poll or server-signaled refresh,
-- a unified activity timeline across server change signals, revisions, security checks, and human reviews.
+- a unified activity timeline across server change signals, revisions, security checks, and human reviews,
+- a live timeline-based watch mode that surfaces server change notifications before catalog refresh.
 
 Run the current research benchmarks with:
 

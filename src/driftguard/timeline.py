@@ -174,3 +174,23 @@ def build_server_timeline(
         reverse=newest_first,
     )
     return events
+
+
+def timeline_events_after(
+    events: list[TimelineEvent],
+    cursor: str | None,
+) -> list[TimelineEvent] | None:
+    """Return chronological events after a known event or raw revision cursor."""
+
+    if cursor is None:
+        return events
+
+    accepted = {cursor}
+    if ":" not in cursor:
+        accepted.add(f"revision:{cursor}")
+
+    for index, event in enumerate(events):
+        if event.event_id in accepted:
+            return events[index + 1 :]
+
+    return None

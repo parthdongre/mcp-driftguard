@@ -201,7 +201,7 @@ The API similarly exposes server status, revision history, individual revisions,
 
 A revision is an observation/commit; its `tree_hash` represents the complete tool surface. Repeated identical surfaces may therefore have different revision IDs but the same tree hash, preserving both content identity and observation history.
 
-A cursor-based change feed now derives compact events from the immutable revision chain. This supports both polling APIs and a CLI watch mode without changing the revision model.
+A cursor-based change feed now derives compact events from the immutable revision chain. The live `watch` command consumes the broader unified activity timeline, so it can surface server change signals immediately rather than waiting for a refreshed revision.
 
 Useful local commands:
 
@@ -240,12 +240,17 @@ The CLI and API expose the same read model:
 ```text
 driftguard timeline --db driftguard.db --server demo
 GET /v1/servers/{server}/timeline
+GET /v1/servers/{server}/timeline?after_event=<event>&newest_first=false
 ```
 
 This is the intended backend contract for a GitHub-style repository activity page and makes
 incident reconstruction much easier: an operator can see the server announcement, the
 resulting refresh revision, its security verdict, and any subsequent human decision in one
 chronological stream.
+
+Timeline cursors accept either a full event ID (for example `signal:...`) or a raw revision
+ID for compatibility. `driftguard watch` now polls this timeline oldest-first and therefore
+surfaces a pending `tools/list_changed` signal before the catalog refresh occurs.
 
 ## Revision provenance
 

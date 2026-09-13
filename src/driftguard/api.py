@@ -98,8 +98,19 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         "/v1/servers/{server_id}/timeline",
         response_model=list[TimelineEvent],
     )
-    def timeline(server_id: str) -> list[TimelineEvent]:
-        return runtime.timeline(server_id)
+    def timeline(
+        server_id: str,
+        after_event: str | None = None,
+        newest_first: bool = True,
+    ) -> list[TimelineEvent]:
+        result = runtime.timeline(
+            server_id,
+            after_event_id=after_event,
+            newest_first=newest_first,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Timeline cursor event not found.")
+        return result
 
     @app.get(
         "/v1/servers/{server_id}/checks",
