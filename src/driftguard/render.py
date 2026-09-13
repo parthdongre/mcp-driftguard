@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
+from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .signals import CatalogFreshnessStatus
 
@@ -128,4 +129,24 @@ def render_catalog_freshness(freshness: CatalogFreshnessStatus) -> str:
     ]
     if freshness.last_signal_at is not None:
         lines.append(f"Last change notification: {freshness.last_signal_at.isoformat()}")
+    return "\n".join(lines)
+
+
+def render_revision_check(check: RevisionSecurityCheck) -> str:
+    lines = [
+        f"check {_short(check.revision_id, 12)}: {check.state.value}",
+        f"detector: {check.detector_name}",
+        f"policy: {check.policy_name}",
+        f"forwarded: {len(check.forwarded_tools)}  withheld: {len(check.withheld_tools)}",
+    ]
+    for tool in check.tools:
+        risk = "-" if tool.risk_score is None else f"{tool.risk_score:.2f}"
+        klass = tool.change_class or "-"
+        lines.append(
+            f"{tool.action:18}  {tool.tool_name}  class={klass}  risk={risk}"
+        )
+        if tool.temporal_exceeded:
+            lines.append(
+                f"  ! temporal budget exceeded ({tool.temporal_cumulative_score:.2f})"
+            )
     return "\n".join(lines)

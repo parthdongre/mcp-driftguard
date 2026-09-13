@@ -13,6 +13,7 @@ from .graph_evaluation import evaluate_graph_file
 from .render import (
     render_catalog_freshness,
     render_change_event,
+    render_revision_check,
     render_revision_delta,
     render_revision_log,
     render_surface_status,
@@ -110,6 +111,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Polling interval in seconds (default: 1.0).",
     )
+
+    check = subcommands.add_parser(
+        "check",
+        help="Show the immutable security verdict attached to a discovery revision.",
+    )
+    _add_store_args(check)
+    check.add_argument(
+        "--revision",
+        help="Revision ID; defaults to the latest discovery revision.",
+    )
+    check.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     blame = subcommands.add_parser(
         "blame",
@@ -217,6 +229,25 @@ def _run_revision_command(args: argparse.Namespace) -> int:
             print(status.model_dump_json(indent=2) if args.json else render_surface_status(status))
             return 0
 
+        if args.command == "check":
+            revision_id = args.revision
+            if revision_id is None:
+                latest = store.latest_revision(args.server)
+                if latest is None:
+                    print("No revisions found.")
+                    return 1
+                revision_id = latest.revision_id
+            result = store.get_revision_check(args.server, revision_id)
+            if result is None:
+                print("Revision security check was not found.")
+                return 1
+            print(
+                result.model_dump_json(indent=2)
+                if args.json
+                else render_revision_check(result)
+            )
+            return 0
+
         if args.command == "blame":
             result = blame_tool(
                 store.revision_history(args.server),
@@ -292,7 +323,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "benchmark":
         return _run_benchmark(args)
-    if args.command in {"status", "freshness", "log", "diff", "changes", "blame"}:
+    if args.command in {
+        "status",
+        "freshness",
+        "log",
+        "diff",
+        "changes",
+        "check",
+        "blame",
+    }:
         return _run_revision_command(args)
     if args.command == "watch":
         return _run_watch(args)

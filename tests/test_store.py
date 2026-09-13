@@ -131,3 +131,30 @@ def test_sqlite_store_persists_catalog_change_signal_and_acknowledgement(tmp_pat
     reopened.close()
 
     assert acknowledged.acknowledged_revision_id == refreshed.revision.revision_id
+
+
+def test_sqlite_store_persists_revision_security_check(tmp_path):
+    from driftguard.adapters import intercept_tools_list
+
+    database = tmp_path / "checks.db"
+    store = SQLiteSnapshotStore(database)
+    service = DriftGuardService(store=store)
+
+    result = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    assert result.revision_check is not None
+    revision_id = result.revision_check.revision_id
+    store.close()
+
+    reopened = SQLiteSnapshotStore(database)
+    persisted = reopened.get_revision_check("demo", revision_id)
+    history = reopened.revision_checks("demo")
+    reopened.close()
+
+    assert persisted is not None
+    assert persisted.revision_id == revision_id
+    assert persisted.state.value == "review_required"
+    assert [item.revision_id for item in history] == [revision_id]

@@ -157,7 +157,8 @@ The development branch now contains:
 - a versioned labeled benchmark and evaluation harness,
 - a persistent Git-like discovery revision/change ledger,
 - CLI/API status, log, and arbitrary revision comparison,
-- field-level JSON-pointer diffs and Git-style field provenance/blame.
+- field-level JSON-pointer diffs and Git-style field provenance/blame,
+- immutable per-revision security checks similar to GitHub Checks.
 
 Run the current research benchmarks with:
 

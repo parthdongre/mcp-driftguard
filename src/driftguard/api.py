@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from .adapters import ToolsListInterception, intercept_tools_list
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
+from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
@@ -88,6 +89,23 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         )
         if result is None:
             raise HTTPException(status_code=404, detail="Change-feed cursor revision not found.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/checks",
+        response_model=list[RevisionSecurityCheck],
+    )
+    def checks(server_id: str) -> list[RevisionSecurityCheck]:
+        return runtime.revision_checks(server_id)
+
+    @app.get(
+        "/v1/servers/{server_id}/revisions/{revision_id}/check",
+        response_model=RevisionSecurityCheck,
+    )
+    def revision_check(server_id: str, revision_id: str) -> RevisionSecurityCheck:
+        result = runtime.get_revision_check(server_id, revision_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Revision security check not found.")
         return result
 
     @app.get(

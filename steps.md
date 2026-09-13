@@ -213,6 +213,7 @@ driftguard diff --db driftguard.db --server demo --from <rev> --to <rev>
 driftguard changes --db driftguard.db --server demo --after <rev>
 driftguard watch --db driftguard.db --server demo
 driftguard blame --db driftguard.db --server demo --tool search
+driftguard check --db driftguard.db --server demo
 ```
 
 The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
@@ -222,6 +223,22 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Immutable revision security checks
+
+Every intercepted discovery revision receives a persisted security check, similar to a
+GitHub commit check. The check records the exact detector and policy names plus the
+per-tool action, risk score, C0-C3 class, confidence/abstention state, and temporal
+evidence that existed **when the revision was observed**.
+
+This matters because future detector or policy changes must not silently rewrite historical
+decisions. An operator can inspect the original verdict with:
+
+```text
+driftguard check --db driftguard.db --server demo [--revision <rev>]
+```
+
+The API exposes both per-revision checks and the full check history.
 
 ## Catalog freshness / server change signals
 

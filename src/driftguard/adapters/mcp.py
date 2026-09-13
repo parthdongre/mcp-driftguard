@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..checks import RevisionSecurityCheck, build_revision_check
 from ..graph import CrossToolGraphEvidence, analyze_tool_graph
 from ..revisions import SurfaceObservation
 from ..runtime import DriftGuardService, EnforcementAction, ObservationResult
@@ -24,6 +25,7 @@ class ToolsListInterception(BaseModel):
     withheld_tools: list[str] = Field(default_factory=list)
     graph_evidence: CrossToolGraphEvidence | None = None
     surface: SurfaceObservation | None = None
+    revision_check: RevisionSecurityCheck | None = None
 
 
 def extract_tools(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -81,6 +83,16 @@ def intercept_tools_list(
         else:
             withheld_names.append(observation.snapshot.tool_name)
 
+    revision_check = build_revision_check(
+        revision=surface.revision,
+        observations=observations,
+        forwarded_tools=forwarded_names,
+        withheld_tools=withheld_names,
+        detector=service.detector,
+        policy=service.policy,
+    )
+    service.store.put_revision_check(revision_check)
+
     return ToolsListInterception(
         payload=_replace_tools(payload, forwarded),
         observations=observations,
@@ -88,4 +100,5 @@ def intercept_tools_list(
         withheld_tools=withheld_names,
         graph_evidence=graph_evidence,
         surface=surface,
+        revision_check=revision_check,
     )

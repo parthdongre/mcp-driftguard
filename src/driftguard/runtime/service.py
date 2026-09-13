@@ -9,6 +9,7 @@ from ..baselines import rule_baseline
 from ..blame import ToolBlame, blame_tool
 from ..canonicalize import make_snapshot
 from ..changefeed import RevisionChangeEvent, changes_after
+from ..checks import RevisionSecurityCheck
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
@@ -143,6 +144,16 @@ class DriftGuardService:
 
     def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
         return self.store.get_revision(server_id, revision_id)
+
+    def get_revision_check(
+        self,
+        server_id: str,
+        revision_id: str,
+    ) -> RevisionSecurityCheck | None:
+        return self.store.get_revision_check(server_id, revision_id)
+
+    def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]:
+        return self.store.revision_checks(server_id)
 
     def blame_tool(
         self,

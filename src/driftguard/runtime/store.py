@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Protocol
 
+from ..checks import RevisionSecurityCheck
 from ..models import ToolSnapshot
 from ..revisions import DiscoveryRevision
 from ..signals import CatalogChangeSignal
@@ -52,6 +53,16 @@ class SnapshotStore(Protocol):
 
     def acknowledge_catalog_signals(self, server_id: str, revision_id: str) -> None: ...
 
+    def put_revision_check(self, check: RevisionSecurityCheck) -> None: ...
+
+    def get_revision_check(
+        self,
+        server_id: str,
+        revision_id: str,
+    ) -> RevisionSecurityCheck | None: ...
+
+    def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]: ...
+
 
 class InMemorySnapshotStore:
     """Small deterministic store for tests, demos, and local development."""
@@ -62,6 +73,7 @@ class InMemorySnapshotStore:
         self._reviews: dict[ToolKey, list[ReviewEvent]] = defaultdict(list)
         self._revisions: dict[str, list[DiscoveryRevision]] = defaultdict(list)
         self._catalog_signals: dict[str, list[CatalogChangeSignal]] = defaultdict(list)
+        self._revision_checks: dict[tuple[str, str], RevisionSecurityCheck] = {}
 
     @staticmethod
     def _key(server_id: str, tool_name: str) -> ToolKey:
@@ -139,6 +151,23 @@ class InMemorySnapshotStore:
             for signal in signals
         ]
 
+    def put_revision_check(self, check: RevisionSecurityCheck) -> None:
+        self._revision_checks[(check.server_id, check.revision_id)] = check
+
+    def get_revision_check(
+        self,
+        server_id: str,
+        revision_id: str,
+    ) -> RevisionSecurityCheck | None:
+        return self._revision_checks.get((server_id, revision_id))
+
+    def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]:
+        return [
+            check
+            for (stored_server, _), check in self._revision_checks.items()
+            if stored_server == server_id
+        ]
+
 
 class SQLiteSnapshotStore:
     """Durable local snapshot store backed only by Python's sqlite3 module."""
@@ -213,6 +242,18 @@ class SQLiteSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_catalog_change_signals_server
                 ON catalog_change_signals(server_id, id);
+
+                CREATE TABLE IF NOT EXISTS revision_security_checks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id TEXT NOT NULL,
+                    revision_id TEXT NOT NULL UNIQUE,
+                    checked_at TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    check_json TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_revision_security_checks_server
+                ON revision_security_checks(server_id, id);
                 """
             )
 
@@ -490,3 +531,58 @@ class SQLiteSnapshotStore:
                 """,
                 (revision_id, server_id),
             )
+
+
+    def put_revision_check(self, check: RevisionSecurityCheck) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO revision_security_checks (
+                    server_id,
+                    revision_id,
+                    checked_at,
+                    state,
+                    check_json
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    check.server_id,
+                    check.revision_id,
+                    check.checked_at.isoformat(),
+                    check.state.value,
+                    check.model_dump_json(),
+                ),
+            )
+
+    def get_revision_check(
+        self,
+        server_id: str,
+        revision_id: str,
+    ) -> RevisionSecurityCheck | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT check_json
+                FROM revision_security_checks
+                WHERE server_id = ? AND revision_id = ?
+                LIMIT 1
+                """,
+                (server_id, revision_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return RevisionSecurityCheck.model_validate_json(row[0])
+
+    def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT check_json
+                FROM revision_security_checks
+                WHERE server_id = ?
+                ORDER BY id ASC
+                """,
+                (server_id,),
+            ).fetchall()
+        return [RevisionSecurityCheck.model_validate_json(row[0]) for row in rows]
