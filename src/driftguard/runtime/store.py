@@ -39,6 +39,8 @@ class SnapshotStore(Protocol):
 
     def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]: ...
 
+    def server_reviews(self, server_id: str) -> list[ReviewEvent]: ...
+
     def put_revision(self, revision: DiscoveryRevision) -> None: ...
 
     def latest_revision(self, server_id: str) -> DiscoveryRevision | None: ...
@@ -119,6 +121,15 @@ class InMemorySnapshotStore:
 
     def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]:
         return list(self._reviews.get(self._key(server_id, tool_name), []))
+
+    def server_reviews(self, server_id: str) -> list[ReviewEvent]:
+        reviews = [
+            event
+            for (stored_server, _), events in self._reviews.items()
+            if stored_server == server_id
+            for event in events
+        ]
+        return sorted(reviews, key=lambda event: event.reviewed_at)
 
     def put_revision(self, revision: DiscoveryRevision) -> None:
         self._revisions[revision.server_id].append(revision)
@@ -400,6 +411,19 @@ class SQLiteSnapshotStore:
                 ORDER BY id ASC
                 """,
                 (server_id, tool_name),
+            ).fetchall()
+        return [ReviewEvent.model_validate_json(row[0]) for row in rows]
+
+    def server_reviews(self, server_id: str) -> list[ReviewEvent]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT event_json
+                FROM review_events
+                WHERE server_id = ?
+                ORDER BY reviewed_at ASC, id ASC
+                """,
+                (server_id,),
             ).fetchall()
         return [ReviewEvent.model_validate_json(row[0]) for row in rows]
 

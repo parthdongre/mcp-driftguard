@@ -5,6 +5,7 @@ from .changefeed import RevisionChangeEvent
 from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .signals import CatalogFreshnessStatus
+from .timeline import TimelineEvent
 from .views import RevisionView
 
 
@@ -189,3 +190,13 @@ def render_revision_view(view: RevisionView) -> str:
         lines.append(render_revision_check(view.security_check))
 
     return "\n".join(lines)
+
+
+def render_timeline_event(event: TimelineEvent) -> str:
+    revision = f" rev={_short(event.revision_id, 10)}" if event.revision_id else ""
+    tool = f" tool={event.tool_name}" if event.tool_name else ""
+    severity = f" [{event.severity}]" if event.severity else ""
+    return (
+        f"{event.occurred_at.isoformat()}  "
+        f"{event.kind.value:15}{severity}{revision}{tool}  {event.summary}"
+    )

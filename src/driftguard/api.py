@@ -12,6 +12,7 @@ from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionChannel, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
+from .timeline import TimelineEvent
 from .views import RevisionView
 
 
@@ -92,6 +93,13 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         if result is None:
             raise HTTPException(status_code=404, detail="Change-feed cursor revision not found.")
         return result
+
+    @app.get(
+        "/v1/servers/{server_id}/timeline",
+        response_model=list[TimelineEvent],
+    )
+    def timeline(server_id: str) -> list[TimelineEvent]:
+        return runtime.timeline(server_id)
 
     @app.get(
         "/v1/servers/{server_id}/checks",

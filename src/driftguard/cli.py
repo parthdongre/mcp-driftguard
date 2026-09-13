@@ -18,12 +18,14 @@ from .render import (
     render_revision_log,
     render_revision_view,
     render_surface_status,
+    render_timeline_event,
     render_tool_blame,
 )
 from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
 from .signals import catalog_freshness
 from .stdio_proxy import run_stdio_proxy
+from .timeline import build_server_timeline
 from .views import build_revision_view
 
 
@@ -113,6 +115,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Polling interval in seconds (default: 1.0).",
     )
+
+    timeline = subcommands.add_parser(
+        "timeline",
+        help="Show the unified server activity timeline.",
+    )
+    _add_store_args(timeline)
+    timeline.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     show = subcommands.add_parser(
         "show",
@@ -241,6 +250,22 @@ def _run_revision_command(args: argparse.Namespace) -> int:
                 print("No revisions found.")
                 return 1
             print(status.model_dump_json(indent=2) if args.json else render_surface_status(status))
+            return 0
+
+        if args.command == "timeline":
+            result = build_server_timeline(
+                revisions=store.revision_history(args.server),
+                checks=store.revision_checks(args.server),
+                signals=store.catalog_signals(args.server),
+                reviews=store.server_reviews(args.server),
+            )
+            if args.json:
+                print(_json_list(result))
+            else:
+                print(
+                    "\n".join(render_timeline_event(item) for item in result)
+                    or "No timeline events."
+                )
             return 0
 
         if args.command == "show":
@@ -374,6 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "log",
         "diff",
         "changes",
+        "timeline",
         "show",
         "check",
         "blame",

@@ -215,6 +215,7 @@ driftguard watch --db driftguard.db --server demo
 driftguard blame --db driftguard.db --server demo --tool search
 driftguard check --db driftguard.db --server demo
 driftguard show --db driftguard.db --server demo [<revision>]
+driftguard timeline --db driftguard.db --server demo
 ```
 
 The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
@@ -224,6 +225,27 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Unified activity timeline
+
+`build_server_timeline(...)` merges four durable event streams into one newest-first feed:
+
+1. server `tools/list_changed` notifications,
+2. discovery revisions and their provenance/change summaries,
+3. immutable security checks,
+4. human approval/rejection events.
+
+The CLI and API expose the same read model:
+
+```text
+driftguard timeline --db driftguard.db --server demo
+GET /v1/servers/{server}/timeline
+```
+
+This is the intended backend contract for a GitHub-style repository activity page and makes
+incident reconstruction much easier: an operator can see the server announcement, the
+resulting refresh revision, its security verdict, and any subsequent human decision in one
+chronological stream.
 
 ## Revision provenance
 
