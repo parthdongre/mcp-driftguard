@@ -45,6 +45,8 @@ class SentenceTransformerEmbedder:
 def _cosine_distance(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) != len(right):
         raise ValueError("Embedding dimensions must match")
+    if list(left) == list(right):
+        return 0.0
     if not left:
         return 0.0
 
