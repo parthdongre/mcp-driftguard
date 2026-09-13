@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import ClassVar
 
 from pydantic import BaseModel
 
@@ -23,7 +24,7 @@ class PolicyDecision(BaseModel):
 class DefaultPolicy:
     """Security boundary that converts detector output into an enforcement action."""
 
-    _CLASS_ACTIONS = {
+    _CLASS_ACTIONS: ClassVar[dict[ChangeClass, EnforcementAction]] = {
         ChangeClass.NO_MEANINGFUL_CHANGE: EnforcementAction.ALLOW,
         ChangeClass.BENIGN_MAINTENANCE: EnforcementAction.ALLOW_AND_LOG,
         ChangeClass.CAPABILITY_EXPANSION: EnforcementAction.REQUIRE_RECONSENT,

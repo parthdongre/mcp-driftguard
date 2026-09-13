@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -24,7 +24,7 @@ class ToolSnapshot(BaseModel):
     raw_tool: dict[str, Any]
     canonical_tool: dict[str, Any]
     sha256: str
-    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     protocol_version: str | None = None
     approval_state: str = "unreviewed"
     parent_snapshot_id: str | None = None
