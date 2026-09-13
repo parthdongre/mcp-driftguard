@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..graph import CrossToolGraphEvidence, analyze_tool_graph
+from ..revisions import SurfaceObservation
 from ..runtime import DriftGuardService, EnforcementAction, ObservationResult
 
 _SAFE_FORWARD_ACTIONS = {
@@ -22,11 +23,10 @@ class ToolsListInterception(BaseModel):
     forwarded_tools: list[str] = Field(default_factory=list)
     withheld_tools: list[str] = Field(default_factory=list)
     graph_evidence: CrossToolGraphEvidence | None = None
+    surface: SurfaceObservation | None = None
 
 
 def extract_tools(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract tool definitions from a tools/list result or a JSON-RPC response."""
-
     candidate = payload.get("result", payload)
     if not isinstance(candidate, dict):
         return []
@@ -53,7 +53,7 @@ def intercept_tools_list(
     service: DriftGuardService,
     protocol_version: str | None = None,
 ) -> ToolsListInterception:
-    """Inspect a tools/list response and withhold tools that are not safe to expose."""
+    """Inspect and version a tools/list response before exposing tools to the host."""
 
     observations: list[ObservationResult] = []
     forwarded: list[dict[str, Any]] = []
@@ -61,6 +61,11 @@ def intercept_tools_list(
     withheld_names: list[str] = []
     tools = extract_tools(payload)
     graph_evidence = analyze_tool_graph(tools)
+    surface = service.observe_surface(
+        server_id=server_id,
+        tools=tools,
+        protocol_version=protocol_version,
+    )
 
     for tool in tools:
         observation = service.observe_tool(
@@ -82,4 +87,5 @@ def intercept_tools_list(
         forwarded_tools=forwarded_names,
         withheld_tools=withheld_names,
         graph_evidence=graph_evidence,
+        surface=surface,
     )

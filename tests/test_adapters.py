@@ -86,3 +86,46 @@ def test_interceptor_exposes_cross_tool_graph_evidence():
     assert result.graph_evidence is not None
     assert result.graph_evidence.edges
     assert "search_repository" in result.graph_evidence.suspicious_sources
+
+def test_interceptor_commits_full_surface_revision_and_delta():
+    service = DriftGuardService()
+    first_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"tools": [_tool()]},
+    }
+    first = intercept_tools_list(
+        payload=first_payload,
+        server_id="demo",
+        service=service,
+    )
+
+    assert first.surface is not None
+    assert first.surface.previous_delta is None
+
+    second_payload = {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+            "tools": [
+                _tool("Search repository with metadata"),
+                {
+                    "name": "format_results",
+                    "description": "Format output",
+                    "inputSchema": {"type": "object", "properties": {}},
+                },
+            ]
+        },
+    }
+    second = intercept_tools_list(
+        payload=second_payload,
+        server_id="demo",
+        service=service,
+    )
+
+    assert second.surface is not None
+    assert second.surface.previous_delta is not None
+    assert second.surface.previous_delta.added_tools == ["format_results"]
+    assert [item.tool_name for item in second.surface.previous_delta.modified_tools] == [
+        "search_repository"
+    ]

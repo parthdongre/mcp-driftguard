@@ -2,6 +2,19 @@
 
 Version-aware semantic drift detection for MCP tool poisoning, rug pulls, capability escalation, and schema evolution.
 
+## Product idea: GitHub for MCP change history
+
+DriftGuard continuously versions the complete MCP tool surface. Every discovery becomes a commit-like revision, so an operator can always see:
+
+- what was added,
+- what was removed,
+- which tool definitions changed,
+- how the current surface differs from the last observation,
+- how it differs from the trusted/approved state,
+- who approved or rejected a tool version.
+
+The security detector sits on top of that revision history rather than treating each request as an isolated scan.
+
 ## Why this project exists
 
 Model Context Protocol (MCP) clients discover tools through tool definitions containing natural-language descriptions and structured schemas. Those definitions become part of the model's reasoning context. A tool may therefore be safe when first approved and later change in a security-significant way.
@@ -130,7 +143,9 @@ The development branch now contains:
 - SQLite-backed version history and trusted snapshots,
 - a real `tools/list` interception boundary that withholds unsafe tools,
 - a rolling cumulative drift budget for low-and-slow changes,
-- a versioned labeled benchmark and evaluation harness.
+- a versioned labeled benchmark and evaluation harness,
+- a persistent Git-like discovery revision/change ledger,
+- CLI/API status, log, and arbitrary revision comparison.
 
 Run the current baseline benchmark with:
 

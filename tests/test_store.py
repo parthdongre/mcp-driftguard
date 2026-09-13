@@ -80,3 +80,29 @@ def test_sqlite_store_persists_review_audit_events(tmp_path):
     assert reviews[1].reason == "Unexpected credential capability."
     assert trusted is not None
     assert trusted.sha256 == first.snapshot.sha256
+
+def test_sqlite_store_persists_discovery_revision_history(tmp_path):
+    database = tmp_path / "revisions.db"
+    store = SQLiteSnapshotStore(database)
+    service = DriftGuardService(store=store)
+
+    first = service.observe_surface(
+        server_id="demo",
+        tools=[_tool("Search repository")],
+    )
+    second = service.observe_surface(
+        server_id="demo",
+        tools=[_tool("Search repository with metadata")],
+    )
+    store.close()
+
+    reopened = SQLiteSnapshotStore(database)
+    history = reopened.revision_history("demo")
+    latest = reopened.latest_revision("demo")
+    reopened.close()
+
+    assert len(history) == 2
+    assert history[0].revision_id == first.revision.revision_id
+    assert history[1].parent_revision_id == first.revision.revision_id
+    assert latest is not None
+    assert latest.revision_id == second.revision.revision_id

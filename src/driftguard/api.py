@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
+from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 
 
@@ -45,6 +46,51 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
             service=runtime,
             protocol_version=request.protocol_version,
         )
+
+    @app.get(
+        "/v1/servers/{server_id}/status",
+        response_model=SurfaceObservation,
+    )
+    def status(server_id: str) -> SurfaceObservation:
+        result = runtime.current_surface_status(server_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No discovery revision exists for this server.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/revisions",
+        response_model=list[DiscoveryRevision],
+    )
+    def revisions(server_id: str) -> list[DiscoveryRevision]:
+        return runtime.revision_history(server_id)
+
+    @app.get(
+        "/v1/servers/{server_id}/revisions/{revision_id}",
+        response_model=DiscoveryRevision,
+    )
+    def revision(server_id: str, revision_id: str) -> DiscoveryRevision:
+        result = runtime.get_revision(server_id, revision_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Discovery revision not found.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/compare/{from_revision_id}/{to_revision_id}",
+        response_model=RevisionDelta,
+    )
+    def compare(
+        server_id: str,
+        from_revision_id: str,
+        to_revision_id: str,
+    ) -> RevisionDelta:
+        result = runtime.compare_revisions(
+            server_id=server_id,
+            from_revision_id=from_revision_id,
+            to_revision_id=to_revision_id,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="One or both discovery revisions were not found.")
+        return result
 
     def resolve_snapshot(server_id: str, tool_name: str, sha256: str):
         snapshot = runtime.get_observed(

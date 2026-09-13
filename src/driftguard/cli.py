@@ -6,13 +6,14 @@ from pathlib import Path
 
 from .evaluation import evaluate_file
 from .graph_evaluation import evaluate_graph_file
+from .revisions import compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="driftguard",
-        description="MCP DriftGuard local research and audit CLI.",
+        description="MCP DriftGuard local research, revision, and audit CLI.",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -34,6 +35,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default="data/graph_synthetic_v0.jsonl",
         help="Path to a graph-evolution JSONL benchmark.",
     )
+
+    for command_name, help_text in (
+        ("status", "Show current discovery status against previous and trusted state."),
+        ("log", "Show discovery revision history."),
+    ):
+        command = subcommands.add_parser(command_name, help=help_text)
+        command.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
+        command.add_argument("--server", required=True, help="MCP server identifier.")
+
+    diff = subcommands.add_parser("diff", help="Compare two discovery revisions.")
+    diff.add_argument("--db", required=True, help="Path to the DriftGuard SQLite database.")
+    diff.add_argument("--server", required=True, help="MCP server identifier.")
+    diff.add_argument("--from", dest="from_revision", required=True, help="Older revision ID.")
+    diff.add_argument("--to", dest="to_revision", required=True, help="Newer revision ID.")
 
     audit = subcommands.add_parser("audit", help="Inspect durable review history.")
     audit_sub = audit.add_subparsers(dest="audit_command", required=True)
@@ -61,6 +76,49 @@ def _run_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_revision_command(args: argparse.Namespace) -> int:
+    store = SQLiteSnapshotStore(args.db)
+    try:
+        if args.command == "log":
+            revisions = store.revision_history(args.server)
+            print("[\n" + ",\n".join(item.model_dump_json(indent=2) for item in revisions) + "\n]")
+            return 0
+
+        if args.command == "status":
+            revisions = store.revision_history(args.server)
+            if not revisions:
+                print('{"error":"no revisions found"}')
+                return 1
+            latest = revisions[-1]
+            previous = revisions[-2] if len(revisions) > 1 else None
+            payload = {
+                "revision": latest.model_dump(mode="json"),
+                "previous_delta": (
+                    diff_revisions(previous, latest).model_dump(mode="json")
+                    if previous is not None
+                    else None
+                ),
+                "trusted_status": compare_to_trusted(
+                    latest,
+                    store.trusted_tools(args.server),
+                ).model_dump(mode="json"),
+            }
+            import json
+
+            print(json.dumps(payload, indent=2))
+            return 0
+
+        old = store.get_revision(args.server, args.from_revision)
+        new = store.get_revision(args.server, args.to_revision)
+        if old is None or new is None:
+            print('{"error":"one or both revisions not found"}')
+            return 1
+        print(diff_revisions(old, new).model_dump_json(indent=2))
+        return 0
+    finally:
+        store.close()
+
+
 def _run_audit(args: argparse.Namespace) -> int:
     store = SQLiteSnapshotStore(args.db)
     try:
@@ -82,6 +140,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "benchmark":
         return _run_benchmark(args)
+    if args.command in {"status", "log", "diff"}:
+        return _run_revision_command(args)
     if args.command == "audit":
         return _run_audit(args)
 

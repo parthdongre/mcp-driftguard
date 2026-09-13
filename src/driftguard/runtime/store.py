@@ -7,6 +7,7 @@ from threading import RLock
 from typing import Protocol
 
 from ..models import ToolSnapshot
+from ..revisions import DiscoveryRevision
 from .audit import ReviewEvent
 
 ToolKey = tuple[str, str]
@@ -16,6 +17,8 @@ class SnapshotStore(Protocol):
     """Storage boundary used by the runtime."""
 
     def get_trusted(self, server_id: str, tool_name: str) -> ToolSnapshot | None: ...
+
+    def trusted_tools(self, server_id: str) -> list[ToolSnapshot]: ...
 
     def put_observed(self, snapshot: ToolSnapshot) -> None: ...
 
@@ -34,6 +37,14 @@ class SnapshotStore(Protocol):
 
     def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]: ...
 
+    def put_revision(self, revision: DiscoveryRevision) -> None: ...
+
+    def latest_revision(self, server_id: str) -> DiscoveryRevision | None: ...
+
+    def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None: ...
+
+    def revision_history(self, server_id: str) -> list[DiscoveryRevision]: ...
+
 
 class InMemorySnapshotStore:
     """Small deterministic store for tests, demos, and local development."""
@@ -42,6 +53,7 @@ class InMemorySnapshotStore:
         self._trusted: dict[ToolKey, ToolSnapshot] = {}
         self._history: dict[ToolKey, list[ToolSnapshot]] = defaultdict(list)
         self._reviews: dict[ToolKey, list[ReviewEvent]] = defaultdict(list)
+        self._revisions: dict[str, list[DiscoveryRevision]] = defaultdict(list)
 
     @staticmethod
     def _key(server_id: str, tool_name: str) -> ToolKey:
@@ -49,6 +61,16 @@ class InMemorySnapshotStore:
 
     def get_trusted(self, server_id: str, tool_name: str) -> ToolSnapshot | None:
         return self._trusted.get(self._key(server_id, tool_name))
+
+    def trusted_tools(self, server_id: str) -> list[ToolSnapshot]:
+        return sorted(
+            (
+                snapshot
+                for (stored_server, _), snapshot in self._trusted.items()
+                if stored_server == server_id
+            ),
+            key=lambda snapshot: snapshot.tool_name,
+        )
 
     def put_observed(self, snapshot: ToolSnapshot) -> None:
         self._history[self._key(snapshot.server_id, snapshot.tool_name)].append(snapshot)
@@ -77,6 +99,22 @@ class InMemorySnapshotStore:
 
     def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]:
         return list(self._reviews.get(self._key(server_id, tool_name), []))
+
+    def put_revision(self, revision: DiscoveryRevision) -> None:
+        self._revisions[revision.server_id].append(revision)
+
+    def latest_revision(self, server_id: str) -> DiscoveryRevision | None:
+        revisions = self._revisions.get(server_id, [])
+        return revisions[-1] if revisions else None
+
+    def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
+        for revision in reversed(self._revisions.get(server_id, [])):
+            if revision.revision_id == revision_id:
+                return revision
+        return None
+
+    def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
+        return list(self._revisions.get(server_id, []))
 
 
 class SQLiteSnapshotStore:
@@ -127,6 +165,19 @@ class SQLiteSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_review_events_tool
                 ON review_events(server_id, tool_name, id);
+
+                CREATE TABLE IF NOT EXISTS discovery_revisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id TEXT NOT NULL,
+                    revision_id TEXT NOT NULL UNIQUE,
+                    tree_hash TEXT NOT NULL,
+                    parent_revision_id TEXT,
+                    observed_at TEXT NOT NULL,
+                    revision_json TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_discovery_revisions_server
+                ON discovery_revisions(server_id, id);
                 """
             )
 
@@ -147,6 +198,19 @@ class SQLiteSnapshotStore:
         if row is None:
             return None
         return ToolSnapshot.model_validate_json(row[0])
+
+    def trusted_tools(self, server_id: str) -> list[ToolSnapshot]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT snapshot_json
+                FROM trusted_snapshots
+                WHERE server_id = ?
+                ORDER BY tool_name ASC
+                """,
+                (server_id,),
+            ).fetchall()
+        return [ToolSnapshot.model_validate_json(row[0]) for row in rows]
 
     def put_observed(self, snapshot: ToolSnapshot) -> None:
         with self._lock, self._connection:
@@ -262,3 +326,71 @@ class SQLiteSnapshotStore:
                 (server_id, tool_name),
             ).fetchall()
         return [ReviewEvent.model_validate_json(row[0]) for row in rows]
+
+    def put_revision(self, revision: DiscoveryRevision) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO discovery_revisions (
+                    server_id,
+                    revision_id,
+                    tree_hash,
+                    parent_revision_id,
+                    observed_at,
+                    revision_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    revision.server_id,
+                    revision.revision_id,
+                    revision.tree_hash,
+                    revision.parent_revision_id,
+                    revision.observed_at.isoformat(),
+                    revision.model_dump_json(),
+                ),
+            )
+
+    def latest_revision(self, server_id: str) -> DiscoveryRevision | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT revision_json
+                FROM discovery_revisions
+                WHERE server_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (server_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return DiscoveryRevision.model_validate_json(row[0])
+
+    def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT revision_json
+                FROM discovery_revisions
+                WHERE server_id = ? AND revision_id = ?
+                LIMIT 1
+                """,
+                (server_id, revision_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return DiscoveryRevision.model_validate_json(row[0])
+
+    def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT revision_json
+                FROM discovery_revisions
+                WHERE server_id = ?
+                ORDER BY id ASC
+                """,
+                (server_id,),
+            ).fetchall()
+        return [DiscoveryRevision.model_validate_json(row[0]) for row in rows]

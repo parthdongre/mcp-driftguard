@@ -27,6 +27,21 @@ Key libraries:
 
 LangChain/LlamaIndex are intentionally not core dependencies; DriftGuard should stay MCP- and host-neutral.
 
+## Product mental model
+
+DriftGuard should behave like **GitHub/version control for MCP discovery surfaces**.
+
+Every `tools/list` observation is a revision with:
+
+- a unique revision ID,
+- a complete surface/tree hash,
+- a parent revision,
+- exact tool hashes,
+- previous-vs-current diff,
+- current-vs-trusted status.
+
+The system should always be able to answer: what changed, when did it change, what is new/removed/modified, and how far is current state from approved state.
+
 ## Main architecture
 
 ```text
@@ -64,6 +79,9 @@ Research internals are separated from HTTP/UI/host integration.
 - `DefaultPolicy.decide(...)` — maps detection into enforcement.
 - `DriftGuardService.approve(...)` / `reject(...)` — auditable trust decisions.
 - `verify_review_chain(...)` — verifies review-log integrity.
+- `make_discovery_revision(...)` — creates a commit-like complete MCP surface revision.
+- `diff_revisions(old, new)` — Git-style added/removed/modified/unchanged tool diff.
+- `compare_to_trusted(...)` — current surface vs approved per-tool baselines.
 
 ## Trust and persistence
 
@@ -167,14 +185,30 @@ Backend evidence already supports:
 - review history,
 - audit-integrity indicator.
 
+## Revision/change ledger
+
+The repository now keeps complete discovery revisions in addition to individual tool snapshots.
+
+This enables Git-like operations:
+
+```text
+driftguard status
+driftguard log
+driftguard diff --from <revision> --to <revision>
+```
+
+The API similarly exposes server status, revision history, individual revisions, and arbitrary revision comparison.
+
+A revision is an observation/commit; its `tree_hash` represents the complete tool surface. Repeated identical surfaces may therefore have different revision IDs but the same tree hash, preserving both content identity and observation history.
+
 ## Next priorities
 
-1. experiment combining pairwise + temporal + graph signals,
-2. externally anchored or signed audit checkpoints,
-3. configurable organization policy/thresholds,
-4. real MCP transport proxy/host integration,
-5. CLI for local inspection/review,
-6. polished operator UI over the API contract,
+1. fusion/ablation experiment combining pairwise + temporal + graph signals,
+2. compact human-readable diff rendering for CLI/API/UI,
+3. real MCP transport proxy/host integration that continuously feeds revisions,
+4. externally anchored or signed audit checkpoints,
+5. configurable organization policy/thresholds,
+6. polished GitHub/Codex-like operator UI over revision history and diffs,
 7. substantially expand both pairwise and graph datasets before making accuracy claims.
 
 Avoid placeholder modules and dependencies that do not yet serve an executable or experimental purpose.

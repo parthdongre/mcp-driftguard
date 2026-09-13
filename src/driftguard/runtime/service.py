@@ -10,6 +10,14 @@ from ..canonicalize import make_snapshot
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
+from ..revisions import (
+    DiscoveryRevision,
+    RevisionDelta,
+    SurfaceObservation,
+    compare_to_trusted,
+    diff_revisions,
+    make_discovery_revision,
+)
 from .audit import ReviewDecision, ReviewEvent, seal_review_event
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
@@ -30,7 +38,7 @@ class ObservationResult(BaseModel):
 
 
 class DriftGuardService:
-    """Application service that joins snapshots, drift detection, trust, and policy."""
+    """Application service that joins snapshots, revisions, detection, trust, and policy."""
 
     def __init__(
         self,
@@ -50,6 +58,70 @@ class DriftGuardService:
             if explainer is not None
             else (greedy_counterfactual if detector is rule_baseline else None)
         )
+
+    def observe_surface(
+        self,
+        *,
+        server_id: str,
+        tools: list[dict[str, Any]],
+        protocol_version: str | None = None,
+    ) -> SurfaceObservation:
+        """Commit one complete discovery surface and compute Git-like status."""
+
+        previous = self.store.latest_revision(server_id)
+        revision = make_discovery_revision(
+            server_id=server_id,
+            tools=tools,
+            parent_revision_id=previous.revision_id if previous is not None else None,
+            protocol_version=protocol_version,
+        )
+        self.store.put_revision(revision)
+        previous_delta = diff_revisions(previous, revision) if previous is not None else None
+        trusted_status = compare_to_trusted(
+            revision,
+            self.store.trusted_tools(server_id),
+        )
+        return SurfaceObservation(
+            revision=revision,
+            previous_delta=previous_delta,
+            trusted_status=trusted_status,
+        )
+
+    def current_surface_status(self, server_id: str) -> SurfaceObservation | None:
+        """Return current status without creating a new revision."""
+
+        history = self.store.revision_history(server_id)
+        if not history:
+            return None
+        revision = history[-1]
+        previous = history[-2] if len(history) > 1 else None
+        return SurfaceObservation(
+            revision=revision,
+            previous_delta=diff_revisions(previous, revision) if previous is not None else None,
+            trusted_status=compare_to_trusted(
+                revision,
+                self.store.trusted_tools(server_id),
+            ),
+        )
+
+    def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
+        return self.store.revision_history(server_id)
+
+    def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
+        return self.store.get_revision(server_id, revision_id)
+
+    def compare_revisions(
+        self,
+        *,
+        server_id: str,
+        from_revision_id: str,
+        to_revision_id: str,
+    ) -> RevisionDelta | None:
+        old = self.store.get_revision(server_id, from_revision_id)
+        new = self.store.get_revision(server_id, to_revision_id)
+        if old is None or new is None:
+            return None
+        return diff_revisions(old, new)
 
     def observe_tool(
         self,
@@ -97,8 +169,6 @@ class DriftGuardService:
         tool_name: str,
         sha256: str,
     ) -> ToolSnapshot | None:
-        """Resolve a previously observed snapshot by identity and canonical hash."""
-
         return self.store.get_observed(server_id, tool_name, sha256)
 
     def _record_review(
@@ -132,8 +202,6 @@ class DriftGuardService:
         reviewer: str = "local-reviewer",
         reason: str | None = None,
     ) -> ToolSnapshot:
-        """Record approval and promote the reviewed observation to the trusted baseline."""
-
         approved = snapshot.model_copy(update={"approval_state": "approved"})
         self._record_review(
             snapshot=approved,
@@ -151,8 +219,6 @@ class DriftGuardService:
         reviewer: str = "local-reviewer",
         reason: str | None = None,
     ) -> ToolSnapshot:
-        """Record rejection without replacing the currently trusted baseline."""
-
         rejected = snapshot.model_copy(update={"approval_state": "rejected"})
         self._record_review(
             snapshot=rejected,
