@@ -163,7 +163,8 @@ The development branch now contains:
 - revision provenance recording whether discovery came from the API, direct adapter, or stdio proxy and whether it was a normal poll or server-signaled refresh,
 - a unified activity timeline across server change signals, revisions, security checks, and human reviews,
 - a live timeline-based watch mode that surfaces server change notifications before catalog refresh,
-- an optional Server-Sent Events endpoint for real-time dashboard subscriptions.
+- an optional Server-Sent Events endpoint for real-time dashboard subscriptions,
+- trusted named checkpoints for long-range comparison against known-good MCP releases.
 
 Run the current research benchmarks with:
 

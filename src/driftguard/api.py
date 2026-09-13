@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from .adapters import ToolsListInterception, intercept_tools_list
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
+from .checkpoints import TrustedCheckpoint
 from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionChannel, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
@@ -29,6 +30,13 @@ class ReviewRequest(BaseModel):
     sha256: str = Field(min_length=64, max_length=64)
     reviewer: str = Field(min_length=1, max_length=200)
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class CheckpointCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    revision_id: str | None = None
+    created_by: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=2000)
 
 
 def create_app(service: DriftGuardService | None = None) -> FastAPI:
@@ -160,6 +168,63 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @app.get(
+        "/v1/servers/{server_id}/checkpoints",
+        response_model=list[TrustedCheckpoint],
+    )
+    def checkpoints(server_id: str) -> list[TrustedCheckpoint]:
+        return runtime.checkpoints(server_id)
+
+    @app.post(
+        "/v1/servers/{server_id}/checkpoints",
+        response_model=TrustedCheckpoint,
+    )
+    def create_checkpoint(
+        server_id: str,
+        request: CheckpointCreateRequest,
+    ) -> TrustedCheckpoint:
+        try:
+            return runtime.create_checkpoint(
+                server_id=server_id,
+                name=request.name,
+                revision_id=request.revision_id,
+                created_by=request.created_by,
+                note=request.note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get(
+        "/v1/servers/{server_id}/checkpoint",
+        response_model=TrustedCheckpoint,
+    )
+    def checkpoint(server_id: str, name: str) -> TrustedCheckpoint:
+        result = runtime.get_checkpoint(server_id, name)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Trusted checkpoint not found.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/checkpoint/compare",
+        response_model=RevisionDelta,
+    )
+    def checkpoint_compare(
+        server_id: str,
+        name: str,
+        to_revision: str | None = None,
+    ) -> RevisionDelta:
+        result = runtime.compare_checkpoint(
+            server_id=server_id,
+            checkpoint_name=name,
+            to_revision_id=to_revision,
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Checkpoint or target revision was not found.",
+            )
+        return result
 
     @app.get(
         "/v1/servers/{server_id}/checks",

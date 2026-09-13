@@ -109,3 +109,34 @@ def test_timeline_cursor_accepts_event_id_and_raw_revision_id():
     after_event = timeline_events_after(chronological, cursor)
     assert after_event == chronological[1:]
     assert timeline_events_after(chronological, "missing") is None
+
+
+def test_timeline_includes_trusted_checkpoint_event():
+    service = DriftGuardService()
+    first = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    service.approve(first.observations[0].snapshot)
+    passing = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    assert passing.surface is not None
+
+    service.create_checkpoint(
+        server_id="demo",
+        name="known-good",
+        revision_id=passing.surface.revision.revision_id,
+        created_by="alice",
+    )
+    timeline = service.timeline("demo")
+
+    assert timeline is not None
+    checkpoint_event = next(
+        item for item in timeline if item.kind == TimelineEventKind.CHECKPOINT
+    )
+    assert checkpoint_event.details["name"] == "known-good"
+    assert checkpoint_event.revision_id == passing.surface.revision.revision_id

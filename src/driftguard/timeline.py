@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .checkpoints import TrustedCheckpoint
 from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, diff_revisions
 from .signals import CatalogChangeSignal
@@ -16,6 +17,7 @@ class TimelineEventKind(StrEnum):
     REVISION = "revision"
     SECURITY_CHECK = "security_check"
     REVIEW = "review"
+    CHECKPOINT = "checkpoint"
 
 
 class TimelineEvent(BaseModel):
@@ -153,12 +155,34 @@ def _review_events(reviews: list[Any]) -> list[TimelineEvent]:
     return events
 
 
+def _checkpoint_events(checkpoints: list[TrustedCheckpoint]) -> list[TimelineEvent]:
+    return [
+        TimelineEvent(
+            event_id=f"checkpoint:{checkpoint.checkpoint_id}",
+            kind=TimelineEventKind.CHECKPOINT,
+            occurred_at=checkpoint.created_at,
+            server_id=checkpoint.server_id,
+            revision_id=checkpoint.revision_id,
+            severity="trusted",
+            summary=f"Created trusted checkpoint {checkpoint.name}",
+            details={
+                "name": checkpoint.name,
+                "tree_hash": checkpoint.tree_hash,
+                "created_by": checkpoint.created_by,
+                "note": checkpoint.note,
+            },
+        )
+        for checkpoint in checkpoints
+    ]
+
+
 def build_server_timeline(
     *,
     revisions: list[DiscoveryRevision],
     checks: list[RevisionSecurityCheck],
     signals: list[CatalogChangeSignal],
     reviews: list[Any],
+    checkpoints: list[TrustedCheckpoint] | None = None,
     newest_first: bool = True,
 ) -> list[TimelineEvent]:
     """Combine all operator-relevant MCP history into one stable activity feed."""
@@ -168,6 +192,7 @@ def build_server_timeline(
         *_check_events(checks),
         *_signal_events(signals),
         *_review_events(reviews),
+        *_checkpoint_events(checkpoints or []),
     ]
     events.sort(
         key=lambda item: (item.occurred_at, item.event_id),

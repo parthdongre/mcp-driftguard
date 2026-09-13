@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
+from .checkpoints import TrustedCheckpoint
 from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .signals import CatalogFreshnessStatus
@@ -200,3 +201,16 @@ def render_timeline_event(event: TimelineEvent) -> str:
         f"{event.occurred_at.isoformat()}  "
         f"{event.kind.value:15}{severity}{revision}{tool}  {event.summary}"
     )
+
+
+def render_checkpoint(checkpoint: TrustedCheckpoint) -> str:
+    lines = [
+        f"checkpoint {checkpoint.name}",
+        f"revision: {_short(checkpoint.revision_id, 12)}",
+        f"tree: {_short(checkpoint.tree_hash, 12)}",
+        f"created: {checkpoint.created_at.isoformat()}",
+        f"created by: {checkpoint.created_by}",
+    ]
+    if checkpoint.note:
+        lines.append(f"note: {checkpoint.note}")
+    return "\n".join(lines)

@@ -9,7 +9,8 @@ from ..baselines import rule_baseline
 from ..blame import ToolBlame, blame_tool
 from ..canonicalize import make_snapshot
 from ..changefeed import RevisionChangeEvent, changes_after
-from ..checks import RevisionSecurityCheck
+from ..checkpoints import TrustedCheckpoint, make_checkpoint
+from ..checks import RevisionCheckState, RevisionSecurityCheck
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
@@ -150,12 +151,80 @@ class DriftGuardService:
             checks=self.store.revision_checks(server_id),
             signals=self.store.catalog_signals(server_id),
             reviews=self.store.server_reviews(server_id),
+            checkpoints=self.store.checkpoints(server_id),
             newest_first=False,
         )
         selected = timeline_events_after(chronological, after_event_id)
         if selected is None:
             return None
         return list(reversed(selected)) if newest_first else selected
+
+    def create_checkpoint(
+        self,
+        *,
+        server_id: str,
+        name: str,
+        created_by: str,
+        revision_id: str | None = None,
+        note: str | None = None,
+    ) -> TrustedCheckpoint:
+        revision = (
+            self.store.get_revision(server_id, revision_id)
+            if revision_id is not None
+            else self.store.latest_revision(server_id)
+        )
+        if revision is None:
+            raise ValueError("Checkpoint target revision was not found.")
+
+        check = self.store.get_revision_check(server_id, revision.revision_id)
+        if check is None or check.state != RevisionCheckState.PASS:
+            raise ValueError(
+                "Trusted checkpoints require a revision with a persisted PASS security check."
+            )
+
+        latest = self.store.latest_revision(server_id)
+        if latest is not None and latest.revision_id == revision.revision_id:
+            if self.catalog_freshness(server_id).dirty:
+                raise ValueError(
+                    "Cannot checkpoint the latest revision while the catalog is dirty."
+                )
+
+        checkpoint = make_checkpoint(
+            server_id=server_id,
+            name=name,
+            revision_id=revision.revision_id,
+            tree_hash=revision.tree_hash,
+            created_by=created_by,
+            note=note,
+        )
+        self.store.put_checkpoint(checkpoint)
+        return checkpoint
+
+    def checkpoints(self, server_id: str) -> list[TrustedCheckpoint]:
+        return self.store.checkpoints(server_id)
+
+    def get_checkpoint(self, server_id: str, name: str) -> TrustedCheckpoint | None:
+        return self.store.get_checkpoint(server_id, name)
+
+    def compare_checkpoint(
+        self,
+        *,
+        server_id: str,
+        checkpoint_name: str,
+        to_revision_id: str | None = None,
+    ) -> RevisionDelta | None:
+        checkpoint = self.store.get_checkpoint(server_id, checkpoint_name)
+        if checkpoint is None:
+            return None
+        target = (
+            self.store.get_revision(server_id, to_revision_id)
+            if to_revision_id is not None
+            else self.store.latest_revision(server_id)
+        )
+        baseline = self.store.get_revision(server_id, checkpoint.revision_id)
+        if baseline is None or target is None:
+            return None
+        return diff_revisions(baseline, target)
 
     def mark_catalog_changed(self, server_id: str) -> CatalogChangeSignal:
         signal = make_catalog_change_signal(server_id)

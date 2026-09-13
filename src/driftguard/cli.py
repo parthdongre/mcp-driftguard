@@ -12,6 +12,7 @@ from .fusion_evaluation import evaluate_fusion_file
 from .graph_evaluation import evaluate_graph_file
 from .render import (
     render_catalog_freshness,
+    render_checkpoint,
     render_change_event,
     render_revision_check,
     render_revision_delta,
@@ -22,7 +23,7 @@ from .render import (
     render_tool_blame,
 )
 from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
-from .runtime import SQLiteSnapshotStore, verify_review_chain
+from .runtime import DriftGuardService, SQLiteSnapshotStore, verify_review_chain
 from .signals import catalog_freshness
 from .stdio_proxy import run_stdio_proxy
 from .timeline import build_server_timeline, timeline_events_after
@@ -152,6 +153,64 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     check.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
+    checkpoint = subcommands.add_parser(
+        "checkpoint",
+        help="Manage trusted named revision checkpoints.",
+    )
+    checkpoint_sub = checkpoint.add_subparsers(dest="checkpoint_command", required=True)
+
+    checkpoint_create = checkpoint_sub.add_parser(
+        "create",
+        help="Create a trusted checkpoint at a PASS revision.",
+    )
+    _add_store_args(checkpoint_create)
+    checkpoint_create.add_argument("name", help="Checkpoint name.")
+    checkpoint_create.add_argument(
+        "--revision",
+        help="Revision ID; defaults to the latest revision.",
+    )
+    checkpoint_create.add_argument(
+        "--by",
+        dest="created_by",
+        default="local-reviewer",
+        help="Identity creating the checkpoint.",
+    )
+    checkpoint_create.add_argument("--note", help="Optional checkpoint note.")
+
+    checkpoint_list = checkpoint_sub.add_parser("list", help="List trusted checkpoints.")
+    _add_store_args(checkpoint_list)
+    checkpoint_list.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
+    checkpoint_show = checkpoint_sub.add_parser("show", help="Show one trusted checkpoint.")
+    _add_store_args(checkpoint_show)
+    checkpoint_show.add_argument("name", help="Checkpoint name.")
+    checkpoint_show.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
+    checkpoint_diff = checkpoint_sub.add_parser(
+        "diff",
+        help="Compare a trusted checkpoint to a revision or the latest state.",
+    )
+    _add_store_args(checkpoint_diff)
+    checkpoint_diff.add_argument("name", help="Checkpoint name.")
+    checkpoint_diff.add_argument(
+        "--to",
+        dest="to_revision",
+        help="Target revision ID; defaults to latest.",
+    )
+    checkpoint_diff.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON.",
+    )
+
     blame = subcommands.add_parser(
         "blame",
         help="Show which revision last changed each current tool field.",
@@ -264,6 +323,7 @@ def _run_revision_command(args: argparse.Namespace) -> int:
                 checks=store.revision_checks(args.server),
                 signals=store.catalog_signals(args.server),
                 reviews=store.server_reviews(args.server),
+                checkpoints=store.checkpoints(args.server),
             )
             if args.json:
                 print(_json_list(result))
@@ -370,6 +430,7 @@ def _run_watch(args: argparse.Namespace) -> int:
                 checks=store.revision_checks(args.server),
                 signals=store.catalog_signals(args.server),
                 reviews=store.server_reviews(args.server),
+                checkpoints=store.checkpoints(args.server),
                 newest_first=False,
             )
             feed = timeline_events_after(timeline, cursor)
@@ -383,6 +444,63 @@ def _run_watch(args: argparse.Namespace) -> int:
             print(render_timeline_event(event), flush=True)
             cursor = event.event_id
         time.sleep(max(0.1, args.interval))
+
+
+
+def _run_checkpoint(args: argparse.Namespace) -> int:
+    store = SQLiteSnapshotStore(args.db)
+    service = DriftGuardService(store=store)
+    try:
+        if args.checkpoint_command == "create":
+            try:
+                checkpoint = service.create_checkpoint(
+                    server_id=args.server,
+                    name=args.name,
+                    revision_id=args.revision,
+                    created_by=args.created_by,
+                    note=args.note,
+                )
+            except ValueError as exc:
+                print(str(exc))
+                return 1
+            print(render_checkpoint(checkpoint))
+            return 0
+
+        if args.checkpoint_command == "list":
+            checkpoints = service.checkpoints(args.server)
+            if args.json:
+                print(_json_list(checkpoints))
+            else:
+                print(
+                    "\n\n".join(render_checkpoint(item) for item in checkpoints)
+                    or "No trusted checkpoints."
+                )
+            return 0
+
+        if args.checkpoint_command == "show":
+            checkpoint = service.get_checkpoint(args.server, args.name)
+            if checkpoint is None:
+                print("Trusted checkpoint was not found.")
+                return 1
+            print(
+                checkpoint.model_dump_json(indent=2)
+                if args.json
+                else render_checkpoint(checkpoint)
+            )
+            return 0
+
+        delta = service.compare_checkpoint(
+            server_id=args.server,
+            checkpoint_name=args.name,
+            to_revision_id=args.to_revision,
+        )
+        if delta is None:
+            print("Checkpoint or target revision was not found.")
+            return 1
+        print(delta.model_dump_json(indent=2) if args.json else render_revision_delta(delta))
+        return 0
+    finally:
+        store.close()
 
 
 def _run_audit(args: argparse.Namespace) -> int:
@@ -431,6 +549,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             db_path=args.db,
             server_id=args.server,
         )
+    if args.command == "checkpoint":
+        return _run_checkpoint(args)
     if args.command == "audit":
         return _run_audit(args)
 

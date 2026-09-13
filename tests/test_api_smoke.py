@@ -12,3 +12,5 @@ def test_api_exposes_revision_and_realtime_routes():
     assert "/v1/servers/{server_id}/timeline" in paths
     assert "/v1/servers/{server_id}/events" in paths
     assert "/v1/servers/{server_id}/revisions/{revision_id}/view" in paths
+    assert "/v1/servers/{server_id}/checkpoints" in paths
+    assert "/v1/servers/{server_id}/checkpoint/compare" in paths

@@ -235,6 +235,8 @@ driftguard blame --db driftguard.db --server demo --tool search
 driftguard check --db driftguard.db --server demo
 driftguard show --db driftguard.db --server demo [<revision>]
 driftguard timeline --db driftguard.db --server demo
+driftguard checkpoint create --db driftguard.db --server demo release/v1 --by alice
+driftguard checkpoint diff --db driftguard.db --server demo release/v1
 ```
 
 The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
@@ -244,6 +246,33 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Trusted checkpoints / security-aware tags
+
+Trusted checkpoints are DriftGuard's equivalent of security-aware Git tags. A checkpoint is
+an immutable named reference to a discovery revision and its complete tree hash.
+
+Unlike a normal tag, checkpoint creation is rejected unless:
+
+1. the target revision has a persisted `PASS` security check, and
+2. if the target is the latest revision, the catalog is not currently dirty after a
+   `tools/list_changed` notification.
+
+This prevents accidentally labeling a pending-review or stale catalog as a known-good
+baseline.
+
+Useful commands:
+
+```text
+driftguard checkpoint create --db driftguard.db --server demo release/v1 --by alice
+driftguard checkpoint list --db driftguard.db --server demo
+driftguard checkpoint show --db driftguard.db --server demo release/v1
+driftguard checkpoint diff --db driftguard.db --server demo release/v1 [--to <revision>]
+```
+
+The diff operation compares the checkpoint revision to a selected revision or the latest
+revision, giving a durable answer to "what changed since our known-good release?" Checkpoint
+creation is also emitted into the unified activity timeline.
 
 ## Unified activity timeline
 
@@ -402,7 +431,7 @@ produce a defensible paper ablation table on a much larger corpus.
 2. Streamable HTTP gateway/interceptor for remote MCP servers,
 3. automatically establish the MCP tools-list-change subscription where supported,
 4. production hardening for the SSE stream (auth, disconnect/load testing, backpressure),
-5. externally anchored or signed audit checkpoints,
+5. externally anchor/sign review-chain and checkpoint heads,
 6. configurable organization policy/thresholds,
 7. polished GitHub/Codex-like operator UI over revision history and diffs,
 8. substantially expand both pairwise and graph datasets before making accuracy claims.

@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Protocol
 
+from ..checkpoints import TrustedCheckpoint
 from ..checks import RevisionSecurityCheck
 from ..models import ToolSnapshot
 from ..revisions import DiscoveryRevision
@@ -65,6 +66,12 @@ class SnapshotStore(Protocol):
 
     def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]: ...
 
+    def put_checkpoint(self, checkpoint: TrustedCheckpoint) -> None: ...
+
+    def get_checkpoint(self, server_id: str, name: str) -> TrustedCheckpoint | None: ...
+
+    def checkpoints(self, server_id: str) -> list[TrustedCheckpoint]: ...
+
 
 class InMemorySnapshotStore:
     """Small deterministic store for tests, demos, and local development."""
@@ -76,6 +83,7 @@ class InMemorySnapshotStore:
         self._revisions: dict[str, list[DiscoveryRevision]] = defaultdict(list)
         self._catalog_signals: dict[str, list[CatalogChangeSignal]] = defaultdict(list)
         self._revision_checks: dict[tuple[str, str], RevisionSecurityCheck] = {}
+        self._checkpoints: dict[tuple[str, str], TrustedCheckpoint] = {}
 
     @staticmethod
     def _key(server_id: str, tool_name: str) -> ToolKey:
@@ -179,6 +187,28 @@ class InMemorySnapshotStore:
             if stored_server == server_id
         ]
 
+    def put_checkpoint(self, checkpoint: TrustedCheckpoint) -> None:
+        key = (checkpoint.server_id, checkpoint.name)
+        if key in self._checkpoints:
+            raise ValueError(
+                f"Checkpoint {checkpoint.name!r} already exists for server "
+                f"{checkpoint.server_id!r}."
+            )
+        self._checkpoints[key] = checkpoint
+
+    def get_checkpoint(self, server_id: str, name: str) -> TrustedCheckpoint | None:
+        return self._checkpoints.get((server_id, name))
+
+    def checkpoints(self, server_id: str) -> list[TrustedCheckpoint]:
+        return sorted(
+            (
+                checkpoint
+                for (stored_server, _), checkpoint in self._checkpoints.items()
+                if stored_server == server_id
+            ),
+            key=lambda checkpoint: checkpoint.created_at,
+        )
+
 
 class SQLiteSnapshotStore:
     """Durable local snapshot store backed only by Python's sqlite3 module."""
@@ -265,6 +295,23 @@ class SQLiteSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_revision_security_checks_server
                 ON revision_security_checks(server_id, id);
+
+                CREATE TABLE IF NOT EXISTS trusted_checkpoints (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    checkpoint_id TEXT NOT NULL UNIQUE,
+                    server_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    revision_id TEXT NOT NULL,
+                    tree_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    note TEXT,
+                    checkpoint_json TEXT NOT NULL,
+                    UNIQUE(server_id, name)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_trusted_checkpoints_server
+                ON trusted_checkpoints(server_id, id);
                 """
             )
 
@@ -610,3 +657,68 @@ class SQLiteSnapshotStore:
                 (server_id,),
             ).fetchall()
         return [RevisionSecurityCheck.model_validate_json(row[0]) for row in rows]
+
+
+    def put_checkpoint(self, checkpoint: TrustedCheckpoint) -> None:
+        try:
+            with self._lock, self._connection:
+                self._connection.execute(
+                    """
+                    INSERT INTO trusted_checkpoints (
+                        checkpoint_id,
+                        server_id,
+                        name,
+                        revision_id,
+                        tree_hash,
+                        created_at,
+                        created_by,
+                        note,
+                        checkpoint_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        checkpoint.checkpoint_id,
+                        checkpoint.server_id,
+                        checkpoint.name,
+                        checkpoint.revision_id,
+                        checkpoint.tree_hash,
+                        checkpoint.created_at.isoformat(),
+                        checkpoint.created_by,
+                        checkpoint.note,
+                        checkpoint.model_dump_json(),
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(
+                f"Checkpoint {checkpoint.name!r} already exists for server "
+                f"{checkpoint.server_id!r}."
+            ) from exc
+
+    def get_checkpoint(self, server_id: str, name: str) -> TrustedCheckpoint | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT checkpoint_json
+                FROM trusted_checkpoints
+                WHERE server_id = ? AND name = ?
+                LIMIT 1
+                """,
+                (server_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return TrustedCheckpoint.model_validate_json(row[0])
+
+    def checkpoints(self, server_id: str) -> list[TrustedCheckpoint]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT checkpoint_json
+                FROM trusted_checkpoints
+                WHERE server_id = ?
+                ORDER BY id ASC
+                """,
+                (server_id,),
+            ).fetchall()
+        return [TrustedCheckpoint.model_validate_json(row[0]) for row in rows]

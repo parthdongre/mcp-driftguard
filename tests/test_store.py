@@ -158,3 +158,43 @@ def test_sqlite_store_persists_revision_security_check(tmp_path):
     assert persisted.revision_id == revision_id
     assert persisted.state.value == "review_required"
     assert [item.revision_id for item in history] == [revision_id]
+
+
+def test_sqlite_store_persists_trusted_checkpoint(tmp_path):
+    from driftguard.adapters import intercept_tools_list
+
+    database = tmp_path / "checkpoints.db"
+    store = SQLiteSnapshotStore(database)
+    service = DriftGuardService(store=store)
+
+    first = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    service.approve(first.observations[0].snapshot)
+    passing = intercept_tools_list(
+        payload={"result": {"tools": [_tool()]}},
+        server_id="demo",
+        service=service,
+    )
+    assert passing.surface is not None
+
+    checkpoint = service.create_checkpoint(
+        server_id="demo",
+        name="release/v1",
+        revision_id=passing.surface.revision.revision_id,
+        created_by="security-reviewer",
+        note="Known-good release.",
+    )
+    store.close()
+
+    reopened = SQLiteSnapshotStore(database)
+    persisted = reopened.get_checkpoint("demo", "release/v1")
+    history = reopened.checkpoints("demo")
+    reopened.close()
+
+    assert persisted is not None
+    assert persisted.checkpoint_id == checkpoint.checkpoint_id
+    assert persisted.revision_id == passing.surface.revision.revision_id
+    assert [item.name for item in history] == ["release/v1"]
