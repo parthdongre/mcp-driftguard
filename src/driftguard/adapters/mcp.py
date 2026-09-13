@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..graph import CrossToolGraphEvidence, analyze_tool_graph
 from ..runtime import DriftGuardService, EnforcementAction, ObservationResult
 
 _SAFE_FORWARD_ACTIONS = {
@@ -20,6 +21,7 @@ class ToolsListInterception(BaseModel):
     observations: list[ObservationResult] = Field(default_factory=list)
     forwarded_tools: list[str] = Field(default_factory=list)
     withheld_tools: list[str] = Field(default_factory=list)
+    graph_evidence: CrossToolGraphEvidence | None = None
 
 
 def extract_tools(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -57,8 +59,10 @@ def intercept_tools_list(
     forwarded: list[dict[str, Any]] = []
     forwarded_names: list[str] = []
     withheld_names: list[str] = []
+    tools = extract_tools(payload)
+    graph_evidence = analyze_tool_graph(tools)
 
-    for tool in extract_tools(payload):
+    for tool in tools:
         observation = service.observe_tool(
             server_id=server_id,
             tool=tool,
@@ -77,4 +81,5 @@ def intercept_tools_list(
         observations=observations,
         forwarded_tools=forwarded_names,
         withheld_tools=withheld_names,
+        graph_evidence=graph_evidence,
     )
