@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .evaluation import evaluate_file
 from .graph_evaluation import evaluate_graph_file
