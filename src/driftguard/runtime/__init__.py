@@ -9,6 +9,6 @@ __all__ = [
     "InMemorySnapshotStore",
     "ObservationResult",
     "PolicyDecision",
-    "SnapshotStore",
     "SQLiteSnapshotStore",
+    "SnapshotStore",
 ]
