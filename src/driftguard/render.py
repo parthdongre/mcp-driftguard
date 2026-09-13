@@ -84,7 +84,9 @@ def render_revision_log(revisions: list[DiscoveryRevision]) -> str:
         marker = "=" if previous_tree is not None and revision.tree_hash == previous_tree else "*"
         lines.append(
             f"{marker} {_short(revision.revision_id, 12)}  "
-            f"{revision.observed_at.isoformat()}  tree {_short(revision.tree_hash, 12)}"
+            f"{revision.observed_at.isoformat()}  "
+            f"{revision.origin.channel.value}/{revision.origin.trigger.value}  "
+            f"tree {_short(revision.tree_hash, 12)}"
         )
         previous_tree = revision.tree_hash
     return "\n".join(lines)
@@ -161,7 +163,12 @@ def render_revision_view(view: RevisionView) -> str:
         f"tree: {_short(revision.tree_hash, 12)}",
         f"observed: {revision.observed_at.isoformat()}",
         f"parent: {_short(revision.parent_revision_id, 12)}",
+        f"origin: {revision.origin.channel.value} / {revision.origin.trigger.value}",
     ]
+    if revision.origin.pending_change_signals:
+        lines.append(
+            f"refresh signals: {revision.origin.pending_change_signals}"
+        )
 
     if view.is_latest and view.freshness is not None:
         state = "DIRTY" if view.freshness.dirty else "clean"

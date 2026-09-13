@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import intercept_tools_list
+from .revisions import RevisionChannel
 from .runtime import DriftGuardService, SQLiteSnapshotStore
 
 
@@ -77,6 +78,7 @@ class StdioProxyFilter:
                 payload=message,
                 server_id=self.server_id,
                 service=self.service,
+                channel=RevisionChannel.STDIO_PROXY,
             )
             transformed = result.payload
         except Exception as exc:  # noqa: BLE001 - security boundary must fail closed

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..checks import RevisionSecurityCheck, build_revision_check
 from ..graph import CrossToolGraphEvidence, analyze_tool_graph
-from ..revisions import SurfaceObservation
+from ..revisions import RevisionChannel, SurfaceObservation
 from ..runtime import DriftGuardService, EnforcementAction, ObservationResult
 
 _SAFE_FORWARD_ACTIONS = {
@@ -54,6 +54,7 @@ def intercept_tools_list(
     server_id: str,
     service: DriftGuardService,
     protocol_version: str | None = None,
+    channel: RevisionChannel = RevisionChannel.ADAPTER,
 ) -> ToolsListInterception:
     """Inspect and version a tools/list response before exposing tools to the host."""
 
@@ -67,6 +68,7 @@ def intercept_tools_list(
         server_id=server_id,
         tools=tools,
         protocol_version=protocol_version,
+        channel=channel,
     )
 
     for tool in tools:

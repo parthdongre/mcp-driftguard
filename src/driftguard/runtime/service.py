@@ -15,7 +15,10 @@ from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
 from ..revisions import (
     DiscoveryRevision,
+    RevisionChannel,
     RevisionDelta,
+    RevisionOrigin,
+    RevisionTrigger,
     SurfaceObservation,
     compare_to_trusted,
     diff_revisions,
@@ -75,15 +78,29 @@ class DriftGuardService:
         server_id: str,
         tools: list[dict[str, Any]],
         protocol_version: str | None = None,
+        channel: RevisionChannel = RevisionChannel.ADAPTER,
     ) -> SurfaceObservation:
         """Commit one complete discovery surface and compute Git-like status."""
 
         previous = self.store.latest_revision(server_id)
+        freshness_before = self.catalog_freshness(server_id)
+        if previous is None:
+            trigger = RevisionTrigger.INITIAL_DISCOVERY
+        elif freshness_before.dirty:
+            trigger = RevisionTrigger.LIST_CHANGED_REFRESH
+        else:
+            trigger = RevisionTrigger.DISCOVERY
+
         revision = make_discovery_revision(
             server_id=server_id,
             tools=tools,
             parent_revision_id=previous.revision_id if previous is not None else None,
             protocol_version=protocol_version,
+            origin=RevisionOrigin(
+                channel=channel,
+                trigger=trigger,
+                pending_change_signals=freshness_before.pending_signals,
+            ),
         )
         self.store.put_revision(revision)
         self.store.acknowledge_catalog_signals(server_id, revision.revision_id)

@@ -9,7 +9,7 @@ from .adapters import ToolsListInterception, intercept_tools_list
 from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .checks import RevisionSecurityCheck
-from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
+from .revisions import DiscoveryRevision, RevisionChannel, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
 from .views import RevisionView
@@ -50,6 +50,7 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
             server_id=server_id,
             service=runtime,
             protocol_version=request.protocol_version,
+            channel=RevisionChannel.API,
         )
 
     @app.get(

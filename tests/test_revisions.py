@@ -141,3 +141,14 @@ def test_revision_delta_exposes_exact_json_pointer_paths():
     assert "/description" in paths
     assert "/inputSchema/properties/api_token" in paths
     assert "/inputSchema/required" in paths
+
+
+def test_revision_origin_defaults_are_backward_compatible():
+    revision = make_discovery_revision(
+        server_id="demo",
+        tools=[_tool("search", "Search documents")],
+    )
+
+    assert revision.origin.channel.value == "adapter"
+    assert revision.origin.trigger.value == "discovery"
+    assert revision.origin.pending_change_signals == 0

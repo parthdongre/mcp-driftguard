@@ -86,3 +86,36 @@ def test_stdio_proxy_marks_catalog_dirty_on_list_changed_notification():
     )
 
     assert service.catalog_freshness("demo").dirty is False
+
+
+def test_stdio_proxy_records_revision_origin_and_refresh_trigger():
+    service = DriftGuardService()
+    proxy = StdioProxyFilter(server_id="demo", service=service)
+
+    proxy.process_client_line(
+        '{"jsonrpc":"2.0","id":20,"method":"tools/list","params":{}}\n'
+    )
+    proxy.process_server_line(
+        json.dumps({"jsonrpc": "2.0", "id": 20, "result": {"tools": [_tool()]}})
+        + "\n"
+    )
+    first = service.revision_history("demo")[-1]
+
+    assert first.origin.channel.value == "stdio_proxy"
+    assert first.origin.trigger.value == "initial_discovery"
+
+    proxy.process_server_line(
+        '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n'
+    )
+    proxy.process_client_line(
+        '{"jsonrpc":"2.0","id":21,"method":"tools/list","params":{}}\n'
+    )
+    proxy.process_server_line(
+        json.dumps({"jsonrpc": "2.0", "id": 21, "result": {"tools": [_tool()]}})
+        + "\n"
+    )
+    second = service.revision_history("demo")[-1]
+
+    assert second.origin.channel.value == "stdio_proxy"
+    assert second.origin.trigger.value == "list_changed_refresh"
+    assert second.origin.pending_change_signals == 1

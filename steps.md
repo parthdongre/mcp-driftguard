@@ -225,6 +225,20 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
 
+## Revision provenance
+
+Each discovery revision now records two provenance dimensions:
+
+- **channel** — direct adapter, HTTP API, or transparent stdio proxy,
+- **trigger** — initial discovery, ordinary discovery/poll, or refresh after a server
+  `notifications/tools/list_changed` signal.
+
+A refresh revision also records how many pending server change signals it acknowledged.
+This makes the history explain *why* a revision exists instead of only storing its content.
+
+The provenance is included in `driftguard log` and `driftguard show`, and is part of the
+immutable revision ID payload.
+
 ## Git-show-style revision view
 
 `RevisionView` is the primary read model for an operator opening a revision. It combines:

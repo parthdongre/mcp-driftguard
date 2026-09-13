@@ -14,6 +14,24 @@ from .models import ToolSnapshot
 from .signals import CatalogFreshnessStatus
 
 
+class RevisionChannel(StrEnum):
+    ADAPTER = "adapter"
+    STDIO_PROXY = "stdio_proxy"
+    API = "api"
+
+
+class RevisionTrigger(StrEnum):
+    INITIAL_DISCOVERY = "initial_discovery"
+    DISCOVERY = "discovery"
+    LIST_CHANGED_REFRESH = "list_changed_refresh"
+
+
+class RevisionOrigin(BaseModel):
+    channel: RevisionChannel = RevisionChannel.ADAPTER
+    trigger: RevisionTrigger = RevisionTrigger.DISCOVERY
+    pending_change_signals: int = Field(default=0, ge=0)
+
+
 class RevisionTool(BaseModel):
     name: str
     sha256: str
@@ -29,6 +47,7 @@ class DiscoveryRevision(BaseModel):
     observed_at: datetime
     parent_revision_id: str | None = None
     protocol_version: str | None = None
+    origin: RevisionOrigin = Field(default_factory=RevisionOrigin)
     tools: list[RevisionTool] = Field(default_factory=list)
     duplicate_tool_names: list[str] = Field(default_factory=list)
 
@@ -119,10 +138,12 @@ def make_discovery_revision(
     parent_revision_id: str | None = None,
     protocol_version: str | None = None,
     observed_at: datetime | None = None,
+    origin: RevisionOrigin | None = None,
 ) -> DiscoveryRevision:
     """Create a commit-like revision for one full tools/list observation."""
 
     timestamp = observed_at or datetime.now(UTC)
+    revision_origin = origin if origin is not None else RevisionOrigin()
     entries = _surface_tool_entries(tools)
     counts = Counter(entry.name for entry in entries)
     duplicates = sorted(name for name, count in counts.items() if count > 1)
@@ -142,6 +163,7 @@ def make_discovery_revision(
             "tree_hash": tree_hash,
             "parent_revision_id": parent_revision_id,
             "protocol_version": protocol_version,
+            "origin": revision_origin.model_dump(mode="json"),
             "observed_at": timestamp.isoformat(),
         }
     )
@@ -153,6 +175,7 @@ def make_discovery_revision(
         observed_at=timestamp,
         parent_revision_id=parent_revision_id,
         protocol_version=protocol_version,
+        origin=revision_origin,
         tools=entries,
         duplicate_tool_names=duplicates,
     )
