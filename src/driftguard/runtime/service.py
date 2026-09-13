@@ -11,6 +11,7 @@ from ..diff import build_delta
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
+from .temporal import DriftBudget, DriftBudgetEvidence
 
 Detector = Callable[[ToolDelta], RiskAssessment]
 
@@ -20,6 +21,7 @@ class ObservationResult(BaseModel):
     baseline: ToolSnapshot | None = None
     delta: ToolDelta | None = None
     assessment: RiskAssessment | None = None
+    temporal: DriftBudgetEvidence | None = None
     decision: PolicyDecision
 
 
@@ -32,10 +34,12 @@ class DriftGuardService:
         store: SnapshotStore | None = None,
         detector: Detector = rule_baseline,
         policy: DefaultPolicy | None = None,
+        drift_budget: DriftBudget | None = None,
     ) -> None:
         self.store = store if store is not None else InMemorySnapshotStore()
         self.detector = detector
         self.policy = policy if policy is not None else DefaultPolicy()
+        self.drift_budget = drift_budget if drift_budget is not None else DriftBudget()
 
     def observe_tool(
         self,
@@ -51,21 +55,27 @@ class DriftGuardService:
         )
         baseline = self.store.get_trusted(snapshot.server_id, snapshot.tool_name)
         self.store.put_observed(snapshot)
+        temporal = self.drift_budget.evaluate(
+            self.store.history(snapshot.server_id, snapshot.tool_name),
+            self.detector,
+        )
 
         if baseline is None:
             return ObservationResult(
                 snapshot=snapshot,
+                temporal=temporal,
                 decision=self.policy.for_untrusted_tool(),
             )
 
         delta = build_delta(baseline, snapshot)
         assessment = self.detector(delta)
-        decision = self.policy.decide(assessment)
+        decision = self.policy.apply_temporal(self.policy.decide(assessment), temporal)
         return ObservationResult(
             snapshot=snapshot,
             baseline=baseline,
             delta=delta,
             assessment=assessment,
+            temporal=temporal,
             decision=decision,
         )
 

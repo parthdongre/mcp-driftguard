@@ -6,6 +6,7 @@ from typing import ClassVar
 from pydantic import BaseModel
 
 from ..models import ChangeClass, RiskAssessment
+from .temporal import DriftBudgetEvidence
 
 
 class EnforcementAction(StrEnum):
@@ -43,4 +44,30 @@ class DefaultPolicy:
             action=action,
             reason=f"{assessment.change_class.value} mapped to {action.value} by default policy.",
             assessment=assessment,
+        )
+
+    def apply_temporal(
+        self,
+        decision: PolicyDecision,
+        evidence: DriftBudgetEvidence,
+    ) -> PolicyDecision:
+        """Escalate otherwise-safe drift when the rolling cumulative budget is exceeded."""
+
+        if not evidence.exceeded:
+            return decision
+
+        if decision.action not in {
+            EnforcementAction.ALLOW,
+            EnforcementAction.ALLOW_AND_LOG,
+        }:
+            return decision
+
+        return PolicyDecision(
+            action=EnforcementAction.REQUIRE_RECONSENT,
+            reason=(
+                "Rolling drift budget exceeded: "
+                f"{evidence.cumulative_score:.2f} > {evidence.budget:.2f} "
+                f"across {evidence.comparisons} version transitions."
+            ),
+            assessment=decision.assessment,
         )

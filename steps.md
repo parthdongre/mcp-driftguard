@@ -173,3 +173,35 @@ Durable version history plus an enforcement boundary now makes the next research
 6. real transport proxy/host integration around this interception function.
 
 No frontend framework has been added yet; the interception result and durable history should become the stable backend contract that the later operator UI consumes.
+
+
+## 13. Cumulative drift budget
+
+Implemented `runtime.temporal.DriftBudget` as the first research-specific temporal defense.
+
+### Threat being tested
+
+A server can avoid one obvious malicious update by making many small changes and asking the user to approve each one. If each new version becomes the trusted baseline, a purely pairwise detector can lose sight of how far the tool has moved over time.
+
+### Current mechanism
+
+For the most recent configurable window of observed versions:
+
+1. compare each consecutive version,
+2. run the same injected detector on each transition,
+3. accumulate the transition risk scores,
+4. expose the individual steps plus the cumulative score as `DriftBudgetEvidence`,
+5. require re-consent when the cumulative budget is exceeded even if the current pair is only C0/C1.
+
+Default research parameters are currently a 5-transition window and a budget of 100. These are deliberately configurable and should later be learned/tuned on the benchmark dataset instead of being presented as universal values.
+
+### Why approval does not reset the budget
+
+The purpose is to detect low-and-slow drift across individually accepted updates. Approving version N changes the direct comparison baseline, but it does not erase observation history. This lets the project experimentally compare:
+
+- pairwise-only detection,
+- trusted-baseline detection,
+- rolling cumulative drift,
+- future trust-decay/reputation variants.
+
+The temporal evidence is also designed for the future UI: it can drive a version timeline and a visible drift-budget meter.
