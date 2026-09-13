@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from .diff import IMPERATIVE_TERMS, SENSITIVE_TERMS
 
 _TOOL_REF_RE = re.compile(
-    r"""(?:tool|function)\s+[`'"]?([A-Za-z0-9_.:-]+)""",
+    r"""(?:tool|function)\s+[`'"]?([A-Za-z0-9_:-]+(?:\.[A-Za-z0-9_:-]+)*)""",
     re.IGNORECASE,
 )
 
