@@ -16,6 +16,7 @@ from .render import (
 )
 from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
+from .stdio_proxy import run_stdio_proxy
 
 
 def _add_store_args(command: argparse.ArgumentParser) -> None:
@@ -79,6 +80,17 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Polling interval in seconds (default: 1.0).",
+    )
+
+    proxy = subcommands.add_parser(
+        "proxy",
+        help="Run a local MCP server behind DriftGuard's transparent stdio gate.",
+    )
+    _add_store_args(proxy)
+    proxy.add_argument(
+        "server_command",
+        nargs=argparse.REMAINDER,
+        help="Child MCP server command, usually after --.",
     )
 
     audit = subcommands.add_parser("audit", help="Inspect durable review history.")
@@ -207,6 +219,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_revision_command(args)
     if args.command == "watch":
         return _run_watch(args)
+    if args.command == "proxy":
+        command = list(args.server_command)
+        if command and command[0] == "--":
+            command = command[1:]
+        if not command:
+            parser.error("proxy requires a child MCP server command after --")
+        return run_stdio_proxy(
+            command=command,
+            db_path=args.db,
+            server_id=args.server,
+        )
     if args.command == "audit":
         return _run_audit(args)
 

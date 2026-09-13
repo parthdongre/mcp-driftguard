@@ -15,6 +15,15 @@ DriftGuard continuously versions the complete MCP tool surface. Every discovery 
 
 The security detector sits on top of that revision history rather than treating each request as an isolated scan.
 
+For local MCP servers, DriftGuard can now run as a transparent stdio proxy:
+
+```bash
+driftguard proxy --db driftguard.db --server my-server -- python server.py
+```
+
+Every intercepted `tools/list` response becomes a revision before the filtered catalog is
+forwarded to the MCP host.
+
 ## Why this project exists
 
 Model Context Protocol (MCP) clients discover tools through tool definitions containing natural-language descriptions and structured schemas. Those definitions become part of the model's reasoning context. A tool may therefore be safe when first approved and later change in a security-significant way.

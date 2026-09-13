@@ -215,10 +215,33 @@ driftguard watch --db driftguard.db --server demo
 
 The default CLI output is intentionally Git-like and human-readable. Add `--json` where supported for automation/UI plumbing.
 
+## Transparent stdio MCP proxy
+
+`driftguard proxy` now provides the first real transport integration.
+
+It launches a local MCP server as a child process, transparently forwards JSON-RPC traffic,
+tracks client request IDs, and intercepts only responses corresponding to `tools/list`.
+Those discovery responses pass through the same version ledger, risk detection, policy, and
+tool filtering as the direct adapter/API path.
+
+Example:
+
+```bash
+driftguard proxy --db driftguard.db --server filesystem -- python my_mcp_server.py
+```
+
+All proxy diagnostics go to stderr so stdout remains a clean MCP protocol channel. Invalid
+or unrelated output is passed through unchanged. If DriftGuard itself fails while inspecting
+a `tools/list` response, the proxy fails closed by returning an empty tool list and writing
+the error to stderr.
+
+This raw JSON-RPC proxy is intentionally SDK-neutral and supports the stdio deployment model
+without making the research core depend on a particular MCP SDK.
+
 ## Next priorities
 
 1. fusion/ablation experiment combining pairwise + temporal + graph signals,
-2. real MCP transport proxy/host integration that continuously feeds revisions,
+2. Streamable HTTP gateway/interceptor for remote MCP servers,
 3. server-push subscription (SSE/WebSocket) over the cursor-based change feed,
 4. externally anchored or signed audit checkpoints,
 5. configurable organization policy/thresholds,
