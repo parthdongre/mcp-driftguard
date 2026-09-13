@@ -4,6 +4,7 @@ from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .checkpoints import TrustedCheckpoint
 from .checks import RevisionSecurityCheck
+from .overview import ServerOverview
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .signals import CatalogFreshnessStatus
 from .timeline import TimelineEvent
@@ -213,4 +214,53 @@ def render_checkpoint(checkpoint: TrustedCheckpoint) -> str:
     ]
     if checkpoint.note:
         lines.append(f"note: {checkpoint.note}")
+    return "\n".join(lines)
+
+
+def render_server_overview(overview: ServerOverview) -> str:
+    latest = overview.latest_revision
+    check_state = (
+        overview.latest_security_check.state.value
+        if overview.latest_security_check is not None
+        else "unknown"
+    )
+    catalog_state = "DIRTY" if overview.freshness.dirty else "clean"
+
+    lines = [
+        f"Server: {overview.server_id}",
+        f"Latest revision: {_short(latest.revision_id, 12)}",
+        f"Tree: {_short(latest.tree_hash, 12)}",
+        f"Tools: {overview.tool_count}",
+        f"Catalog: {catalog_state}",
+        f"Security: {check_state}",
+        (
+            "Trusted-state drift: "
+            f"{len(overview.trusted_status.untrusted_tools)} untrusted, "
+            f"{len(overview.trusted_status.modified_from_trusted)} modified, "
+            f"{len(overview.trusted_status.missing_trusted_tools)} missing"
+        ),
+    ]
+
+    if overview.latest_checkpoint is None:
+        lines.extend(["", "Trusted checkpoint: none"])
+        return "\n".join(lines)
+
+    checkpoint = overview.latest_checkpoint
+    lines.extend(
+        [
+            "",
+            f"Trusted checkpoint: {checkpoint.name}",
+            f"Checkpoint revision: {_short(checkpoint.revision_id, 12)}",
+            f"Revisions ahead: {overview.revisions_since_checkpoint or 0}",
+            (
+                "Checkpoint tree: match"
+                if overview.checkpoint_tree_matches
+                else "Checkpoint tree: diverged"
+            ),
+        ]
+    )
+
+    if overview.checkpoint_delta is not None:
+        lines.extend(["", "Changes since checkpoint:", render_revision_delta(overview.checkpoint_delta)])
+
     return "\n".join(lines)

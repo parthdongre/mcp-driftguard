@@ -13,6 +13,7 @@ from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .checkpoints import TrustedCheckpoint
 from .checks import RevisionSecurityCheck
+from .overview import ServerOverview
 from .revisions import DiscoveryRevision, RevisionChannel, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
@@ -65,6 +66,16 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
             protocol_version=request.protocol_version,
             channel=RevisionChannel.API,
         )
+
+    @app.get(
+        "/v1/servers/{server_id}/overview",
+        response_model=ServerOverview,
+    )
+    def overview(server_id: str) -> ServerOverview:
+        result = runtime.overview(server_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No discovery revision exists for this server.")
+        return result
 
     @app.get(
         "/v1/servers/{server_id}/status",

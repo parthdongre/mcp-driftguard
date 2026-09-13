@@ -164,7 +164,8 @@ The development branch now contains:
 - a unified activity timeline across server change signals, revisions, security checks, and human reviews,
 - a live timeline-based watch mode that surfaces server change notifications before catalog refresh,
 - an optional Server-Sent Events endpoint for real-time dashboard subscriptions,
-- trusted named checkpoints for long-range comparison against known-good MCP releases.
+- trusted named checkpoints for long-range comparison against known-good MCP releases,
+- a repository-style server overview showing current security state and divergence from known-good.
 
 Run the current research benchmarks with:
 

@@ -14,6 +14,7 @@ from ..checks import RevisionCheckState, RevisionSecurityCheck
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
+from ..overview import ServerOverview, build_server_overview
 from ..revisions import (
     DiscoveryRevision,
     RevisionChannel,
@@ -138,6 +139,15 @@ class DriftGuardService:
 
     def revision_history(self, server_id: str) -> list[DiscoveryRevision]:
         return self.store.revision_history(server_id)
+
+    def overview(self, server_id: str) -> ServerOverview | None:
+        return build_server_overview(
+            revisions=self.store.revision_history(server_id),
+            checks=self.store.revision_checks(server_id),
+            checkpoints=self.store.checkpoints(server_id),
+            freshness=self.catalog_freshness(server_id),
+            trusted_snapshots=self.store.trusted_tools(server_id),
+        )
 
     def timeline(
         self,

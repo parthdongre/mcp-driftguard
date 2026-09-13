@@ -225,6 +225,7 @@ A cursor-based change feed now derives compact events from the immutable revisio
 Useful local commands:
 
 ```text
+driftguard overview --db driftguard.db --server demo
 driftguard status --db driftguard.db --server demo
 driftguard freshness --db driftguard.db --server demo
 driftguard log --db driftguard.db --server demo
@@ -246,6 +247,29 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Repository-style server overview
+
+`ServerOverview` is the landing-page read model for one MCP server. It combines the latest
+revision and tree, current freshness, latest immutable security check, per-tool trusted-state
+drift, and divergence from the newest trusted checkpoint.
+
+The checkpoint section reports:
+
+- checkpoint name and revision,
+- number of observed revisions since that checkpoint,
+- whether the complete tool tree still matches,
+- exact added/removed/modified tools and field-level changes since known-good.
+
+Use:
+
+```text
+driftguard overview --db driftguard.db --server demo
+GET /v1/servers/{server}/overview
+```
+
+This is intentionally higher-level than `status`: `status` remains a precise current-vs-
+previous/trusted view, while `overview` is the GitHub-style repository home summary.
 
 ## Trusted checkpoints / security-aware tags
 

@@ -10,6 +10,7 @@ from .changefeed import changes_after
 from .evaluation import evaluate_file
 from .fusion_evaluation import evaluate_fusion_file
 from .graph_evaluation import evaluate_graph_file
+from .overview import build_server_overview
 from .render import (
     render_catalog_freshness,
     render_change_event,
@@ -18,6 +19,7 @@ from .render import (
     render_revision_delta,
     render_revision_log,
     render_revision_view,
+    render_server_overview,
     render_surface_status,
     render_timeline_event,
     render_tool_blame,
@@ -77,6 +79,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=20.0,
         help="Experimental cumulative drift threshold (default: 20).",
     )
+
+    overview = subcommands.add_parser(
+        "overview",
+        help="Show repository-style MCP server summary and checkpoint divergence.",
+    )
+    _add_store_args(overview)
+    overview.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     status = subcommands.add_parser(
         "status",
@@ -291,6 +300,28 @@ def _json_list(items) -> str:
 def _run_revision_command(args: argparse.Namespace) -> int:
     store = SQLiteSnapshotStore(args.db)
     try:
+        if args.command == "overview":
+            latest = store.latest_revision(args.server)
+            result = build_server_overview(
+                revisions=store.revision_history(args.server),
+                checks=store.revision_checks(args.server),
+                checkpoints=store.checkpoints(args.server),
+                freshness=catalog_freshness(
+                    store.catalog_signals(args.server),
+                    latest_revision_id=latest.revision_id if latest is not None else None,
+                ),
+                trusted_snapshots=store.trusted_tools(args.server),
+            )
+            if result is None:
+                print("No revisions found.")
+                return 1
+            print(
+                result.model_dump_json(indent=2)
+                if args.json
+                else render_server_overview(result)
+            )
+            return 0
+
         if args.command == "freshness":
             latest = store.latest_revision(args.server)
             result = catalog_freshness(
@@ -525,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "benchmark":
         return _run_benchmark(args)
     if args.command in {
+        "overview",
         "status",
         "freshness",
         "log",
