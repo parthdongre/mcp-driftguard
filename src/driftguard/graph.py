@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from .diff import IMPERATIVE_TERMS, SENSITIVE_TERMS
 
 _TOOL_REF_RE = re.compile(
-    r"""(?:tool|function)\s+[`'"]?([A-Za-z0-9_:-]+(?:\.[A-Za-z0-9_:-]+)*)""",
+    r"""(?:tool|function)\s+[`'\"]?([A-Za-z0-9_:-]+(?:\.[A-Za-z0-9_:-]+)*)""",
     re.IGNORECASE,
 )
 
@@ -35,6 +35,8 @@ class CrossToolGraphDelta(BaseModel):
     removed_nodes: list[str] = Field(default_factory=list)
     added_edges: list[tuple[str, str]] = Field(default_factory=list)
     removed_edges: list[tuple[str, str]] = Field(default_factory=list)
+    added_imperative_edges: list[tuple[str, str]] = Field(default_factory=list)
+    added_sensitive_edges: list[tuple[str, str]] = Field(default_factory=list)
     new_cycles: list[list[str]] = Field(default_factory=list)
     resolved_cycles: list[list[str]] = Field(default_factory=list)
     newly_suspicious_sources: list[str] = Field(default_factory=list)
@@ -48,12 +50,22 @@ class CrossToolGraphDelta(BaseModel):
                 self.removed_nodes,
                 self.added_edges,
                 self.removed_edges,
+                self.added_imperative_edges,
+                self.added_sensitive_edges,
                 self.new_cycles,
                 self.resolved_cycles,
                 self.newly_suspicious_sources,
                 self.resolved_suspicious_sources,
             )
         )
+
+
+class GraphRiskAssessment(BaseModel):
+    """Transparent baseline risk assessment over topology drift."""
+
+    risk_score: float = Field(ge=0.0, le=100.0)
+    suspicious: bool
+    reasons: list[str] = Field(default_factory=list)
 
 
 def _flatten_text(value: Any) -> str:
@@ -206,8 +218,11 @@ def diff_tool_graph(
     old_nodes = set(old.nodes)
     new_nodes = set(new.nodes)
 
-    old_edges = {(edge.source, edge.target) for edge in old.edges}
-    new_edges = {(edge.source, edge.target) for edge in new.edges}
+    old_edge_map = {(edge.source, edge.target): edge for edge in old.edges}
+    new_edge_map = {(edge.source, edge.target): edge for edge in new.edges}
+    old_edges = set(old_edge_map)
+    new_edges = set(new_edge_map)
+    added_edges = new_edges - old_edges
 
     old_cycles = {_canonical_cycle(cycle) for cycle in old.cycles if cycle}
     new_cycles = {_canonical_cycle(cycle) for cycle in new.cycles if cycle}
@@ -218,10 +233,74 @@ def diff_tool_graph(
     return CrossToolGraphDelta(
         added_nodes=sorted(new_nodes - old_nodes),
         removed_nodes=sorted(old_nodes - new_nodes),
-        added_edges=sorted(new_edges - old_edges),
+        added_edges=sorted(added_edges),
         removed_edges=sorted(old_edges - new_edges),
+        added_imperative_edges=sorted(
+            key for key in added_edges if new_edge_map[key].imperative_terms
+        ),
+        added_sensitive_edges=sorted(
+            key for key in added_edges if new_edge_map[key].sensitive_target
+        ),
         new_cycles=[list(cycle) for cycle in sorted(new_cycles - old_cycles)],
         resolved_cycles=[list(cycle) for cycle in sorted(old_cycles - new_cycles)],
         newly_suspicious_sources=sorted(new_suspicious - old_suspicious),
         resolved_suspicious_sources=sorted(old_suspicious - new_suspicious),
+    )
+
+
+def graph_rule_baseline(delta: CrossToolGraphDelta) -> GraphRiskAssessment:
+    """Transparent graph-drift baseline used before graph evidence affects policy."""
+
+    if not delta.changed:
+        return GraphRiskAssessment(
+            risk_score=0.0,
+            suspicious=False,
+            reasons=["Discovery topology is unchanged."],
+        )
+
+    score = 0.0
+    reasons: list[str] = []
+
+    if delta.added_sensitive_edges:
+        contribution = min(45.0, 25.0 + 10.0 * len(delta.added_sensitive_edges))
+        score += contribution
+        reasons.append(
+            "New routes toward sensitive-looking tools: "
+            + ", ".join(f"{source}->{target}" for source, target in delta.added_sensitive_edges)
+        )
+
+    if delta.added_imperative_edges:
+        contribution = min(35.0, 18.0 + 8.0 * len(delta.added_imperative_edges))
+        score += contribution
+        reasons.append(
+            "New imperative cross-tool routes: "
+            + ", ".join(f"{source}->{target}" for source, target in delta.added_imperative_edges)
+        )
+
+    if delta.new_cycles:
+        contribution = min(35.0, 22.0 + 8.0 * len(delta.new_cycles))
+        score += contribution
+        reasons.append(
+            "New cross-tool cycles: "
+            + "; ".join(" -> ".join(cycle) for cycle in delta.new_cycles)
+        )
+
+    if delta.newly_suspicious_sources:
+        contribution = min(20.0, 5.0 * len(delta.newly_suspicious_sources))
+        score += contribution
+        reasons.append(
+            "Tools newly marked suspicious by graph evidence: "
+            + ", ".join(delta.newly_suspicious_sources)
+        )
+
+    if delta.added_edges and not reasons:
+        score += min(15.0, 5.0 * len(delta.added_edges))
+        reasons.append("Topology changed through new cross-tool references without high-risk evidence.")
+
+    score = min(100.0, round(score, 2))
+    suspicious = score >= 35.0
+    return GraphRiskAssessment(
+        risk_score=score,
+        suspicious=suspicious,
+        reasons=reasons or ["Topology changed without a scored high-risk graph signal."],
     )
