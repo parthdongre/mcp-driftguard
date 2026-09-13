@@ -56,6 +56,14 @@ class ToolDelta(BaseModel):
     lexical_change_ratio: float = 0.0
 
 
+class RiskContribution(BaseModel):
+    """One named contribution to an explainable detector score."""
+
+    signal: str
+    points: float = Field(ge=0.0)
+    evidence: list[str] = Field(default_factory=list)
+
+
 class RiskAssessment(BaseModel):
     """Model-agnostic assessment returned by the detector pipeline."""
 
@@ -64,3 +72,4 @@ class RiskAssessment(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str
     probabilities: dict[str, float] = Field(default_factory=dict)
+    contributions: list[RiskContribution] = Field(default_factory=list)

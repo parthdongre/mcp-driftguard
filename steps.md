@@ -236,3 +236,31 @@ semantic embedding, hybrid, temporal, and uncertainty-aware detectors.
 
 Future dataset versions should add provenance, multiple annotators, paraphrase variants,
 unseen attack-family splits, and benign real-world MCP schema evolution.
+
+
+## 15. Explainable scoring and counterfactual evidence
+
+The rule baseline now emits typed `RiskContribution` objects in addition to human-readable
+reasons. Each contribution contains a signal name, the points added to the score, and the
+specific evidence that caused it.
+
+Examples include:
+
+- sensitive terms added,
+- required parameters added,
+- imperative/instruction terms,
+- external URLs,
+- cross-tool references,
+- lexical change.
+
+`greedy_counterfactual(...)` then asks a narrow, inspectable question: which largest
+rule contributions would need to disappear for the score to cross the next safer rule
+boundary?
+
+This is deliberately described as a **rule-baseline explanation**, not causal proof.
+Future learned detectors will need model-appropriate explainers. The stable runtime
+`ObservationResult` now exposes the counterfactual so the eventual UI can show both
+"why this was blocked" and "what evidence drove the decision."
+
+C1-to-C0 is not claimed from score reduction because C0 requires canonical equivalence,
+not merely a score below a threshold.

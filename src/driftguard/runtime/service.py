@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from ..baselines import rule_baseline
 from ..canonicalize import make_snapshot
 from ..diff import build_delta
+from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
@@ -22,6 +23,7 @@ class ObservationResult(BaseModel):
     delta: ToolDelta | None = None
     assessment: RiskAssessment | None = None
     temporal: DriftBudgetEvidence | None = None
+    counterfactual: CounterfactualExplanation | None = None
     decision: PolicyDecision
 
 
@@ -76,6 +78,7 @@ class DriftGuardService:
             delta=delta,
             assessment=assessment,
             temporal=temporal,
+            counterfactual=greedy_counterfactual(assessment),
             decision=decision,
         )
 
