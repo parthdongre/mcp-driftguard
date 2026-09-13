@@ -1,476 +1,285 @@
-# MCP DriftGuard build notes
+# MCP DriftGuard engineering map
 
-This file is a concise engineering map of the major repository decisions. It is intentionally an overview, not line-by-line documentation.
+This file is the compact technical overview of the repository: what the major layers do, why the main libraries were chosen, where important functions are called, and what research questions the current implementation supports.
 
 ## 1. Branch strategy
 
-Work continues on the existing `dev/project-scaffold` branch because `dev/parth` did not exist. Creating another development branch would add no value and would violate the goal of keeping the repository branch model small.
-
-Current intended flow:
+Development remains on the existing `dev/project-scaffold` branch to keep the repository branch model small.
 
 ```text
 dev/project-scaffold -> main
 ```
 
-No PR is required for every small development commit; the branch exists to accumulate coherent work before main is updated.
+Do not create extra development branches unless isolation is genuinely required.
 
-## 2. Why the repository stays Python-first
+## 2. Why the project is Python-first
 
-The research core is Python because the project needs fast iteration on feature extraction, embeddings, classical ML baselines, evaluation, and security experiments.
+The research core is Python because DriftGuard needs fast iteration on feature extraction, embeddings, classical ML, evaluation, security experiments, and local middleware.
 
-Current libraries:
+Main dependencies:
 
-- **Pydantic**: typed validation/serialization for snapshots, deltas, risk assessments, and runtime results. It is used instead of raw dictionaries/dataclasses at the trust boundary because malformed security data should fail clearly.
-- **scikit-learn** *(optional `ml` extra)*: planned for transparent pairwise baselines and classical models. It is easier to inspect and reproduce than introducing a deep-learning training stack immediately.
-- **sentence-transformers** *(optional `ml` extra)*: planned for field-level semantic distances and pairwise embeddings. It is not a hard dependency so the core detector can run without downloading a model.
-- **FastAPI + Uvicorn** *(optional `api` extra)*: reserved for a later local/service API. They are optional because the detector itself should not depend on a web server.
-- **pytest**: unit/integration tests.
-- **Ruff**: fast linting with little configuration overhead.
+- **Pydantic** — typed models and validation across trust boundaries.
+- **scikit-learn** (`ml` extra) — interpretable/reproducible classical learned baselines.
+- **sentence-transformers** (`semantic` extra) — optional semantic embeddings without forcing model downloads into the minimal install.
+- **FastAPI + Uvicorn** (`api` extra) — optional local/service control plane for CLI/UI clients.
+- **pytest** — tests.
+- **Ruff** — linting.
+- **SQLite / sqlite3** — durable local audit/history storage without adding a database dependency.
 
-We are intentionally **not** using LangChain/LlamaIndex as core infrastructure. DriftGuard is a security control for MCP definitions, so its core should stay protocol-focused and framework-independent.
+The core intentionally does **not** depend on LangChain or LlamaIndex. DriftGuard is an MCP security layer and should remain host/framework neutral.
 
-## 3. Structural decision
-
-The original research functions remain in small top-level modules because they are already cohesive:
+## 3. Repository architecture
 
 ```text
 src/driftguard/
-├── models.py          # domain models
-├── canonicalize.py    # deterministic snapshot + hash
-├── diff.py            # pairwise structural/lexical deltas
-├── baselines.py       # reproducible baseline detector
-├── runtime/           # trust, policy, orchestration
-└── adapters/          # external MCP payload conversion
+├── models.py          # domain objects and risk assessments
+├── canonicalize.py    # deterministic tool snapshots + hashes
+├── diff.py            # structural / lexical pairwise deltas
+├── features.py        # stable numeric pairwise features
+├── semantic.py        # provider-neutral semantic features / embedders
+├── ml.py              # learned pairwise + hybrid detectors
+├── graph.py           # cross-tool influence graph + topology drift
+├── baselines.py       # hash/rule baselines
+├── explain.py         # explainable risk contributions / counterfactuals
+├── evaluation.py      # benchmark metrics and reports
+├── api.py             # optional HTTP control plane
+├── runtime/           # trust, policy, persistence, audit, temporal logic
+└── adapters/          # MCP payload/interception boundary
 ```
 
-This avoids a premature rewrite into many tiny packages while still separating product/runtime concerns from research code.
+Research code stays separated from HTTP, UI, and host-specific integration.
 
-## 4. Main runtime call flow
-
-The intended call path is:
+## 4. Main MCP enforcement flow
 
 ```text
-MCP tools/list
-  -> adapters.mcp.extract_tools(payload)
-  -> DriftGuardService.observe_tool(...)
-      -> make_snapshot(...)
-      -> SnapshotStore.get_trusted(...)
-      -> build_delta(...)
-      -> detector(delta)              # defaults to rule_baseline
-      -> DefaultPolicy.decide(...)
-  -> ObservationResult
+MCP server tools/list
+        |
+        v
+adapters.mcp.intercept_tools_list
+        |
+        +--> extract_tools
+        +--> graph analysis
+        |
+        v
+DriftGuardService.observe_tool
+        |
+        +--> make_snapshot
+        +--> SnapshotStore.put_observed
+        +--> SnapshotStore.get_trusted
+        +--> build_delta
+        +--> detector(delta)
+        +--> DriftBudget.evaluate(history)
+        +--> policy decision
+        +--> optional explanation
+        |
+        v
+ObservationResult
+        |
+        +--> allow / allow+log -> forwarded
+        +--> re-consent / quarantine -> withheld
 ```
 
-### What the major functions do
+A first-seen tool is withheld until reviewed. Merely observing a tool never promotes it to the trusted baseline.
 
-- `extract_tools(payload)`: called by an MCP-facing interceptor/host integration. It extracts tool dictionaries from a direct `tools/list` result or JSON-RPC response.
-- `make_snapshot(...)`: called by `DriftGuardService.observe_tool`. It canonicalizes the tool definition, computes its stable hash, and wraps it in `ToolSnapshot`.
-- `build_delta(old, new)`: called by `DriftGuardService.observe_tool` once a trusted baseline exists. It creates structural signals and a lexical change ratio between versions.
-- `rule_baseline(delta)`: the default detector injected into `DriftGuardService`. It produces a `RiskAssessment`; later ML detectors can use the same callable interface.
-- `DefaultPolicy.decide(assessment)`: called after detection. It maps C0-C3 into operational actions. Policy is separate from classification so an organization can change enforcement without retraining a model.
-- `DriftGuardService.approve(snapshot)`: called only after explicit review/consent. It promotes that observed snapshot to the trusted comparison baseline.
+## 5. Important function boundaries
 
-## 5. Storage decision
+- `make_snapshot(...)` — canonicalizes one tool definition and computes the stable SHA-256 identity.
+- `build_delta(old, new)` — creates structural and lexical pairwise evidence.
+- `pair_features(delta)` — converts pairwise evidence into the stable numeric feature contract used by learned models.
+- `semantic_pair_features(...)` — measures field-level semantic distances through an injected embedder.
+- `rule_baseline(delta)` — transparent non-ML baseline.
+- `PairwiseLogisticDetector` — learned structural/lexical baseline.
+- `HybridSemanticLogisticDetector` — structural + semantic learned baseline.
+- `DriftBudget.evaluate(...)` — detects cumulative low-and-slow drift across multiple versions.
+- `build_tool_graph(...)` — constructs cross-tool influence evidence from a complete tool surface.
+- `diff_tool_graph(old, new)` — measures topology drift between discovery surfaces.
+- `DefaultPolicy.decide(...)` — maps semantic risk to operational action.
+- `intercept_tools_list(...)` — executable security gate before tool definitions reach the host/LLM.
+- `DriftGuardService.approve(...)` / `reject(...)` — auditable trust decisions.
+- `verify_review_chain(...)` — independently verifies the tamper-evident review chain.
 
-`SnapshotStore` is a Python `Protocol`, not a database-specific base class. This keeps the runtime independent of SQLite/Postgres/Redis while still defining exactly what storage must provide.
+## 6. Persistence and trust
 
-`InMemorySnapshotStore` is used now for tests and demos. It is not intended to be the production audit store.
+`SnapshotStore` is a protocol, not a database-specific base class.
 
-Likely next durable implementation: SQLite first for local development, then Postgres for multi-user/server deployments. That decision should be made when persistence/audit requirements are implemented rather than adding database dependencies now.
+Implementations:
 
-## 6. Security decisions in this scaffold
+- `InMemorySnapshotStore` — deterministic tests/demos.
+- `SQLiteSnapshotStore` — durable local history, trusted snapshots, and review events.
 
-- First-seen tools are **not** silently trusted. They return `require_reconsent`.
-- Detector output and enforcement policy are separate layers.
-- Approved snapshots are the comparison baseline; merely observing a version does not automatically approve it.
-- Adapters are kept outside the detector so malformed transport data can be handled before it reaches research logic.
+The store separates:
 
-## 7. UI decision intentionally deferred
+- observed tool versions,
+- currently trusted baseline,
+- append-only human review events.
 
-No React/Next.js/Tauri/Electron frontend has been committed yet. The ongoing product/UI research should decide whether the best experience is a web dashboard, local desktop shell, terminal-first client, or a hybrid.
+This keeps observation, trust, and governance as different concepts.
 
-Whichever UI is chosen should consume the runtime/API result model instead of directly calling `diff.py` or `baselines.py`.
+## 7. Detection progression
 
-## 8. Tests added with this structure
+The project deliberately supports progressively stronger comparisons:
 
-Runtime tests cover:
-
-- a first observation requiring explicit approval,
-- an approved snapshot becoming the trusted baseline,
-- suspicious drift not being auto-approved,
-- MCP JSON-RPC tool extraction.
-
-These tests protect the trust lifecycle, not only individual helper functions.
-
-## 9. Near-term structure additions
-
-Next additions should be driven by actual implementation needs, roughly in this order:
-
-1. durable snapshot/audit store,
-2. MCP interceptor/host integration,
-3. detector interface + feature pipeline for learned models,
-4. experiment/evaluation harness and versioned datasets,
-5. policy configuration and approval records,
-6. API/CLI surface,
-7. polished operator UI after the UX architecture is finalized.
-
-The repository should avoid adding placeholder folders that have no executable or documented purpose.
-
-
-## 10. Durable local trust and audit history
-
-Implemented `SQLiteSnapshotStore` as the first durable store.
-
-Why SQLite first:
-
-- it is included in Python, so no new runtime dependency is required,
-- it survives process restarts, unlike `InMemorySnapshotStore`,
-- it is easy to inspect during a college demonstration,
-- it provides a migration path to Postgres later without changing `DriftGuardService`.
-
-The database keeps two concepts separate:
-
-- **observations**: append-only tool snapshots used for version history and later experiments,
-- **trusted snapshots**: the currently approved baseline for each server/tool pair.
-
-The runtime still depends only on the `SnapshotStore` protocol. SQLite is therefore an implementation choice, not a dependency baked into the detector.
-
-## 11. First real MCP enforcement boundary
-
-Implemented `adapters.mcp.intercept_tools_list(...)`.
-
-Updated call flow:
-
-```text
-MCP server tools/list response
-  -> intercept_tools_list(...)
-      -> extract_tools(...)
-      -> DriftGuardService.observe_tool(...) for every tool
-      -> policy decision
-      -> safe tools are forwarded
-      -> re-consent/quarantine tools are withheld
-  -> filtered tools/list response reaches the host/LLM
-```
-
-Important behavior:
-
-- a first-seen tool is withheld until explicitly approved,
-- an unchanged approved tool is forwarded,
-- a suspicious changed tool is withheld again,
-- the original JSON-RPC envelope is preserved.
-
-This gives DriftGuard an executable security-control point rather than only producing an offline risk score.
-
-## 12. Research direction opened by this batch
-
-Durable version history plus an enforcement boundary now makes the next research additions practical:
-
-1. cumulative drift / drift-budget experiments over observation history,
-2. trust decay and temporal reputation,
-3. approval/audit records with reviewer identity and reason,
-4. semantic embedding detector plugged into the existing detector callable,
-5. benchmark/evaluation harness comparing hash, structural, lexical, semantic, and hybrid models,
-6. real transport proxy/host integration around this interception function.
-
-No frontend framework has been added yet; the interception result and durable history should become the stable backend contract that the later operator UI consumes.
-
-
-## 13. Cumulative drift budget
-
-Implemented `runtime.temporal.DriftBudget` as the first research-specific temporal defense.
-
-### Threat being tested
-
-A server can avoid one obvious malicious update by making many small changes and asking the user to approve each one. If each new version becomes the trusted baseline, a purely pairwise detector can lose sight of how far the tool has moved over time.
-
-### Current mechanism
-
-For the most recent configurable window of observed versions:
-
-1. compare each consecutive version,
-2. run the same injected detector on each transition,
-3. accumulate the transition risk scores,
-4. expose the individual steps plus the cumulative score as `DriftBudgetEvidence`,
-5. require re-consent when the cumulative budget is exceeded even if the current pair is only C0/C1.
-
-Default research parameters are currently a 5-transition window and a budget of 100. These are deliberately configurable and should later be learned/tuned on the benchmark dataset instead of being presented as universal values.
-
-### Why approval does not reset the budget
-
-The purpose is to detect low-and-slow drift across individually accepted updates. Approving version N changes the direct comparison baseline, but it does not erase observation history. This lets the project experimentally compare:
-
-- pairwise-only detection,
-- trusted-baseline detection,
-- rolling cumulative drift,
-- future trust-decay/reputation variants.
-
-The temporal evidence is also designed for the future UI: it can drive a version timeline and a visible drift-budget meter.
-
-
-## 14. Reproducible benchmark and evaluation harness
-
-Implemented `driftguard.evaluation`, `data/synthetic_v0.jsonl`, and
-`experiments/evaluate_rule_baseline.py`.
-
-The first benchmark is intentionally small and synthetic. Its purpose is to establish the
-research contract before collecting a larger dataset:
-
-- every sample stores the old tool, new tool, semantic label, and attack/change family,
-- labels are independent of the current detector,
-- predictions are retained in the report so individual failures are inspectable,
-- reports include accuracy, per-class precision/recall/F1, macro F1, and a confusion matrix.
-
-The metric implementation uses only the Python standard library plus existing Pydantic
-models. scikit-learn remains optional because basic evaluation should run in the minimal
-installation.
-
-Run:
-
-```bash
-python experiments/evaluate_rule_baseline.py
-```
-
-A low score is not treated as a repository failure. The current rule detector is a
-baseline. Its mistakes identify exactly which cases should be improved by the next
-semantic embedding, hybrid, temporal, and uncertainty-aware detectors.
-
-Future dataset versions should add provenance, multiple annotators, paraphrase variants,
-unseen attack-family splits, and benign real-world MCP schema evolution.
-
-
-## 15. Explainable scoring and counterfactual evidence
-
-The rule baseline now emits typed `RiskContribution` objects in addition to human-readable
-reasons. Each contribution contains a signal name, the points added to the score, and the
-specific evidence that caused it.
-
-Examples include:
-
-- sensitive terms added,
-- required parameters added,
-- imperative/instruction terms,
-- external URLs,
-- cross-tool references,
-- lexical change.
-
-`greedy_counterfactual(...)` then asks a narrow, inspectable question: which largest
-rule contributions would need to disappear for the score to cross the next safer rule
-boundary?
-
-This is deliberately described as a **rule-baseline explanation**, not causal proof.
-Future learned detectors will need model-appropriate explainers. The stable runtime
-`ObservationResult` now exposes the counterfactual so the eventual UI can show both
-"why this was blocked" and "what evidence drove the decision."
-
-C1-to-C0 is not claimed from score reduction because C0 requires canonical equivalence,
-not merely a score below a threshold.
-
-
-## 16. Stable pairwise feature pipeline
-
-Added `features.py` so learned detectors consume a versioned, explicit numeric feature
-contract instead of re-implementing feature extraction inside training scripts.
-
-The first feature vector includes canonical identity, lexical drift, changed-field count,
-parameter/required/type/default/enum changes, sensitive terms, URLs, cross-tool
-references, and imperative language.
-
-The ordering is fixed by `PAIR_FEATURE_NAMES`, which makes saved model coefficients and
-ablation experiments interpretable.
-
-## 17. Classical learned pairwise detector
-
-Added `PairwiseLogisticDetector` as the first learned baseline.
-
-Why logistic regression first:
-
-- the benchmark is still small,
-- coefficients and probabilities are inspectable,
-- training/inference are fast,
-- it provides a meaningful learned baseline before adding embedding-heavy models,
-- it can be compared directly with the hand-written rule baseline.
-
-It uses `StandardScaler + LogisticRegression(class_weight="balanced")`. The classifier
-predicts C0-C3 probabilities and converts their expected severity into a 0-100 risk score.
-
-The exact-identity C0 case is kept deterministic: canonical equality returns C0 directly
-rather than asking a statistical model to rediscover equality.
-
-## 18. Uncertainty-aware abstention
-
-`RiskAssessment` now carries `confidence`, `abstained`, and
-`uncertainty_reason`.
-
-The learned detector abstains when either:
-
-- maximum class probability is below a configurable confidence threshold, or
-- the margin between the top two classes is too small.
-
-Abstention does not invent a fifth semantic class. The predicted C0-C3 class is retained
-for evaluation, while policy escalates the uncertain decision to `require_reconsent`.
-
-This separation is useful for research: semantic classification quality and operational
-safety under uncertainty can be measured independently.
-
-## 19. ML dependency and validation strategy
-
-The optional dependencies are now separated:
-
-- `.[ml]`: NumPy + scikit-learn for classical learned baselines,
-- `.[semantic]`: sentence-transformers for later embedding experiments.
-
-Normal DriftGuard installations do not pull the semantic model stack.
-
-CI now has a second `ml-smoke` job that installs `.[dev,ml]` and tests the learned
-detector. The normal job remains lightweight.
-
-`experiments/evaluate_pairwise_logistic.py` performs leave-one-out evaluation over the
-current prototype benchmark. This is intentionally more honest than training and reporting
-accuracy on the same twelve samples. The dataset is still far too small for publication
-claims; the point is to establish a reproducible experimental protocol before scaling the
-corpus.
-
-
-## 20. Provider-neutral semantic drift features
-
-Added `semantic.py` with a small `TextEmbedder` protocol instead of binding the project
-to one embedding vendor or model.
-
-The first semantic feature set measures cosine distance between old/new versions of:
-
-- tool description text,
-- input schema text,
-- parameter names/descriptions,
-- the full canonical tool definition.
-
-`SentenceTransformerEmbedder` is an optional adapter. The core semantic feature functions
-can be tested with any deterministic/fake embedder, so normal CI does not need to download
-a model.
-
-## 21. Hybrid structural + semantic classifier
-
-`PairwiseLogisticDetector` now accepts an injected feature extractor and stable feature
-names. `HybridSemanticLogisticDetector` uses that same learned baseline with:
-
-```text
-structural / lexical pair features
-          +
-field-level semantic distances
-          ->
-balanced logistic classifier
-```
-
-This intentionally reuses the same classifier family so an ablation can isolate the value
-of semantic features rather than changing both features and model architecture at once.
-
-The research comparison is now naturally:
-
-1. hash-only,
+1. hash-only change detection,
 2. hand-written rule baseline,
 3. learned structural/lexical pair classifier,
-4. learned structural + semantic pair classifier,
-5. later temporal + semantic hybrid,
-6. later deeper pair encoder / Siamese model if the dataset justifies it.
+4. semantic distances,
+5. hybrid structural + semantic classifier,
+6. temporal drift budget,
+7. cross-tool topology drift,
+8. future deeper pair encoder / Siamese model only if the dataset justifies it.
 
-`experiments/evaluate_hybrid_semantic.py` mirrors the leave-one-out protocol and accepts
-`DRIFTGUARD_EMBEDDING_MODEL` to select the embedding model. It is not part of mandatory
-CI because model downloads are large and should not be required for a normal install.
+The same benchmark/evaluation boundary should be used for all models so improvements are measurable rather than qualitative.
 
+## 8. Uncertainty-aware abstention
 
-## 22. Cross-tool influence graph
+Learned detectors expose confidence and can abstain when:
 
-Added `graph.py` to analyze the complete `tools/list` surface rather than treating every
-tool as independent.
+- maximum class probability is too low, or
+- the margin between the top two classes is too small.
 
-The graph creates an edge when one tool definition explicitly references another known
-tool/function. For each edge it records:
+Abstention does not create a fifth semantic class. The predicted C0-C3 class remains available for evaluation, while operational policy escalates uncertain results to re-consent.
 
-- source and target,
-- imperative language associated with the redirect,
-- whether the target name looks security-sensitive.
+This allows classification quality and safety-under-uncertainty to be measured separately.
 
-It also records unresolved tool references and detects cycles.
+## 9. Explainability
 
-Examples of graph-level evidence:
+The rule baseline emits named `RiskContribution` objects such as:
 
-```text
-search
-  -- "always call" --> credential_export
+- sensitive terms,
+- required parameters,
+- imperative language,
+- external URLs,
+- cross-tool references,
+- lexical drift.
 
-alpha --> beta --> alpha
-```
+`greedy_counterfactual(...)` explains which large rule contributions would need to disappear to cross the next safer rule threshold.
 
-These cases matter because a single tool can look relatively benign while the combined
-tool topology creates an influence/redirection path.
+This is explicitly an explanation of the rule baseline, not a causal security proof.
 
-The MCP interceptor now returns `graph_evidence` alongside per-tool observations so the
-future UI can display a dependency/influence map. Graph evidence is currently kept
-separate from the default enforcement decision to avoid silently introducing a new
-false-positive-heavy blocking rule before it has benchmark coverage.
+## 10. Temporal drift budget
 
-The next graph research step should compare graph snapshots across versions so we can
-measure **topology drift**: new edges, removed edges, new cycles, and movement toward
-sensitive tools.
+Pairwise review alone can miss a "boiling frog" attack where each accepted update is individually small.
 
+`DriftBudget` therefore evaluates consecutive observations over a rolling window and accumulates risk. Approval changes the trusted direct-comparison baseline but does **not** erase observation history.
 
-## 23. Cross-tool topology drift
+Research comparisons can therefore test:
 
-Added `diff_tool_graph(old, new)` so graph analysis is version-aware rather than only a
-single-snapshot visualization.
+- pairwise-only,
+- trusted-baseline,
+- cumulative temporal drift,
+- future trust-decay/reputation variants.
 
-The graph delta records:
+## 11. Cross-tool graph research
 
-- tools added or removed,
-- influence edges added or removed,
-- newly introduced or resolved cycles,
-- tools that newly become suspicious,
-- tools whose graph-level suspicion is resolved.
+Tool definitions are also analyzed as a system.
 
-This creates a second temporal security object alongside the per-tool schema delta:
+Graph evidence includes:
 
-```text
-Tool definition drift:
-    T_old -> T_new
+- explicit tool-to-tool references,
+- imperative redirects,
+- references toward sensitive-looking tools,
+- unresolved references,
+- cycles.
 
-Discovery topology drift:
-    G_old -> G_new
-```
+`diff_tool_graph(...)` additionally measures:
 
-That distinction is important for the research paper. An attacker may keep each individual
-tool definition only mildly changed while creating a dangerous new route between tools.
-A topology-drift detector can measure that system-level change directly.
+- edges added/removed,
+- tools added/removed,
+- cycles introduced/resolved,
+- changes in graph-level suspicion.
 
-Graph deltas remain evidence-only for now. Before they affect blocking policy, the project
-should add labeled graph-evolution cases and measure false-positive/false-negative behavior.
+Graph evidence remains separate from default blocking until labeled graph-evolution benchmark coverage is large enough to estimate false positives.
 
+## 12. Benchmark and experimental discipline
 
-## 24. Append-only review and approval audit
+`data/synthetic_v0.jsonl` is the initial labeled old/new tool-pair corpus.
 
-Added `ReviewEvent` and `ReviewDecision` to make trust changes auditable.
+`evaluation.py` reports:
 
-Each approval/rejection records:
+- accuracy,
+- per-class precision/recall/F1,
+- macro-F1,
+- confusion matrix,
+- individual predictions.
 
-- server and tool identity,
-- exact snapshot SHA-256,
+Labels represent intended security semantics and are not changed to make the current baseline score better.
+
+Learned experiments use leave-one-out evaluation on the tiny prototype dataset rather than reporting training accuracy. Publication claims require a much larger corpus with provenance, independent annotation, paraphrase/adversarial variants, unseen-family splits, and real benign MCP evolution.
+
+## 13. Review and approval audit
+
+Every approval/rejection records:
+
+- server/tool identity,
+- exact observed snapshot hash,
+- decision,
 - reviewer identifier,
-- approval or rejection decision,
-- optional human reason,
-- review timestamp.
+- optional reason,
+- timestamp.
 
-SQLite stores these in an append-only `review_events` table. The in-memory store exposes
-the same contract for tests.
+Rejection never replaces the trusted baseline.
 
-`DriftGuardService.approve(...)` now records the audit event before promoting the snapshot
-to the trusted baseline. `reject(...)` records the decision but deliberately leaves the
-previous trusted baseline unchanged.
+The reviewer string is still application-supplied; real authentication/identity integration belongs at the control-plane boundary.
 
-This makes the eventual operator UI capable of answering:
+## 14. Tamper-evident review chain
 
-- Who approved this version?
-- Why was it accepted or rejected?
-- Which exact hash was reviewed?
-- What baseline remained trusted after a rejection?
+Review events are now hash-chained per `(server_id, tool_name)`.
 
-The reviewer string is application-supplied. Authentication, signed reviewer identity, and
-tamper-evident audit chaining are later hardening steps rather than being faked at this
-stage.
+Each event stores `previous_event_hash` and `event_hash`. The digest covers the complete deterministic event payload including the previous digest. Editing, reordering, inserting, or deleting a sealed event therefore breaks verification from the affected position.
+
+`verify_review_chain(...)` returns:
+
+- whether the chain is valid,
+- event count,
+- chain-head hash,
+- first invalid index and reason when verification fails.
+
+Important limitation: this is **tamper-evident**, not tamper-proof. An attacker controlling the whole local database could rewrite an entire unsigned chain. Production hardening should anchor chain heads externally or sign checkpoints with a protected key/HSM.
+
+## 15. HTTP control plane
+
+The optional FastAPI surface provides a stable backend contract for a future CLI/desktop/web UI.
+
+Current high-value operations include:
+
+```text
+POST /v1/servers/{server}/tools/intercept
+POST /v1/servers/{server}/tools/{tool}/approve
+POST /v1/servers/{server}/tools/{tool}/reject
+GET  /v1/servers/{server}/tools/{tool}/reviews
+GET  /v1/servers/{server}/tools/{tool}/reviews/integrity
+```
+
+Approvals/rejections are hash-addressed: the caller must name the exact observed snapshot SHA-256 being reviewed.
+
+## 16. UI contract
+
+The UI should consume stable runtime/API objects rather than import `diff.py`, `ml.py`, or other research internals directly.
+
+Useful operator views are now naturally supported by backend evidence:
+
+- tool/version timeline,
+- before/after schema diff,
+- risk contributions,
+- confidence/abstention state,
+- temporal drift-budget meter,
+- cross-tool influence graph,
+- approval/rejection history,
+- audit-chain integrity indicator.
+
+A polished UI should prioritize these operator workflows over generic dashboard decoration.
+
+## 17. Current next priorities
+
+Highest-value next work:
+
+1. labeled graph/topology-evolution benchmark cases,
+2. experiment comparing pairwise vs temporal vs graph-aware decisions,
+3. externally anchored/signed audit checkpoints,
+4. configurable organization policy and thresholds,
+5. actual MCP transport proxy/host integration around the interceptor,
+6. CLI for local operation/debugging,
+7. Codex/Claude-Code-quality operator UI over the existing API contract,
+8. expand the dataset before making accuracy claims.
+
+The repository should keep avoiding placeholder folders and dependencies that do not yet serve an executable or experimental purpose.

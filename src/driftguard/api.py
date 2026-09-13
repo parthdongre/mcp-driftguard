@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
-from .runtime import DriftGuardService, ReviewEvent
+from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 
 
 class InterceptRequest(BaseModel):
@@ -85,5 +85,12 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
     )
     def reviews(server_id: str, tool_name: str) -> list[ReviewEvent]:
         return runtime.store.reviews(server_id, tool_name)
+
+    @app.get(
+        "/v1/servers/{server_id}/tools/{tool_name}/reviews/integrity",
+        response_model=AuditIntegrityReport,
+    )
+    def review_integrity(server_id: str, tool_name: str) -> AuditIntegrityReport:
+        return verify_review_chain(runtime.store.reviews(server_id, tool_name))
 
     return app
