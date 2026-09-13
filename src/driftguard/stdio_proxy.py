@@ -72,8 +72,8 @@ class StdioProxyFilter:
                 service=self.service,
             )
             transformed = result.payload
-        except Exception as exc:
-            # This proxy is a security boundary: discovery interception fails closed.
+        except Exception as exc:  # noqa: BLE001 - security boundary must fail closed
+            # Any unexpected inspection failure must not expose an unreviewed catalog.
             transformed = deepcopy(message)
             candidate = transformed.get("result")
             if isinstance(candidate, dict):
