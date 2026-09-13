@@ -183,11 +183,14 @@ class DriftGuardService:
             )
 
         latest = self.store.latest_revision(server_id)
-        if latest is not None and latest.revision_id == revision.revision_id:
-            if self.catalog_freshness(server_id).dirty:
-                raise ValueError(
-                    "Cannot checkpoint the latest revision while the catalog is dirty."
-                )
+        if (
+            latest is not None
+            and latest.revision_id == revision.revision_id
+            and self.catalog_freshness(server_id).dirty
+        ):
+            raise ValueError(
+                "Cannot checkpoint the latest revision while the catalog is dirty."
+            )
 
         checkpoint = make_checkpoint(
             server_id=server_id,
