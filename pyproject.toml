@@ -18,6 +18,8 @@ dependencies = [
 ml = [
   "numpy>=1.26",
   "scikit-learn>=1.5",
+]
+semantic = [
   "sentence-transformers>=3.0",
 ]
 api = [
