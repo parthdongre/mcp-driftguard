@@ -12,8 +12,8 @@ from .fusion_evaluation import evaluate_fusion_file
 from .graph_evaluation import evaluate_graph_file
 from .render import (
     render_catalog_freshness,
-    render_checkpoint,
     render_change_event,
+    render_checkpoint,
     render_revision_check,
     render_revision_delta,
     render_revision_log,
