@@ -19,6 +19,13 @@ class SnapshotStore(Protocol):
 
     def put_observed(self, snapshot: ToolSnapshot) -> None: ...
 
+    def get_observed(
+        self,
+        server_id: str,
+        tool_name: str,
+        sha256: str,
+    ) -> ToolSnapshot | None: ...
+
     def trust(self, snapshot: ToolSnapshot) -> None: ...
 
     def history(self, server_id: str, tool_name: str) -> list[ToolSnapshot]: ...
@@ -45,6 +52,17 @@ class InMemorySnapshotStore:
 
     def put_observed(self, snapshot: ToolSnapshot) -> None:
         self._history[self._key(snapshot.server_id, snapshot.tool_name)].append(snapshot)
+
+    def get_observed(
+        self,
+        server_id: str,
+        tool_name: str,
+        sha256: str,
+    ) -> ToolSnapshot | None:
+        for snapshot in reversed(self._history.get(self._key(server_id, tool_name), [])):
+            if snapshot.sha256 == sha256:
+                return snapshot
+        return None
 
     def trust(self, snapshot: ToolSnapshot) -> None:
         self._trusted[self._key(snapshot.server_id, snapshot.tool_name)] = snapshot.model_copy(
@@ -147,6 +165,27 @@ class SQLiteSnapshotStore:
                     snapshot.model_dump_json(),
                 ),
             )
+
+    def get_observed(
+        self,
+        server_id: str,
+        tool_name: str,
+        sha256: str,
+    ) -> ToolSnapshot | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT snapshot_json
+                FROM observations
+                WHERE server_id = ? AND tool_name = ? AND sha256 = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (server_id, tool_name, sha256),
+            ).fetchone()
+        if row is None:
+            return None
+        return ToolSnapshot.model_validate_json(row[0])
 
     def trust(self, snapshot: ToolSnapshot) -> None:
         approved = snapshot.model_copy(update={"approval_state": "approved"})

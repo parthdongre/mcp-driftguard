@@ -90,6 +90,17 @@ class DriftGuardService:
             decision=decision,
         )
 
+    def get_observed(
+        self,
+        *,
+        server_id: str,
+        tool_name: str,
+        sha256: str,
+    ) -> ToolSnapshot | None:
+        """Resolve a previously observed snapshot by identity and canonical hash."""
+
+        return self.store.get_observed(server_id, tool_name, sha256)
+
     def approve(
         self,
         snapshot: ToolSnapshot,
