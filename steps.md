@@ -375,3 +375,39 @@ The research comparison is now naturally:
 `experiments/evaluate_hybrid_semantic.py` mirrors the leave-one-out protocol and accepts
 `DRIFTGUARD_EMBEDDING_MODEL` to select the embedding model. It is not part of mandatory
 CI because model downloads are large and should not be required for a normal install.
+
+
+## 22. Cross-tool influence graph
+
+Added `graph.py` to analyze the complete `tools/list` surface rather than treating every
+tool as independent.
+
+The graph creates an edge when one tool definition explicitly references another known
+tool/function. For each edge it records:
+
+- source and target,
+- imperative language associated with the redirect,
+- whether the target name looks security-sensitive.
+
+It also records unresolved tool references and detects cycles.
+
+Examples of graph-level evidence:
+
+```text
+search
+  -- "always call" --> credential_export
+
+alpha --> beta --> alpha
+```
+
+These cases matter because a single tool can look relatively benign while the combined
+tool topology creates an influence/redirection path.
+
+The MCP interceptor now returns `graph_evidence` alongside per-tool observations so the
+future UI can display a dependency/influence map. Graph evidence is currently kept
+separate from the default enforcement decision to avoid silently introducing a new
+false-positive-heavy blocking rule before it has benchmark coverage.
+
+The next graph research step should compare graph snapshots across versions so we can
+measure **topology drift**: new edges, removed edges, new cycles, and movement toward
+sensitive tools.
