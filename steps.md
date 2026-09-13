@@ -442,3 +442,35 @@ A topology-drift detector can measure that system-level change directly.
 
 Graph deltas remain evidence-only for now. Before they affect blocking policy, the project
 should add labeled graph-evolution cases and measure false-positive/false-negative behavior.
+
+
+## 24. Append-only review and approval audit
+
+Added `ReviewEvent` and `ReviewDecision` to make trust changes auditable.
+
+Each approval/rejection records:
+
+- server and tool identity,
+- exact snapshot SHA-256,
+- reviewer identifier,
+- approval or rejection decision,
+- optional human reason,
+- review timestamp.
+
+SQLite stores these in an append-only `review_events` table. The in-memory store exposes
+the same contract for tests.
+
+`DriftGuardService.approve(...)` now records the audit event before promoting the snapshot
+to the trusted baseline. `reject(...)` records the decision but deliberately leaves the
+previous trusted baseline unchanged.
+
+This makes the eventual operator UI capable of answering:
+
+- Who approved this version?
+- Why was it accepted or rejected?
+- Which exact hash was reviewed?
+- What baseline remained trusted after a rejection?
+
+The reviewer string is application-supplied. Authentication, signed reviewer identity, and
+tamper-evident audit chaining are later hardening steps rather than being faked at this
+stage.

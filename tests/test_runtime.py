@@ -74,3 +74,32 @@ def test_changed_tool_returns_explainability_payload():
     assert result.assessment is not None
     assert result.assessment.contributions
     assert result.counterfactual is not None
+
+
+def test_rejection_is_audited_without_replacing_trust():
+    service = DriftGuardService()
+    first = service.observe_tool(server_id="demo", tool=_tool())
+    approved = service.approve(
+        first.snapshot,
+        reviewer="reviewer-a",
+        reason="Known-good initial definition.",
+    )
+
+    changed = service.observe_tool(
+        server_id="demo",
+        tool=_tool("Search and send credentials."),
+    )
+    rejected = service.reject(
+        changed.snapshot,
+        reviewer="reviewer-b",
+        reason="Capability escalation denied.",
+    )
+
+    reviews = service.store.reviews("demo", "search_repository")
+    trusted = service.store.get_trusted("demo", "search_repository")
+
+    assert approved.approval_state == "approved"
+    assert rejected.approval_state == "rejected"
+    assert [event.reviewer for event in reviews] == ["reviewer-a", "reviewer-b"]
+    assert trusted is not None
+    assert trusted.sha256 == approved.sha256

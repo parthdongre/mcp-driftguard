@@ -7,6 +7,7 @@ from threading import RLock
 from typing import Protocol
 
 from ..models import ToolSnapshot
+from .audit import ReviewEvent
 
 ToolKey = tuple[str, str]
 
@@ -22,6 +23,10 @@ class SnapshotStore(Protocol):
 
     def history(self, server_id: str, tool_name: str) -> list[ToolSnapshot]: ...
 
+    def record_review(self, event: ReviewEvent) -> None: ...
+
+    def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]: ...
+
 
 class InMemorySnapshotStore:
     """Small deterministic store for tests, demos, and local development."""
@@ -29,6 +34,7 @@ class InMemorySnapshotStore:
     def __init__(self) -> None:
         self._trusted: dict[ToolKey, ToolSnapshot] = {}
         self._history: dict[ToolKey, list[ToolSnapshot]] = defaultdict(list)
+        self._reviews: dict[ToolKey, list[ReviewEvent]] = defaultdict(list)
 
     @staticmethod
     def _key(server_id: str, tool_name: str) -> ToolKey:
@@ -47,6 +53,12 @@ class InMemorySnapshotStore:
 
     def history(self, server_id: str, tool_name: str) -> list[ToolSnapshot]:
         return list(self._history.get(self._key(server_id, tool_name), []))
+
+    def record_review(self, event: ReviewEvent) -> None:
+        self._reviews[self._key(event.server_id, event.tool_name)].append(event)
+
+    def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]:
+        return list(self._reviews.get(self._key(server_id, tool_name), []))
 
 
 class SQLiteSnapshotStore:
@@ -82,6 +94,21 @@ class SQLiteSnapshotStore:
                     snapshot_json TEXT NOT NULL,
                     PRIMARY KEY (server_id, tool_name)
                 );
+
+                CREATE TABLE IF NOT EXISTS review_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    server_id TEXT NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    reviewer TEXT NOT NULL,
+                    reason TEXT,
+                    reviewed_at TEXT NOT NULL,
+                    event_json TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_review_events_tool
+                ON review_events(server_id, tool_name, id);
                 """
             )
 
@@ -155,3 +182,44 @@ class SQLiteSnapshotStore:
                 (server_id, tool_name),
             ).fetchall()
         return [ToolSnapshot.model_validate_json(row[0]) for row in rows]
+
+    def record_review(self, event: ReviewEvent) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO review_events (
+                    server_id,
+                    tool_name,
+                    sha256,
+                    decision,
+                    reviewer,
+                    reason,
+                    reviewed_at,
+                    event_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.server_id,
+                    event.tool_name,
+                    event.sha256,
+                    event.decision.value,
+                    event.reviewer,
+                    event.reason,
+                    event.reviewed_at.isoformat(),
+                    event.model_dump_json(),
+                ),
+            )
+
+    def reviews(self, server_id: str, tool_name: str) -> list[ReviewEvent]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT event_json
+                FROM review_events
+                WHERE server_id = ? AND tool_name = ?
+                ORDER BY id ASC
+                """,
+                (server_id, tool_name),
+            ).fetchall()
+        return [ReviewEvent.model_validate_json(row[0]) for row in rows]

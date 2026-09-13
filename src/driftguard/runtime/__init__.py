@@ -1,3 +1,4 @@
+from .audit import ReviewDecision, ReviewEvent
 from .policy import DefaultPolicy, EnforcementAction, PolicyDecision
 from .service import DriftGuardService, ObservationResult
 from .store import InMemorySnapshotStore, SnapshotStore, SQLiteSnapshotStore
@@ -12,6 +13,8 @@ __all__ = [
     "InMemorySnapshotStore",
     "ObservationResult",
     "PolicyDecision",
+    "ReviewDecision",
+    "ReviewEvent",
     "SQLiteSnapshotStore",
     "SnapshotStore",
     "TemporalStep",

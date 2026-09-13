@@ -10,6 +10,7 @@ from ..canonicalize import make_snapshot
 from ..diff import build_delta
 from ..explain import CounterfactualExplanation, greedy_counterfactual
 from ..models import RiskAssessment, ToolDelta, ToolSnapshot
+from .audit import ReviewDecision, ReviewEvent
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
 from .temporal import DriftBudget, DriftBudgetEvidence
@@ -89,9 +90,47 @@ class DriftGuardService:
             decision=decision,
         )
 
-    def approve(self, snapshot: ToolSnapshot) -> ToolSnapshot:
-        """Promote one reviewed observation to the trusted comparison baseline."""
+    def approve(
+        self,
+        snapshot: ToolSnapshot,
+        *,
+        reviewer: str = "local-reviewer",
+        reason: str | None = None,
+    ) -> ToolSnapshot:
+        """Record approval and promote the reviewed observation to the trusted baseline."""
 
         approved = snapshot.model_copy(update={"approval_state": "approved"})
+        self.store.record_review(
+            ReviewEvent(
+                server_id=approved.server_id,
+                tool_name=approved.tool_name,
+                sha256=approved.sha256,
+                decision=ReviewDecision.APPROVED,
+                reviewer=reviewer,
+                reason=reason,
+            )
+        )
         self.store.trust(approved)
         return approved
+
+    def reject(
+        self,
+        snapshot: ToolSnapshot,
+        *,
+        reviewer: str = "local-reviewer",
+        reason: str | None = None,
+    ) -> ToolSnapshot:
+        """Record rejection without replacing the currently trusted baseline."""
+
+        rejected = snapshot.model_copy(update={"approval_state": "rejected"})
+        self.store.record_review(
+            ReviewEvent(
+                server_id=rejected.server_id,
+                tool_name=rejected.tool_name,
+                sha256=rejected.sha256,
+                decision=ReviewDecision.REJECTED,
+                reviewer=reviewer,
+                reason=reason,
+            )
+        )
+        return rejected
