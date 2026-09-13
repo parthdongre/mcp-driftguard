@@ -1,5 +1,5 @@
-from driftguard.checks import RevisionCheckState
 from driftguard.adapters import intercept_tools_list
+from driftguard.checks import RevisionCheckState
 from driftguard.runtime import DriftGuardService
 
 
