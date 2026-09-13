@@ -12,6 +12,7 @@ from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
+from .views import RevisionView
 
 
 class InterceptRequest(BaseModel):
@@ -106,6 +107,19 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         result = runtime.get_revision_check(server_id, revision_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Revision security check not found.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/revisions/{revision_id}/view",
+        response_model=RevisionView,
+    )
+    def revision_view(server_id: str, revision_id: str) -> RevisionView:
+        result = runtime.revision_view(
+            server_id=server_id,
+            revision_id=revision_id,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Discovery revision not found.")
         return result
 
     @app.get(

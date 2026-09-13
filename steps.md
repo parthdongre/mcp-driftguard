@@ -214,6 +214,7 @@ driftguard changes --db driftguard.db --server demo --after <rev>
 driftguard watch --db driftguard.db --server demo
 driftguard blame --db driftguard.db --server demo --tool search
 driftguard check --db driftguard.db --server demo
+driftguard show --db driftguard.db --server demo [<revision>]
 ```
 
 The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
@@ -223,6 +224,32 @@ The default CLI output is intentionally Git-like and human-readable. Modified to
 `blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
 
 `driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
+
+## Git-show-style revision view
+
+`RevisionView` is the primary read model for an operator opening a revision. It combines:
+
+- immutable revision metadata,
+- exact parent-to-revision diff,
+- the persisted security check from observation time,
+- current catalog freshness only when viewing the latest revision.
+
+This deliberately separates historical facts from current state. A historical revision never
+inherits today's freshness signal, while its original security verdict remains preserved.
+
+Use:
+
+```text
+driftguard show --db driftguard.db --server demo [<revision>]
+```
+
+The API equivalent is:
+
+```text
+GET /v1/servers/{server}/revisions/{revision}/view
+```
+
+This object is intended to back the eventual GitHub-like revision page in the UI.
 
 ## Immutable revision security checks
 

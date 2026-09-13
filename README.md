@@ -158,7 +158,8 @@ The development branch now contains:
 - a persistent Git-like discovery revision/change ledger,
 - CLI/API status, log, and arbitrary revision comparison,
 - field-level JSON-pointer diffs and Git-style field provenance/blame,
-- immutable per-revision security checks similar to GitHub Checks.
+- immutable per-revision security checks similar to GitHub Checks,
+- a Git-show-style revision view combining metadata, exact parent diff, security verdict, and freshness.
 
 Run the current research benchmarks with:
 

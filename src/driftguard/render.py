@@ -5,6 +5,7 @@ from .changefeed import RevisionChangeEvent
 from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .signals import CatalogFreshnessStatus
+from .views import RevisionView
 
 
 def _short(value: str | None, length: int = 10) -> str:
@@ -149,4 +150,35 @@ def render_revision_check(check: RevisionSecurityCheck) -> str:
             lines.append(
                 f"  ! temporal budget exceeded ({tool.temporal_cumulative_score:.2f})"
             )
+    return "\n".join(lines)
+
+
+def render_revision_view(view: RevisionView) -> str:
+    revision = view.revision
+    lines = [
+        f"revision {_short(revision.revision_id, 12)}",
+        f"server: {revision.server_id}",
+        f"tree: {_short(revision.tree_hash, 12)}",
+        f"observed: {revision.observed_at.isoformat()}",
+        f"parent: {_short(revision.parent_revision_id, 12)}",
+    ]
+
+    if view.is_latest and view.freshness is not None:
+        state = "DIRTY" if view.freshness.dirty else "clean"
+        lines.append(
+            f"catalog: {state} ({view.freshness.pending_signals} pending signal(s))"
+        )
+
+    lines.extend(["", "Changes from parent:"])
+    if view.parent_delta is None:
+        lines.append("Initial discovery revision.")
+    else:
+        lines.append(render_revision_delta(view.parent_delta))
+
+    lines.extend(["", "Security check:"])
+    if view.security_check is None:
+        lines.append("No persisted security check.")
+    else:
+        lines.append(render_revision_check(view.security_check))
+
     return "\n".join(lines)

@@ -16,6 +16,7 @@ from .render import (
     render_revision_check,
     render_revision_delta,
     render_revision_log,
+    render_revision_view,
     render_surface_status,
     render_tool_blame,
 )
@@ -23,6 +24,7 @@ from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
 from .signals import catalog_freshness
 from .stdio_proxy import run_stdio_proxy
+from .views import build_revision_view
 
 
 def _add_store_args(command: argparse.ArgumentParser) -> None:
@@ -111,6 +113,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Polling interval in seconds (default: 1.0).",
     )
+
+    show = subcommands.add_parser(
+        "show",
+        help="Show one revision with its parent diff, security verdict, and freshness.",
+    )
+    _add_store_args(show)
+    show.add_argument(
+        "revision",
+        nargs="?",
+        help="Revision ID; defaults to the latest discovery revision.",
+    )
+    show.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     check = subcommands.add_parser(
         "check",
@@ -229,6 +243,37 @@ def _run_revision_command(args: argparse.Namespace) -> int:
             print(status.model_dump_json(indent=2) if args.json else render_surface_status(status))
             return 0
 
+        if args.command == "show":
+            revision_id = args.revision
+            if revision_id is None:
+                latest = store.latest_revision(args.server)
+                if latest is None:
+                    print("No revisions found.")
+                    return 1
+                revision_id = latest.revision_id
+
+            revisions = store.revision_history(args.server)
+            latest = revisions[-1] if revisions else None
+            freshness = catalog_freshness(
+                store.catalog_signals(args.server),
+                latest_revision_id=latest.revision_id if latest is not None else None,
+            )
+            result = build_revision_view(
+                revisions,
+                target_revision_id=revision_id,
+                security_check=store.get_revision_check(args.server, revision_id),
+                freshness=freshness,
+            )
+            if result is None:
+                print("Revision was not found.")
+                return 1
+            print(
+                result.model_dump_json(indent=2)
+                if args.json
+                else render_revision_view(result)
+            )
+            return 0
+
         if args.command == "check":
             revision_id = args.revision
             if revision_id is None:
@@ -329,6 +374,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "log",
         "diff",
         "changes",
+        "show",
         "check",
         "blame",
     }:

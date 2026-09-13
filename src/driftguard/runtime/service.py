@@ -21,6 +21,7 @@ from ..revisions import (
     diff_revisions,
     make_discovery_revision,
 )
+from ..views import RevisionView, build_revision_view
 from ..signals import (
     CatalogChangeSignal,
     CatalogFreshnessStatus,
@@ -154,6 +155,25 @@ class DriftGuardService:
 
     def revision_checks(self, server_id: str) -> list[RevisionSecurityCheck]:
         return self.store.revision_checks(server_id)
+
+    def revision_view(
+        self,
+        *,
+        server_id: str,
+        revision_id: str,
+    ) -> RevisionView | None:
+        revisions = self.store.revision_history(server_id)
+        latest = revisions[-1] if revisions else None
+        return build_revision_view(
+            revisions,
+            target_revision_id=revision_id,
+            security_check=self.store.get_revision_check(server_id, revision_id),
+            freshness=(
+                self.catalog_freshness(server_id)
+                if latest is not None and latest.revision_id == revision_id
+                else None
+            ),
+        )
 
     def blame_tool(
         self,
