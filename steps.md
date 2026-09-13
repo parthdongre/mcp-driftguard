@@ -329,3 +329,49 @@ current prototype benchmark. This is intentionally more honest than training and
 accuracy on the same twelve samples. The dataset is still far too small for publication
 claims; the point is to establish a reproducible experimental protocol before scaling the
 corpus.
+
+
+## 20. Provider-neutral semantic drift features
+
+Added `semantic.py` with a small `TextEmbedder` protocol instead of binding the project
+to one embedding vendor or model.
+
+The first semantic feature set measures cosine distance between old/new versions of:
+
+- tool description text,
+- input schema text,
+- parameter names/descriptions,
+- the full canonical tool definition.
+
+`SentenceTransformerEmbedder` is an optional adapter. The core semantic feature functions
+can be tested with any deterministic/fake embedder, so normal CI does not need to download
+a model.
+
+## 21. Hybrid structural + semantic classifier
+
+`PairwiseLogisticDetector` now accepts an injected feature extractor and stable feature
+names. `HybridSemanticLogisticDetector` uses that same learned baseline with:
+
+```text
+structural / lexical pair features
+          +
+field-level semantic distances
+          ->
+balanced logistic classifier
+```
+
+This intentionally reuses the same classifier family so an ablation can isolate the value
+of semantic features rather than changing both features and model architecture at once.
+
+The research comparison is now naturally:
+
+1. hash-only,
+2. hand-written rule baseline,
+3. learned structural/lexical pair classifier,
+4. learned structural + semantic pair classifier,
+5. later temporal + semantic hybrid,
+6. later deeper pair encoder / Siamese model if the dataset justifies it.
+
+`experiments/evaluate_hybrid_semantic.py` mirrors the leave-one-out protocol and accepts
+`DRIFTGUARD_EMBEDDING_MODEL` to select the embedding model. It is not part of mandatory
+CI because model downloads are large and should not be required for a normal install.
