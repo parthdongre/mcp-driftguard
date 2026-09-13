@@ -73,3 +73,6 @@ class RiskAssessment(BaseModel):
     recommended_action: str
     probabilities: dict[str, float] = Field(default_factory=dict)
     contributions: list[RiskContribution] = Field(default_factory=list)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    abstained: bool = False
+    uncertainty_reason: str | None = None

@@ -31,6 +31,8 @@ class SamplePrediction(BaseModel):
     predicted: ChangeClass
     risk_score: float = Field(ge=0.0, le=100.0)
     correct: bool
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    abstained: bool = False
 
 
 class PerClassMetrics(BaseModel):
@@ -45,6 +47,8 @@ class EvaluationReport(BaseModel):
     correct: int = Field(ge=0)
     accuracy: float = Field(ge=0.0, le=1.0)
     macro_f1: float = Field(ge=0.0, le=1.0)
+    abstentions: int = Field(ge=0)
+    abstention_rate: float = Field(ge=0.0, le=1.0)
     per_class: dict[str, PerClassMetrics]
     confusion_matrix: dict[str, dict[str, int]]
     predictions: list[SamplePrediction] = Field(default_factory=list)
@@ -108,6 +112,8 @@ def evaluate_samples(
                 predicted=predicted,
                 risk_score=assessment.risk_score,
                 correct=is_correct,
+                confidence=assessment.confidence,
+                abstained=assessment.abstained,
             )
         )
 
@@ -141,6 +147,7 @@ def evaluate_samples(
             supported_f1.append(f1)
 
     total = len(samples)
+    abstentions = sum(int(item.abstained) for item in predictions)
     accuracy = _safe_ratio(correct, total)
     macro_f1 = sum(supported_f1) / len(supported_f1) if supported_f1 else 0.0
 
@@ -149,6 +156,8 @@ def evaluate_samples(
         correct=correct,
         accuracy=round(accuracy, 4),
         macro_f1=round(macro_f1, 4),
+        abstentions=abstentions,
+        abstention_rate=round(_safe_ratio(abstentions, total), 4),
         per_class=per_class,
         confusion_matrix=matrix,
         predictions=predictions,

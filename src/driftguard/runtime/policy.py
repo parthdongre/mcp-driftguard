@@ -39,6 +39,13 @@ class DefaultPolicy:
         )
 
     def decide(self, assessment: RiskAssessment) -> PolicyDecision:
+        if assessment.abstained:
+            return PolicyDecision(
+                action=EnforcementAction.REQUIRE_RECONSENT,
+                reason=assessment.uncertainty_reason or "Detector abstained due to uncertainty.",
+                assessment=assessment,
+            )
+
         action = self._CLASS_ACTIONS[assessment.change_class]
         return PolicyDecision(
             action=action,

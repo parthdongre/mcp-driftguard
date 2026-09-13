@@ -15,6 +15,7 @@ from .store import InMemorySnapshotStore, SnapshotStore
 from .temporal import DriftBudget, DriftBudgetEvidence
 
 Detector = Callable[[ToolDelta], RiskAssessment]
+Explainer = Callable[[RiskAssessment], CounterfactualExplanation]
 
 
 class ObservationResult(BaseModel):
@@ -37,11 +38,17 @@ class DriftGuardService:
         detector: Detector = rule_baseline,
         policy: DefaultPolicy | None = None,
         drift_budget: DriftBudget | None = None,
+        explainer: Explainer | None = None,
     ) -> None:
         self.store = store if store is not None else InMemorySnapshotStore()
         self.detector = detector
         self.policy = policy if policy is not None else DefaultPolicy()
         self.drift_budget = drift_budget if drift_budget is not None else DriftBudget()
+        self.explainer = (
+            explainer
+            if explainer is not None
+            else (greedy_counterfactual if detector is rule_baseline else None)
+        )
 
     def observe_tool(
         self,
@@ -78,7 +85,7 @@ class DriftGuardService:
             delta=delta,
             assessment=assessment,
             temporal=temporal,
-            counterfactual=greedy_counterfactual(assessment),
+            counterfactual=self.explainer(assessment) if self.explainer is not None else None,
             decision=decision,
         )
 
