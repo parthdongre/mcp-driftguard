@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from .canonicalize import make_snapshot
@@ -7,6 +8,8 @@ from .diff import build_delta
 from .evaluation import EvaluationSample
 from .features import PAIR_FEATURE_NAMES, pair_feature_vector
 from .models import ChangeClass, RiskAssessment, ToolDelta
+
+FeatureExtractor = Callable[[ToolDelta], list[float]]
 
 _CLASS_SEVERITY = {
     ChangeClass.NO_MEANINGFUL_CHANGE: 0.0,
@@ -36,21 +39,37 @@ def _sklearn_components() -> tuple[Any, Any, Any]:
 
 
 class PairwiseLogisticDetector:
-    """Lightweight learned classifier over pairwise structural/lexical drift features."""
+    """Lightweight learned classifier over configurable pairwise drift features."""
 
     def __init__(
         self,
         *,
         confidence_threshold: float = 0.55,
         margin_threshold: float = 0.10,
+        feature_extractor: FeatureExtractor = pair_feature_vector,
+        feature_names: tuple[str, ...] = PAIR_FEATURE_NAMES,
     ) -> None:
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("confidence_threshold must be between 0 and 1")
         if not 0.0 <= margin_threshold <= 1.0:
             raise ValueError("margin_threshold must be between 0 and 1")
+        if not feature_names:
+            raise ValueError("feature_names cannot be empty")
+
         self.confidence_threshold = confidence_threshold
         self.margin_threshold = margin_threshold
+        self.feature_extractor = feature_extractor
+        self.feature_names = feature_names
         self._model: Any | None = None
+
+    def _vector(self, delta: ToolDelta) -> list[float]:
+        vector = self.feature_extractor(delta)
+        if len(vector) != len(self.feature_names):
+            raise ValueError(
+                "Feature extractor returned "
+                f"{len(vector)} values for {len(self.feature_names)} feature names"
+            )
+        return vector
 
     def fit(self, samples: list[EvaluationSample]) -> PairwiseLogisticDetector:
         """Fit from labeled old/new pairs. All four semantic classes should be represented."""
@@ -72,7 +91,7 @@ class PairwiseLogisticDetector:
                 server_id=f"train:{sample.sample_id}",
                 tool=sample.new_tool,
             )
-            x.append(pair_feature_vector(build_delta(old, new)))
+            x.append(self._vector(build_delta(old, new)))
             y.append(sample.label.value)
 
         if len(set(y)) < 2:
@@ -103,7 +122,7 @@ class PairwiseLogisticDetector:
         if self._model is None:
             raise RuntimeError("PairwiseLogisticDetector must be fitted before inference")
 
-        vector = pair_feature_vector(delta)
+        vector = self._vector(delta)
         probabilities = self._model.predict_proba([vector])[0]
         class_names = list(self._model.classes_)
         probability_map = {
@@ -130,7 +149,7 @@ class PairwiseLogisticDetector:
             for class_name, probability in probability_map.items()
         )
 
-        feature_map = dict(zip(PAIR_FEATURE_NAMES, vector, strict=True))
+        feature_map = dict(zip(self.feature_names, vector, strict=True))
         active_features = sorted(
             (name for name, value in feature_map.items() if value > 0),
             key=lambda name: feature_map[name],
