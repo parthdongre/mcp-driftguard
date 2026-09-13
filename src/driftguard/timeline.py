@@ -123,25 +123,25 @@ def _review_events(reviews: list[Any]) -> list[TimelineEvent]:
         fallback = (
             f"{getattr(review, 'tool_name', 'unknown')}:"
             f"{getattr(review, 'sha256', 'unknown')}:"
-            f"{getattr(review, 'reviewed_at').isoformat()}:{index}"
+            f"{review.reviewed_at.isoformat()}:{index}"
         )
         event_id = f"review:{event_hash or fallback}"
-        decision = str(getattr(review, "decision"))
-        tool_name = str(getattr(review, "tool_name"))
-        reviewer = str(getattr(review, "reviewer"))
+        decision = str(review.decision)
+        tool_name = str(review.tool_name)
+        reviewer = str(review.reviewer)
         reason = getattr(review, "reason", None)
 
         events.append(
             TimelineEvent(
                 event_id=event_id,
                 kind=TimelineEventKind.REVIEW,
-                occurred_at=getattr(review, "reviewed_at"),
-                server_id=str(getattr(review, "server_id")),
+                occurred_at=review.reviewed_at,
+                server_id=str(review.server_id),
                 tool_name=tool_name,
                 severity=decision,
                 summary=f"{decision.capitalize()} {tool_name} by {reviewer}",
                 details={
-                    "sha256": str(getattr(review, "sha256")),
+                    "sha256": str(review.sha256),
                     "decision": decision,
                     "reviewer": reviewer,
                     "reason": reason,
