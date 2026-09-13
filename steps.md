@@ -154,6 +154,25 @@ Review events are now hash-chained per `(server_id, tool_name)` using `previous_
 
 This is **tamper-evident**, not tamper-proof. A privileged attacker who can rewrite the entire unsigned database can rebuild the chain. Production hardening should anchor/sign chain heads externally.
 
+## Real-time event subscription
+
+The optional FastAPI control plane now exposes a Server-Sent Events stream:
+
+```text
+GET /v1/servers/{server}/events
+GET /v1/servers/{server}/events?after_event=<timeline-event-id>
+```
+
+Each application event uses the timeline event ID as the SSE `id`, the timeline kind as the
+SSE `event`, and the full `TimelineEvent` JSON as `data`. Empty polling cycles emit SSE
+comments as keepalive heartbeats.
+
+This is deliberately built on the same timeline cursor contract used by `driftguard watch`,
+so CLI and dashboard clients see the same event semantics. The endpoint is optional and only
+requires the `api` extra; the core revision/detection package remains FastAPI-independent.
+
+CI now has a dedicated `api-smoke` job in addition to core and ML jobs.
+
 ## API control plane
 
 The optional FastAPI backend is the stable boundary for future CLI/UI clients.
@@ -382,7 +401,7 @@ produce a defensible paper ablation table on a much larger corpus.
 1. expand the unified multi-revision benchmark and run held-out-family ablations,
 2. Streamable HTTP gateway/interceptor for remote MCP servers,
 3. automatically establish the MCP tools-list-change subscription where supported,
-4. server-push subscription (SSE/WebSocket) over the DriftGuard change feed,
+4. production hardening for the SSE stream (auth, disconnect/load testing, backpressure),
 5. externally anchored or signed audit checkpoints,
 6. configurable organization policy/thresholds,
 7. polished GitHub/Codex-like operator UI over revision history and diffs,

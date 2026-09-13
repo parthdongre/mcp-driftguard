@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
@@ -12,6 +15,7 @@ from .checks import RevisionSecurityCheck
 from .revisions import DiscoveryRevision, RevisionChannel, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
 from .signals import CatalogFreshnessStatus
+from .sse import encode_sse_comment, encode_sse_event
 from .timeline import TimelineEvent
 from .views import RevisionView
 
@@ -111,6 +115,51 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         if result is None:
             raise HTTPException(status_code=404, detail="Timeline cursor event not found.")
         return result
+
+    @app.get("/v1/servers/{server_id}/events")
+    def events(
+        server_id: str,
+        after_event: str | None = None,
+        poll_interval: float = Query(default=1.0, ge=0.1, le=30.0),
+    ) -> StreamingResponse:
+        initial = runtime.timeline(
+            server_id,
+            after_event_id=after_event,
+            newest_first=False,
+        )
+        if initial is None:
+            raise HTTPException(status_code=404, detail="Timeline cursor event not found.")
+
+        async def event_stream() -> AsyncIterator[str]:
+            cursor = after_event
+            pending = initial
+
+            while True:
+                if pending:
+                    for event in pending:
+                        yield encode_sse_event(event)
+                        cursor = event.event_id
+                else:
+                    yield encode_sse_comment()
+
+                await asyncio.sleep(poll_interval)
+                next_events = runtime.timeline(
+                    server_id,
+                    after_event_id=cursor,
+                    newest_first=False,
+                )
+                if next_events is None:
+                    return
+                pending = next_events
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.get(
         "/v1/servers/{server_id}/checks",

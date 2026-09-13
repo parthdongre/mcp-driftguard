@@ -34,3 +34,17 @@ jobs:
         run: pip install -e ".[dev,ml]"
       - name: Test learned pairwise detector
         run: pytest -q tests/test_ml.py tests/test_features.py
+
+
+  api-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install API extras
+        run: pip install -e ".[dev,api]"
+      - name: Test API control plane
+        run: pytest -q tests/test_api_smoke.py tests/test_sse.py
