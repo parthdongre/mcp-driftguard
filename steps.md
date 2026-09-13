@@ -264,3 +264,68 @@ Future learned detectors will need model-appropriate explainers. The stable runt
 
 C1-to-C0 is not claimed from score reduction because C0 requires canonical equivalence,
 not merely a score below a threshold.
+
+
+## 16. Stable pairwise feature pipeline
+
+Added `features.py` so learned detectors consume a versioned, explicit numeric feature
+contract instead of re-implementing feature extraction inside training scripts.
+
+The first feature vector includes canonical identity, lexical drift, changed-field count,
+parameter/required/type/default/enum changes, sensitive terms, URLs, cross-tool
+references, and imperative language.
+
+The ordering is fixed by `PAIR_FEATURE_NAMES`, which makes saved model coefficients and
+ablation experiments interpretable.
+
+## 17. Classical learned pairwise detector
+
+Added `PairwiseLogisticDetector` as the first learned baseline.
+
+Why logistic regression first:
+
+- the benchmark is still small,
+- coefficients and probabilities are inspectable,
+- training/inference are fast,
+- it provides a meaningful learned baseline before adding embedding-heavy models,
+- it can be compared directly with the hand-written rule baseline.
+
+It uses `StandardScaler + LogisticRegression(class_weight="balanced")`. The classifier
+predicts C0-C3 probabilities and converts their expected severity into a 0-100 risk score.
+
+The exact-identity C0 case is kept deterministic: canonical equality returns C0 directly
+rather than asking a statistical model to rediscover equality.
+
+## 18. Uncertainty-aware abstention
+
+`RiskAssessment` now carries `confidence`, `abstained`, and
+`uncertainty_reason`.
+
+The learned detector abstains when either:
+
+- maximum class probability is below a configurable confidence threshold, or
+- the margin between the top two classes is too small.
+
+Abstention does not invent a fifth semantic class. The predicted C0-C3 class is retained
+for evaluation, while policy escalates the uncertain decision to `require_reconsent`.
+
+This separation is useful for research: semantic classification quality and operational
+safety under uncertainty can be measured independently.
+
+## 19. ML dependency and validation strategy
+
+The optional dependencies are now separated:
+
+- `.[ml]`: NumPy + scikit-learn for classical learned baselines,
+- `.[semantic]`: sentence-transformers for later embedding experiments.
+
+Normal DriftGuard installations do not pull the semantic model stack.
+
+CI now has a second `ml-smoke` job that installs `.[dev,ml]` and tests the learned
+detector. The normal job remains lightweight.
+
+`experiments/evaluate_pairwise_logistic.py` performs leave-one-out evaluation over the
+current prototype benchmark. This is intentionally more honest than training and reporting
+accuracy on the same twelve samples. The dataset is still far too small for publication
+claims; the point is to establish a reproducible experimental protocol before scaling the
+corpus.
