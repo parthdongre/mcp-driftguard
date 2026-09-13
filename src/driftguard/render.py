@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 
@@ -90,3 +91,23 @@ def render_change_event(event: RevisionChangeEvent) -> str:
         f"-{len(event.removed_tools)}",
     ]
     return "  ".join(parts)
+
+
+def render_tool_blame(blame: ToolBlame) -> str:
+    if blame.ambiguous:
+        return (
+            f"blame {blame.tool_name}: ambiguous\n"
+            f"{blame.ambiguity_reason or 'Provenance cannot be resolved uniquely.'}"
+        )
+
+    lines = [
+        f"blame {blame.tool_name} @ {_short(blame.target_revision_id, 12)}",
+    ]
+    for field in blame.fields:
+        lines.append(
+            f"{_short(field.revision_id, 12)}  "
+            f"{field.observed_at.isoformat()}  {field.path}"
+        )
+    if not blame.fields:
+        lines.append("No matching fields.")
+    return "\n".join(lines)

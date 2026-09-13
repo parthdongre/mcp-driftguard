@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
+from .blame import ToolBlame
 from .changefeed import RevisionChangeEvent
 from .revisions import DiscoveryRevision, RevisionDelta, SurfaceObservation
 from .runtime import AuditIntegrityReport, DriftGuardService, ReviewEvent, verify_review_chain
@@ -107,6 +108,29 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         )
         if result is None:
             raise HTTPException(status_code=404, detail="One or both discovery revisions were not found.")
+        return result
+
+    @app.get(
+        "/v1/servers/{server_id}/tools/{tool_name}/blame",
+        response_model=ToolBlame,
+    )
+    def tool_blame(
+        server_id: str,
+        tool_name: str,
+        revision_id: str | None = None,
+        path: str | None = None,
+    ) -> ToolBlame:
+        result = runtime.blame_tool(
+            server_id=server_id,
+            tool_name=tool_name,
+            revision_id=revision_id,
+            path_prefix=path,
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Tool or requested revision was not found in discovery history.",
+            )
         return result
 
     def resolve_snapshot(server_id: str, tool_name: str, sha256: str):

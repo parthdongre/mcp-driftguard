@@ -154,7 +154,8 @@ The development branch now contains:
 - a rolling cumulative drift budget for low-and-slow changes,
 - a versioned labeled benchmark and evaluation harness,
 - a persistent Git-like discovery revision/change ledger,
-- CLI/API status, log, and arbitrary revision comparison.
+- CLI/API status, log, and arbitrary revision comparison,
+- field-level JSON-pointer diffs and Git-style field provenance/blame.
 
 Run the current baseline benchmark with:
 

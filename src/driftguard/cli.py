@@ -5,6 +5,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
+from .blame import blame_tool
 from .changefeed import changes_after
 from .evaluation import evaluate_file
 from .graph_evaluation import evaluate_graph_file
@@ -13,6 +14,7 @@ from .render import (
     render_revision_delta,
     render_revision_log,
     render_surface_status,
+    render_tool_blame,
 )
 from .revisions import SurfaceObservation, compare_to_trusted, diff_revisions
 from .runtime import SQLiteSnapshotStore, verify_review_chain
@@ -81,6 +83,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Polling interval in seconds (default: 1.0).",
     )
+
+    blame = subcommands.add_parser(
+        "blame",
+        help="Show which revision last changed each current tool field.",
+    )
+    _add_store_args(blame)
+    blame.add_argument("--tool", required=True, help="Tool name.")
+    blame.add_argument("--revision", help="Blame a historical revision instead of latest.")
+    blame.add_argument(
+        "--path",
+        help="Only show this JSON-pointer path or descendants.",
+    )
+    blame.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     proxy = subcommands.add_parser(
         "proxy",
@@ -153,6 +168,19 @@ def _run_revision_command(args: argparse.Namespace) -> int:
             print(status.model_dump_json(indent=2) if args.json else render_surface_status(status))
             return 0
 
+        if args.command == "blame":
+            result = blame_tool(
+                store.revision_history(args.server),
+                tool_name=args.tool,
+                revision_id=args.revision,
+                path_prefix=args.path,
+            )
+            if result is None:
+                print("Tool or requested revision was not found.")
+                return 1
+            print(result.model_dump_json(indent=2) if args.json else render_tool_blame(result))
+            return 0
+
         if args.command == "changes":
             feed = changes_after(store.revision_history(args.server), args.after)
             if feed is None:
@@ -215,7 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "benchmark":
         return _run_benchmark(args)
-    if args.command in {"status", "log", "diff", "changes"}:
+    if args.command in {"status", "log", "diff", "changes", "blame"}:
         return _run_revision_command(args)
     if args.command == "watch":
         return _run_watch(args)

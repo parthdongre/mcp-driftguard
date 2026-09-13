@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from ..baselines import rule_baseline
+from ..blame import ToolBlame, blame_tool
 from ..canonicalize import make_snapshot
 from ..changefeed import RevisionChangeEvent, changes_after
 from ..diff import build_delta
@@ -121,6 +122,21 @@ class DriftGuardService:
 
     def get_revision(self, server_id: str, revision_id: str) -> DiscoveryRevision | None:
         return self.store.get_revision(server_id, revision_id)
+
+    def blame_tool(
+        self,
+        *,
+        server_id: str,
+        tool_name: str,
+        revision_id: str | None = None,
+        path_prefix: str | None = None,
+    ) -> ToolBlame | None:
+        return blame_tool(
+            self.store.revision_history(server_id),
+            tool_name=tool_name,
+            revision_id=revision_id,
+            path_prefix=path_prefix,
+        )
 
     def compare_revisions(
         self,

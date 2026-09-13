@@ -211,9 +211,16 @@ driftguard log --db driftguard.db --server demo
 driftguard diff --db driftguard.db --server demo --from <rev> --to <rev>
 driftguard changes --db driftguard.db --server demo --after <rev>
 driftguard watch --db driftguard.db --server demo
+driftguard blame --db driftguard.db --server demo --tool search
 ```
 
 The default CLI output is intentionally Git-like and human-readable. Modified tools also expose exact JSON-pointer paths (for example `/description` or `/inputSchema/properties/api_token`) so operators can review precise field-level changes. Arrays are intentionally treated atomically to avoid unstable index-level diffs. Add `--json` where supported for automation/UI plumbing.
+
+### Field provenance / blame
+
+`blame_tool(...)` walks the immutable revision history and records the revision that most recently introduced or changed every current leaf field. This allows questions such as "when did the API-token capability appear?" without manually comparing every version.
+
+`driftguard blame` supports an optional historical revision and a JSON-pointer prefix. For example, `--path /inputSchema/properties/api_token` returns provenance for that capability subtree. If a target revision contains duplicate definitions with the same tool name, blame is explicitly marked ambiguous rather than guessing.
 
 ## Transparent stdio MCP proxy
 
