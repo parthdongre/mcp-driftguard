@@ -205,3 +205,34 @@ The purpose is to detect low-and-slow drift across individually accepted updates
 - future trust-decay/reputation variants.
 
 The temporal evidence is also designed for the future UI: it can drive a version timeline and a visible drift-budget meter.
+
+
+## 14. Reproducible benchmark and evaluation harness
+
+Implemented `driftguard.evaluation`, `data/synthetic_v0.jsonl`, and
+`experiments/evaluate_rule_baseline.py`.
+
+The first benchmark is intentionally small and synthetic. Its purpose is to establish the
+research contract before collecting a larger dataset:
+
+- every sample stores the old tool, new tool, semantic label, and attack/change family,
+- labels are independent of the current detector,
+- predictions are retained in the report so individual failures are inspectable,
+- reports include accuracy, per-class precision/recall/F1, macro F1, and a confusion matrix.
+
+The metric implementation uses only the Python standard library plus existing Pydantic
+models. scikit-learn remains optional because basic evaluation should run in the minimal
+installation.
+
+Run:
+
+```bash
+python experiments/evaluate_rule_baseline.py
+```
+
+A low score is not treated as a repository failure. The current rule detector is a
+baseline. Its mistakes identify exactly which cases should be improved by the next
+semantic embedding, hybrid, temporal, and uncertainty-aware detectors.
+
+Future dataset versions should add provenance, multiple annotators, paraphrase variants,
+unseen attack-family splits, and benign real-world MCP schema evolution.

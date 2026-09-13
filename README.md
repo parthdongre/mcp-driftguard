@@ -106,7 +106,7 @@ mcp-driftguard/
 ├── src/driftguard/       # core Python package
 ├── tests/                # unit/integration tests
 ├── examples/             # benign and malicious schema-pair demos
-├── data/                 # dataset manifests / generated samples
+├── data/                 # versioned labeled benchmark samples
 ├── experiments/          # training and evaluation entry points
 ├── policies/             # OPA/Rego policy examples
 ├── docs/                 # threat model, architecture, labeling guide
@@ -121,9 +121,30 @@ mcp-driftguard/
 4. Can legitimate capability expansion be separated from malicious permission escalation?
 5. What latency / accuracy trade-off is achievable before tool invocation?
 
+## Current implemented foundation
+
+The development branch now contains:
+
+- a typed pairwise drift detector and reproducible rule baseline,
+- explicit trust / approval lifecycle,
+- SQLite-backed version history and trusted snapshots,
+- a real `tools/list` interception boundary that withholds unsafe tools,
+- a rolling cumulative drift budget for low-and-slow changes,
+- a versioned labeled benchmark and evaluation harness.
+
+Run the current baseline benchmark with:
+
+```bash
+python experiments/evaluate_rule_baseline.py
+```
+
+The benchmark labels describe intended security semantics rather than being fitted to the
+rule baseline. Misclassifications are therefore useful research evidence for the next
+semantic and hybrid detectors.
+
 ## Status
 
-Project scaffold in progress.
+Research prototype under active development.
 
 ## License
 
