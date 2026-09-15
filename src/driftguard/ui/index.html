@@ -99,33 +99,63 @@
                 DriftGuard is tracking every schema revision, security verdict, and trusted baseline.
               </p>
             </div>
-            <div class="hero-hash">
-              <span>latest revision</span>
-              <code id="latest-revision">—</code>
+            <div class="hero-visual-shell" aria-label="Revision risk trajectory">
+              <div class="hero-visual-head">
+                <div>
+                  <span class="eyebrow">Risk trajectory</span>
+                  <strong>Revision signal</strong>
+                </div>
+                <div class="hero-hash">
+                  <span>latest revision</span>
+                  <code id="latest-revision">—</code>
+                </div>
+              </div>
+              <div id="revision-trajectory" class="revision-trajectory"></div>
+              <div class="trajectory-foot">
+                <span><i class="legend-dot pass"></i> pass</span>
+                <span><i class="legend-dot review"></i> review</span>
+                <span><i class="legend-dot blocked"></i> blocked</span>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="overview-grid" class="metric-grid" aria-label="Security overview">
-          <article class="metric-card">
+          <article class="metric-card metric-tools-card">
             <div class="metric-top"><span>Tracked tools</span><span class="metric-icon">◫</span></div>
             <strong id="metric-tools">—</strong>
             <small id="metric-tools-note">catalog surface</small>
+            <div class="metric-rule"></div>
           </article>
-          <article class="metric-card">
+          <article class="metric-card metric-drift-card">
             <div class="metric-top"><span>Trusted drift</span><span class="metric-icon amber">△</span></div>
             <strong id="metric-drift">—</strong>
             <small id="metric-drift-note">awaiting data</small>
+            <div class="metric-rule amber"></div>
           </article>
-          <article class="metric-card">
+          <article class="metric-card metric-ahead-card">
             <div class="metric-top"><span>Revisions ahead</span><span class="metric-icon">⑂</span></div>
             <strong id="metric-ahead">—</strong>
             <small id="metric-ahead-note">from checkpoint</small>
+            <div class="metric-rule"></div>
           </article>
-          <article class="metric-card">
-            <div class="metric-top"><span>Max risk</span><span class="metric-icon red">◆</span></div>
-            <strong id="metric-risk">—</strong>
-            <small id="metric-risk-note">latest check</small>
+          <article class="metric-card metric-risk-card">
+            <div class="metric-risk-copy">
+              <div class="metric-top"><span>Max risk</span><span class="metric-icon red">◆</span></div>
+              <strong id="metric-risk">—</strong>
+              <small id="metric-risk-note">latest check</small>
+            </div>
+            <div class="risk-visual" aria-label="Latest maximum risk score">
+              <div id="risk-dial" class="risk-dial low">
+                <div class="risk-dial-inner">
+                  <span id="risk-dial-value">0</span>
+                  <small>/100</small>
+                </div>
+              </div>
+              <div class="risk-scale" aria-hidden="true">
+                <span>0</span><span>45</span><span>70</span><span>100</span>
+              </div>
+            </div>
           </article>
         </section>
 
@@ -167,6 +197,14 @@
                 <h2>Trust posture</h2>
               </div>
               <button class="text-button" data-scroll="revisions-section">Inspect revisions →</button>
+            </div>
+
+            <div class="surface-map-wrap">
+              <div class="surface-map-head">
+                <span class="label-mono">Tool surface map</span>
+                <span class="surface-map-note">trust state, not call graph</span>
+              </div>
+              <div id="surface-map" class="surface-map" aria-label="Current MCP tool trust map"></div>
             </div>
 
             <div class="trust-stack">
