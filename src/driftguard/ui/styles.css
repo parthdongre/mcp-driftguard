@@ -1484,3 +1484,523 @@ code, .mono { font-family: var(--font-mono); }
 
   .brand-name { font-size: 14px; }
 }
+
+
+/* ============================================================
+   Data-bearing visual layer
+   Taste-skill: asymmetric composition, anti-card-grid defaults.
+   Emil: short state-driven motion.
+   Impeccable: one dominant move, quiet supporting surfaces.
+   ============================================================ */
+
+.label-mono {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(390px, .95fr);
+  align-items: end;
+  gap: clamp(34px, 5vw, 78px);
+}
+
+.hero-visual-shell {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(rgba(255,255,255,.012), rgba(255,255,255,.012)),
+    var(--bg-1);
+  animation: visual-rise .42s var(--ease-out) both;
+}
+
+.hero-visual-head {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hero-visual-head strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-1);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+.hero-visual-head .hero-hash {
+  min-width: 0;
+  padding: 0;
+  text-align: right;
+}
+
+.revision-trajectory {
+  min-height: 186px;
+  padding: 8px 10px 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+  background-size: 100% 44px, 68px 100%;
+}
+
+.revision-trajectory svg {
+  display: block;
+  width: 100%;
+  height: 176px;
+  overflow: visible;
+}
+
+.trajectory-grid-line {
+  stroke: rgba(255,255,255,.055);
+  stroke-width: 1;
+}
+
+.trajectory-threshold {
+  stroke: rgba(245,177,74,.28);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+
+.trajectory-threshold.high {
+  stroke: rgba(240,128,128,.25);
+}
+
+.trajectory-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: trace-in .7s .08s var(--ease-out) forwards;
+}
+
+.trajectory-area {
+  fill: rgba(94,234,212,.055);
+}
+
+.trajectory-point {
+  stroke: var(--bg-1);
+  stroke-width: 3;
+  transform-origin: center;
+  animation: point-pop .32s var(--ease-out) both;
+}
+
+.trajectory-point.pass { fill: var(--ok); }
+.trajectory-point.review_required { fill: var(--warn); }
+.trajectory-point.blocked { fill: var(--bad); }
+.trajectory-point.unknown { fill: var(--ink-4); }
+
+.trajectory-label {
+  fill: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.trajectory-risk-label {
+  fill: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.trajectory-checkpoint {
+  fill: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.trajectory-foot {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: .04em;
+}
+
+.trajectory-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend-dot.pass { background: var(--ok); }
+.legend-dot.review { background: var(--warn); }
+.legend-dot.blocked { background: var(--bad); }
+
+/* Asymmetric KPI bento instead of four equal cards. */
+.metric-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.metric-tools-card { grid-column: span 3; }
+.metric-drift-card { grid-column: span 3; }
+.metric-ahead-card { grid-column: span 2; }
+.metric-risk-card {
+  grid-column: span 4;
+  display: grid;
+  grid-template-columns: minmax(0, .78fr) minmax(142px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 144px;
+}
+
+.metric-rule {
+  width: 46px;
+  height: 2px;
+  margin-top: 18px;
+  background: var(--accent);
+  opacity: .65;
+}
+
+.metric-rule.amber {
+  background: var(--warn);
+}
+
+.metric-risk-copy strong {
+  margin-top: 14px;
+}
+
+.risk-visual {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+}
+
+.risk-dial {
+  --risk-angle: 0deg;
+  --risk-color: var(--ok);
+  width: 91px;
+  height: 91px;
+  padding: 7px;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      var(--risk-color) 0 var(--risk-angle),
+      rgba(255,255,255,.065) var(--risk-angle) 360deg
+    );
+  transition: background .4s var(--ease-out), transform .2s var(--ease-out);
+}
+
+.risk-dial:hover {
+  transform: scale(1.025);
+}
+
+.risk-dial.medium { --risk-color: var(--warn); }
+.risk-dial.high { --risk-color: var(--bad); }
+
+.risk-dial-inner {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-1);
+  text-align: center;
+}
+
+.risk-dial-inner span {
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.risk-dial-inner small {
+  margin-top: 2px;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.risk-scale {
+  width: 120px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.surface-map-wrap {
+  margin: 18px 18px 2px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--bg-2);
+}
+
+.surface-map-head {
+  min-height: 37px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.surface-map-note {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.surface-map {
+  min-height: 190px;
+  position: relative;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(94,234,212,.04), transparent 38%),
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+}
+
+.surface-map svg {
+  display: block;
+  width: 100%;
+  height: 190px;
+}
+
+.surface-edge {
+  stroke: rgba(255,255,255,.09);
+  stroke-width: 1;
+}
+
+.surface-edge.modified {
+  stroke: rgba(245,177,74,.28);
+}
+
+.surface-edge.untrusted {
+  stroke: rgba(240,128,128,.24);
+  stroke-dasharray: 3 4;
+}
+
+.surface-center {
+  fill: var(--bg-1);
+  stroke: var(--accent-line);
+  stroke-width: 1.25;
+}
+
+.surface-center-ring {
+  fill: none;
+  stroke: rgba(94,234,212,.09);
+  stroke-width: 1;
+}
+
+.surface-node {
+  stroke: var(--bg-2);
+  stroke-width: 3;
+  animation: point-pop .32s var(--ease-out) both;
+}
+
+.surface-node.trusted { fill: var(--ok); }
+.surface-node.modified { fill: var(--warn); }
+.surface-node.untrusted { fill: var(--bad); }
+
+.surface-node-label {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 600;
+}
+
+.surface-center-label {
+  fill: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: .08em;
+}
+
+.surface-map-legend {
+  display: flex;
+  gap: 10px;
+  padding: 8px 11px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 7px;
+}
+
+.surface-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Depth without generic shadows: selective accent edges. */
+.checkpoint-panel {
+  position: relative;
+}
+
+.checkpoint-panel::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-line), transparent);
+  opacity: .45;
+}
+
+.metric-card,
+.panel {
+  animation: visual-rise .38s var(--ease-out) both;
+}
+
+.metric-card:nth-child(2) { animation-delay: .035s; }
+.metric-card:nth-child(3) { animation-delay: .07s; }
+.metric-card:nth-child(4) { animation-delay: .105s; }
+
+.revision-row {
+  transition:
+    background .15s ease,
+    box-shadow .15s ease,
+    transform .12s ease;
+}
+
+.revision-row:active {
+  transform: translateY(1px);
+}
+
+.activity-node {
+  transition:
+    transform .18s var(--ease-out),
+    border-color .18s ease,
+    background .18s ease;
+}
+
+.activity-item:hover .activity-node {
+  transform: scale(1.08);
+}
+
+@keyframes trace-in {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes point-pop {
+  from { opacity: 0; transform: scale(.72); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes visual-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1120px) {
+  .hero-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-visual-shell {
+    max-width: 720px;
+  }
+
+  .metric-tools-card,
+  .metric-drift-card {
+    grid-column: span 4;
+  }
+
+  .metric-ahead-card {
+    grid-column: span 4;
+  }
+
+  .metric-risk-card {
+    grid-column: span 12;
+    grid-template-columns: 1fr 180px;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero-visual-shell {
+    width: 100%;
+  }
+
+  .revision-trajectory {
+    min-height: 156px;
+  }
+
+  .revision-trajectory svg {
+    height: 150px;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-tools-card,
+  .metric-drift-card,
+  .metric-ahead-card {
+    grid-column: span 1;
+  }
+
+  .metric-risk-card {
+    grid-column: 1 / -1;
+  }
+
+  .surface-map-wrap {
+    margin-inline: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-tools-card,
+  .metric-drift-card,
+  .metric-ahead-card,
+  .metric-risk-card {
+    grid-column: 1;
+  }
+
+  .metric-risk-card {
+    grid-template-columns: minmax(0,1fr) 132px;
+  }
+
+  .risk-dial {
+    width: 78px;
+    height: 78px;
+  }
+
+  .risk-scale {
+    width: 96px;
+  }
+
+  .trajectory-foot {
+    flex-wrap: wrap;
+  }
+}
