@@ -197,6 +197,149 @@
     return values.length?Math.max(...values):0;
   }
 
+  function renderRiskDial(risk) {
+    const dial=$("risk-dial");
+    const value=$("risk-dial-value");
+    if (!dial || !value) return;
+    const bounded=Math.max(0,Math.min(100,Number(risk)||0));
+    dial.style.setProperty("--risk-angle",(bounded*3.6)+"deg");
+    dial.classList.remove("low","medium","high");
+    dial.classList.add(bounded>=70?"high":bounded>=45?"medium":"low");
+    value.textContent=bounded.toFixed(0);
+  }
+
+  function renderTrajectory(o) {
+    const host=$("revision-trajectory");
+    if (!host) return;
+
+    const chronological=[...state.revisions].reverse().slice(-6);
+    if (!chronological.length) {
+      host.innerHTML='<div class="inspector-empty"><p>No revision risk history yet.</p></div>';
+      return;
+    }
+
+    const width=430;
+    const height=168;
+    const left=28;
+    const right=18;
+    const top=18;
+    const bottom=32;
+    const innerW=width-left-right;
+    const innerH=height-top-bottom;
+    const xAt=(index)=>left+(chronological.length===1?innerW/2:(innerW*index/(chronological.length-1)));
+    const yAt=(risk)=>top+innerH-(Math.max(0,Math.min(100,risk))*innerH/100);
+
+    const points=chronological.map((revision,index)=>{
+      const check=checkForRevision(revision.revision_id);
+      const risk=maxRisk(check);
+      return {
+        revision,
+        check,
+        risk,
+        x:xAt(index),
+        y:yAt(risk),
+      };
+    });
+
+    const linePoints=points.map(p=>p.x+","+p.y).join(" ");
+    const areaPoints=[
+      left+","+(top+innerH),
+      ...points.map(p=>p.x+","+p.y),
+      (left+innerW)+","+(top+innerH)
+    ].join(" ");
+    const checkpointId=o.latest_checkpoint?.revision_id;
+
+    const grid=[0,25,50,75,100].map(value=>{
+      const y=yAt(value);
+      return '<line class="trajectory-grid-line" x1="'+left+'" y1="'+y+'" x2="'+(left+innerW)+'" y2="'+y+'"></line>';
+    }).join("");
+
+    const thresholds=
+      '<line class="trajectory-threshold" x1="'+left+'" y1="'+yAt(45)+'" x2="'+(left+innerW)+'" y2="'+yAt(45)+'"></line>'+
+      '<line class="trajectory-threshold high" x1="'+left+'" y1="'+yAt(70)+'" x2="'+(left+innerW)+'" y2="'+yAt(70)+'"></line>';
+
+    const marks=points.map((p,index)=>{
+      const stateName=p.check?.state||"unknown";
+      const checkpoint=p.revision.revision_id===checkpointId
+        ? '<text class="trajectory-checkpoint" x="'+p.x+'" y="'+(height-4)+'" text-anchor="middle">checkpoint</text>'
+        : '';
+      return checkpoint+
+        '<circle class="trajectory-point '+escapeHtml(stateName)+'" cx="'+p.x+'" cy="'+p.y+'" r="5" style="animation-delay:'+(index*.045)+'s"></circle>'+
+        '<text class="trajectory-risk-label" x="'+p.x+'" y="'+(p.y-10)+'" text-anchor="middle">'+p.risk.toFixed(0)+'</text>'+
+        '<text class="trajectory-label" x="'+p.x+'" y="'+(height-18)+'" text-anchor="middle">'+short(p.revision.revision_id,5)+'</text>';
+    }).join("");
+
+    host.innerHTML=
+      '<svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Risk score across recent MCP revisions">'+
+        grid+thresholds+
+        '<polygon class="trajectory-area" points="'+areaPoints+'"></polygon>'+
+        '<polyline class="trajectory-line" points="'+linePoints+'"></polyline>'+
+        marks+
+      '</svg>';
+  }
+
+  function renderSurfaceMap(o) {
+    const host=$("surface-map");
+    if (!host) return;
+
+    const tools=o.latest_revision?.tools||[];
+    if (!tools.length) {
+      host.innerHTML='<div class="inspector-empty"><p>No tools in the current surface.</p></div>';
+      return;
+    }
+
+    const trust=o.trusted_status||{};
+    const modified=new Set((trust.modified_from_trusted||[]).map(item=>item.tool_name));
+    const untrusted=new Set(trust.untrusted_tools||[]);
+    const width=360;
+    const height=190;
+    const cx=180;
+    const cy=94;
+    const rx=126;
+    const ry=66;
+    const count=tools.length;
+
+    const nodes=tools.map((tool,index)=>{
+      const angle=(-Math.PI/2)+(Math.PI*2*index/count);
+      const x=cx+Math.cos(angle)*rx;
+      const y=cy+Math.sin(angle)*ry;
+      const status=untrusted.has(tool.name)?"untrusted":modified.has(tool.name)?"modified":"trusted";
+      return {tool,x,y,status,index};
+    });
+
+    const edges=nodes.map(node=>
+      '<line class="surface-edge '+node.status+'" x1="'+cx+'" y1="'+cy+'" x2="'+node.x+'" y2="'+node.y+'"></line>'
+    ).join("");
+
+    const marks=nodes.map(node=>{
+      const anchor=node.x<cx-12?"end":node.x>cx+12?"start":"middle";
+      const offset=node.x<cx-12?-9:node.x>cx+12?9:0;
+      const labelY=node.y<cy-12?node.y-9:node.y>cy+12?node.y+13:node.y+3;
+      const label=toolLabel(node.tool.name,15);
+      return '<circle class="surface-node '+node.status+'" cx="'+node.x+'" cy="'+node.y+'" r="5.5" style="animation-delay:'+(node.index*.035)+'s"></circle>'+
+        '<text class="surface-node-label" x="'+(node.x+offset)+'" y="'+labelY+'" text-anchor="'+anchor+'">'+escapeHtml(label)+'</text>';
+    }).join("");
+
+    host.innerHTML=
+      '<svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Current MCP tools arranged by trust state">'+
+        '<circle class="surface-center-ring" cx="'+cx+'" cy="'+cy+'" r="29"></circle>'+
+        edges+
+        '<circle class="surface-center" cx="'+cx+'" cy="'+cy+'" r="20"></circle>'+
+        '<text class="surface-center-label" x="'+cx+'" y="'+(cy+3)+'" text-anchor="middle">MCP</text>'+
+        marks+
+      '</svg>'+
+      '<div class="surface-map-legend">'+
+        '<span><i class="legend-dot pass"></i> trusted</span>'+
+        '<span><i class="legend-dot review"></i> modified</span>'+
+        '<span><i class="legend-dot blocked"></i> new / untrusted</span>'+
+      '</div>';
+  }
+
+  function toolLabel(value, max) {
+    const text=String(value||"");
+    return text.length>max?text.slice(0,max-1)+"…":text;
+  }
+
   async function fetchJson(path) {
     const response=await fetch(path,{headers:{"Accept":"application/json"}});
     if (!response.ok) {
@@ -295,6 +438,9 @@
     $("metric-risk").textContent=risk?risk.toFixed(0):"0";
     $("metric-risk-note").textContent=risk>=70?"high-risk evidence":risk>=45?"review threshold":"within baseline";
 
+    renderRiskDial(risk);
+    renderTrajectory(o);
+    renderSurfaceMap(o);
     renderCheckpoint(o);
     renderTrust(o);
   }
@@ -532,6 +678,9 @@
     $("metric-drift").textContent="0";
     $("metric-ahead").textContent="—";
     $("metric-risk").textContent="0";
+    renderRiskDial(0);
+    if ($("revision-trajectory")) $("revision-trajectory").innerHTML='<div class="inspector-empty"><p>No risk history yet.</p></div>';
+    if ($("surface-map")) $("surface-map").innerHTML='<div class="inspector-empty"><p>No tool surface yet.</p></div>';
     $("revision-list").innerHTML='<div class="inspector-empty"><p>No revisions yet.</p></div>';
     $("activity-timeline").innerHTML='<div class="inspector-empty"><p>No activity yet.</p></div>';
   }
