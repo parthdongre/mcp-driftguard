@@ -80,9 +80,19 @@ jobs:
             echo "No Chromium-compatible browser found on runner"
             exit 1
           fi
-          "$BROWSER" --headless=new --no-sandbox --disable-gpu --hide-scrollbars             --window-size=1600,1100             --virtual-time-budget=2500             --screenshot=ui-artifacts/driftguard-overview.png             "http://127.0.0.1:8765/?demo=1"
-          "$BROWSER" --headless=new --no-sandbox --disable-gpu --hide-scrollbars             --window-size=1600,1100             --virtual-time-budget=3000             --screenshot=ui-artifacts/driftguard-revision-inspector.png             "http://127.0.0.1:8765/?demo=1&inspect=latest"
-          "$BROWSER" --headless=new --no-sandbox --disable-gpu --hide-scrollbars             --window-size=430,932             --virtual-time-budget=2500             --screenshot=ui-artifacts/driftguard-mobile.png             "http://127.0.0.1:8765/?demo=1"
+
+          capture() {
+            local output="$1"
+            local size="$2"
+            local budget="$3"
+            local url="$4"
+            timeout 25s "$BROWSER" --headless=new --no-sandbox --disable-gpu --hide-scrollbars               --window-size="$size"               --virtual-time-budget="$budget"               --screenshot="$output"               "$url" || true
+            test -s "$output"
+          }
+
+          capture ui-artifacts/driftguard-overview.png 1600,1100 2500 "http://127.0.0.1:8765/?demo=1"
+          capture ui-artifacts/driftguard-revision-inspector.png 1600,1100 3000 "http://127.0.0.1:8765/?demo=1&inspect=latest"
+          capture ui-artifacts/driftguard-mobile.png 430,932 2500 "http://127.0.0.1:8765/?demo=1"
           file ui-artifacts/*.png
       - name: Upload dashboard screenshots
         uses: actions/upload-artifact@v4
