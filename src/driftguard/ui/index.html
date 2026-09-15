@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#090d10">
+  <title>DriftGuard — MCP Security Control Plane</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <div id="app-shell" class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2 4.5 5.3v5.2c0 5.1 3.2 9.8 7.5 11.5 4.3-1.7 7.5-6.4 7.5-11.5V5.3L12 2Zm0 3.1 4.6 2v3.4c0 3.4-1.8 6.8-4.6 8.3-2.8-1.5-4.6-4.9-4.6-8.3V7.1l4.6-2Z"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">DriftGuard</div>
+          <div class="brand-kicker">MCP SECURITY</div>
+        </div>
+      </div>
+
+      <nav class="nav-stack">
+        <a class="nav-item active" href="#overview-section" data-nav="overview">
+          <span class="nav-icon">⌂</span><span>Overview</span>
+        </a>
+        <a class="nav-item" href="#revisions-section" data-nav="revisions">
+          <span class="nav-icon">⑂</span><span>Revisions</span>
+        </a>
+        <a class="nav-item" href="#activity-section" data-nav="activity">
+          <span class="nav-icon">⌁</span><span>Activity</span>
+        </a>
+        <a class="nav-item" href="#checkpoint-card" data-nav="checkpoints">
+          <span class="nav-icon">◇</span><span>Checkpoints</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-card">
+        <div class="sidebar-card-head">
+          <span class="pulse-dot"></span>
+          <span>Guard active</span>
+        </div>
+        <p>Version-aware policy enforcement is monitoring this MCP surface.</p>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>research prototype</span>
+        <span class="mono">v0.1</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="mobile-menu" class="icon-button mobile-only" aria-label="Open navigation">☰</button>
+
+        <div class="server-control">
+          <span class="eyebrow">MCP server</span>
+          <div class="server-input-wrap">
+            <span class="server-led"></span>
+            <input id="server-input" value="filesystem-prod" aria-label="Server identifier" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div id="live-state" class="live-pill" aria-live="polite">
+            <span class="live-dot"></span>
+            <span id="live-state-text">Connecting</span>
+          </div>
+          <button id="refresh-button" class="button ghost">Refresh</button>
+          <button id="command-button" class="button command">
+            <span>⌘</span><span>K</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="overview-section" class="hero-section">
+          <div class="breadcrumb">
+            <span>servers</span><span>/</span><strong id="breadcrumb-server">filesystem-prod</strong>
+          </div>
+
+          <div class="hero-row">
+            <div>
+              <div class="hero-status-line">
+                <span id="hero-badge" class="status-badge review">
+                  <span class="status-dot"></span>
+                  REVIEW REQUIRED
+                </span>
+                <span id="catalog-badge" class="mini-badge clean">CATALOG CLEAN</span>
+              </div>
+              <h1>Tool surface integrity</h1>
+              <p id="hero-copy" class="hero-copy">
+                DriftGuard is tracking every schema revision, security verdict, and trusted baseline.
+              </p>
+            </div>
+            <div class="hero-hash">
+              <span>latest revision</span>
+              <code id="latest-revision">—</code>
+            </div>
+          </div>
+        </section>
+
+        <section id="overview-grid" class="metric-grid" aria-label="Security overview">
+          <article class="metric-card">
+            <div class="metric-top"><span>Tracked tools</span><span class="metric-icon">◫</span></div>
+            <strong id="metric-tools">—</strong>
+            <small id="metric-tools-note">catalog surface</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>Trusted drift</span><span class="metric-icon amber">△</span></div>
+            <strong id="metric-drift">—</strong>
+            <small id="metric-drift-note">awaiting data</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>Revisions ahead</span><span class="metric-icon">⑂</span></div>
+            <strong id="metric-ahead">—</strong>
+            <small id="metric-ahead-note">from checkpoint</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>Max risk</span><span class="metric-icon red">◆</span></div>
+            <strong id="metric-risk">—</strong>
+            <small id="metric-risk-note">latest check</small>
+          </article>
+        </section>
+
+        <section class="split-grid">
+          <article id="checkpoint-card" class="panel checkpoint-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Known-good baseline</span>
+                <h2>Checkpoint divergence</h2>
+              </div>
+              <span id="checkpoint-state" class="mini-badge">NO CHECKPOINT</span>
+            </div>
+
+            <div class="checkpoint-main">
+              <div class="checkpoint-orbit" aria-hidden="true">
+                <div class="orbit-ring"></div>
+                <div class="orbit-core">✓</div>
+              </div>
+              <div class="checkpoint-copy">
+                <div class="checkpoint-name" id="checkpoint-name">No trusted checkpoint</div>
+                <div class="checkpoint-meta mono" id="checkpoint-meta">Create a PASS checkpoint to establish long-range trust.</div>
+              </div>
+            </div>
+
+            <div class="divergence-grid">
+              <div><span>Added</span><strong id="delta-added">0</strong></div>
+              <div><span>Modified</span><strong id="delta-modified">0</strong></div>
+              <div><span>Removed</span><strong id="delta-removed">0</strong></div>
+              <div><span>Tree</span><strong id="delta-tree">—</strong></div>
+            </div>
+
+            <div id="checkpoint-changes" class="change-chips" aria-label="Checkpoint changes"></div>
+          </article>
+
+          <article class="panel tool-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Current surface</span>
+                <h2>Trust posture</h2>
+              </div>
+              <button class="text-button" data-scroll="revisions-section">Inspect revisions →</button>
+            </div>
+
+            <div class="trust-stack">
+              <div class="trust-row">
+                <div class="trust-label"><span class="trust-dot pass"></span><span>Trusted & unchanged</span></div>
+                <strong id="trusted-count">0</strong>
+              </div>
+              <div class="trust-bar"><span id="trusted-bar" class="pass"></span></div>
+
+              <div class="trust-row">
+                <div class="trust-label"><span class="trust-dot review"></span><span>Modified from trusted</span></div>
+                <strong id="modified-count">0</strong>
+              </div>
+              <div class="trust-bar"><span id="modified-bar" class="review"></span></div>
+
+              <div class="trust-row">
+                <div class="trust-label"><span class="trust-dot unknown"></span><span>Untrusted / new</span></div>
+                <strong id="untrusted-count">0</strong>
+              </div>
+              <div class="trust-bar"><span id="untrusted-bar" class="unknown"></span></div>
+            </div>
+
+            <div id="tool-watchlist" class="watchlist"></div>
+          </article>
+        </section>
+
+        <section id="revisions-section" class="panel revisions-panel">
+          <div class="panel-header revisions-head">
+            <div>
+              <span class="eyebrow">Version ledger</span>
+              <h2>Recent revisions</h2>
+            </div>
+            <div class="revision-tools">
+              <label class="search-box">
+                <span>⌕</span>
+                <input id="revision-search" placeholder="Filter revisions" aria-label="Filter revisions">
+              </label>
+              <span id="revision-count" class="mini-badge">0 revisions</span>
+            </div>
+          </div>
+
+          <div class="revision-table-head" aria-hidden="true">
+            <span>Revision</span><span>Origin</span><span>Security</span><span>Changes</span><span>Observed</span>
+          </div>
+          <div id="revision-list" class="revision-list" aria-label="Revision history"></div>
+        </section>
+
+        <section id="activity-section" class="activity-layout">
+          <article class="panel activity-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Audit stream</span>
+                <h2>Live activity</h2>
+              </div>
+              <span class="live-mini"><span class="live-dot"></span> SSE</span>
+            </div>
+            <div id="activity-timeline" class="activity-timeline" aria-live="polite"></div>
+          </article>
+
+          <article class="panel insight-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Research signal</span>
+                <h2>Why this matters</h2>
+              </div>
+            </div>
+            <div class="insight-score">
+              <span>Temporal trust</span>
+              <strong>VERSION-AWARE</strong>
+            </div>
+            <p>
+              Static scanners ask whether a tool is suspicious now. DriftGuard preserves how trust evolves,
+              when capabilities appeared, and which revision first crossed a security boundary.
+            </p>
+            <div class="insight-tags">
+              <span>semantic drift</span><span>cumulative budget</span><span>graph topology</span><span>blame</span>
+            </div>
+          </article>
+        </section>
+      </div>
+    </main>
+
+    <aside id="revision-inspector" class="inspector" aria-label="Revision inspector" aria-live="polite">
+      <div class="inspector-header">
+        <div>
+          <span class="eyebrow">Revision inspector</span>
+          <h2 id="inspector-title">Select a revision</h2>
+        </div>
+        <button id="inspector-close" class="icon-button" aria-label="Close revision inspector">×</button>
+      </div>
+
+      <div id="inspector-empty" class="inspector-empty">
+        <div class="empty-icon">⑂</div>
+        <h3>No revision selected</h3>
+        <p>Choose a row from revision history to inspect its exact field changes and persisted security verdict.</p>
+      </div>
+
+      <div id="inspector-content" class="inspector-content hidden">
+        <div class="inspector-status-row">
+          <span id="inspector-state" class="status-badge pass">PASS</span>
+          <span id="inspector-origin" class="mini-badge">—</span>
+        </div>
+
+        <dl class="meta-list">
+          <div><dt>Revision</dt><dd><code id="inspector-revision">—</code></dd></div>
+          <div><dt>Tree</dt><dd><code id="inspector-tree">—</code></dd></div>
+          <div><dt>Observed</dt><dd id="inspector-time">—</dd></div>
+        </dl>
+
+        <div class="inspector-section">
+          <div class="section-title">Changes from parent</div>
+          <div id="inspector-diff" class="diff-list"></div>
+        </div>
+
+        <div class="inspector-section">
+          <div class="section-title">Security verdict</div>
+          <div id="inspector-security" class="security-card"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <script src="/ui/app.js" defer></script>
+</body>
+</html>

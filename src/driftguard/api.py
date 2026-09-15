@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from importlib.resources import files
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .adapters import ToolsListInterception, intercept_tools_list
@@ -49,6 +50,26 @@ def create_app(service: DriftGuardService | None = None) -> FastAPI:
         version="0.1.0",
         description="Version-aware MCP tool drift detection and review control plane.",
     )
+
+    ui_root = files("driftguard.ui")
+
+    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    def dashboard() -> HTMLResponse:
+        return HTMLResponse(ui_root.joinpath("index.html").read_text(encoding="utf-8"))
+
+    @app.get("/ui/styles.css", include_in_schema=False)
+    def dashboard_styles() -> Response:
+        return Response(
+            ui_root.joinpath("styles.css").read_text(encoding="utf-8"),
+            media_type="text/css",
+        )
+
+    @app.get("/ui/app.js", include_in_schema=False)
+    def dashboard_script() -> Response:
+        return Response(
+            ui_root.joinpath("app.js").read_text(encoding="utf-8"),
+            media_type="application/javascript",
+        )
 
     @app.get("/health")
     def health() -> dict[str, str]:
