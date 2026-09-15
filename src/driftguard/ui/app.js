@@ -221,6 +221,7 @@
       $("server-input").value=state.server;
       renderAll();
       setLive("demo");
+      maybeOpenRequestedRevision();
       return;
     }
 
@@ -239,6 +240,7 @@
       state.views.clear();
       renderAll();
       connectEvents();
+      maybeOpenRequestedRevision();
     } catch (error) {
       setLive("disconnected");
       showToast(error.status===404?"No revisions exist for this server yet.":"Could not load DriftGuard data.","error");
@@ -250,6 +252,13 @@
     renderOverview();
     renderRevisions();
     renderTimeline();
+  }
+
+  function maybeOpenRequestedRevision() {
+    const requested = new URLSearchParams(location.search).get("inspect");
+    if (!requested || !state.revisions.length) return;
+    const revisionId = requested === "latest" ? state.revisions[0].revision_id : requested;
+    window.setTimeout(() => openRevision(revisionId), 80);
   }
 
   function renderOverview() {
