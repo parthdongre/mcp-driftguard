@@ -26,8 +26,7 @@
   --warn-soft: rgba(245, 177, 74, 0.12);
   --bad: #f08080;
   --bad-soft: rgba(240, 128, 128, 0.12);
-  --blue: #84aee8;
-  --purple: #b5a1e6;
+  --neutral-accent: #c9c1b4;
 
   --radius: 18px;
   --radius-sm: 8px;
@@ -961,12 +960,21 @@ code, .mono { font-family: var(--font-mono); }
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 8px;
+  box-shadow: none;
 }
 
 .activity-item.security_check .activity-node { color: var(--ok); border-color: rgba(132,216,184,.24); }
 .activity-item.catalog_signal .activity-node { color: var(--warn); border-color: rgba(245,177,74,.24); }
-.activity-item.review .activity-node { color: var(--blue); border-color: rgba(132,174,232,.24); }
-.activity-item.checkpoint .activity-node { color: var(--purple); border-color: rgba(181,161,230,.24); }
+.activity-item.review .activity-node {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.activity-item.checkpoint .activity-node {
+  color: var(--ink-2);
+  border-color: var(--line-strong);
+  background: var(--bg-2);
+}
 
 .activity-summary {
   color: var(--ink-1);
