@@ -189,6 +189,32 @@ GET  /v1/servers/{server}/tools/{tool}/reviews/integrity
 
 Review operations are hash-addressed: the caller must identify the exact observed snapshot SHA-256.
 
+## Operator UI visual system
+
+The FastAPI-served dashboard now uses the same editorial palette family as FrameVitals:
+
+- near-black surfaces: `#0a0a0a`, `#111111`, `#161616`,
+- warm cream ink: `#f5efe6` / `#c9c1b4`,
+- one primary product accent: teal `#5eead4`,
+- green/amber/red reserved strictly for pass/review/block security meaning.
+
+The visual direction also incorporates the strongest principles from `taste-skill`,
+Emil Kowalski's design-engineering skills, and Impeccable: asymmetric composition, one
+dominant visual per region, purposeful short motion, strong typographic roles, and
+information-bearing visuals instead of decorative dashboard chrome.
+
+Three first-class visuals are derived from real DriftGuard state:
+
+1. **Revision risk trajectory** — persisted max risk across recent revision checks, including
+   trusted checkpoint position and review/block thresholds.
+2. **Tool surface trust map** — current tool catalog arranged around the MCP surface and
+   classified as trusted, modified, or new/untrusted. It explicitly does not claim to be a
+   call graph.
+3. **Risk dial** — latest immutable security-check max risk on a 0-100 scale.
+
+These remain framework-free HTML/CSS/JavaScript packaged with the Python app and consume only
+the public API/read models.
+
 ## UI contract
 
 The eventual Codex/Claude-Code-quality interface should consume runtime/API objects rather than import detector internals directly.
