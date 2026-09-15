@@ -2004,3 +2004,83 @@ code, .mono { font-family: var(--font-mono); }
     flex-wrap: wrap;
   }
 }
+
+
+/* Platform-stable metric marks; avoids font-dependent symbol glyphs. */
+.metric-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.metric-icon-tools::before,
+.metric-icon-tools::after {
+  content: "";
+  position: absolute;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+}
+
+.metric-icon-tools::before {
+  width: 7px;
+  height: 7px;
+  left: 1px;
+  top: 1px;
+}
+
+.metric-icon-tools::after {
+  width: 7px;
+  height: 7px;
+  right: 0;
+  bottom: 0;
+  opacity: .45;
+}
+
+.metric-icon-drift::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 2px;
+  width: 9px;
+  height: 9px;
+  border-left: 1px solid var(--warn);
+  border-bottom: 1px solid var(--warn);
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
+.metric-icon-revisions::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 2px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.metric-icon-revisions::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 8px 0 -3px var(--bg-1), 0 8px 0 -2px var(--accent);
+}
+
+.metric-icon-risk::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--bad);
+  transform: rotate(45deg);
+}
+
+.metric-icon.amber { color: var(--warn); }
+.metric-icon.red { color: var(--bad); }
