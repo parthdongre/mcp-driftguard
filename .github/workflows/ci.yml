@@ -47,4 +47,4 @@ jobs:
       - name: Install API extras
         run: pip install -e ".[dev,api]"
       - name: Test API control plane
-        run: pytest -q tests/test_api_smoke.py tests/test_sse.py
+        run: pytest -q tests/test_api_smoke.py tests/test_sse.py tests/test_ui.py
