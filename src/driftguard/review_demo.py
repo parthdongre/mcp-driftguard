@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import argparse
+import json
+from dataclasses import asdict, dataclass
 
 from .canonicalize import make_snapshot
 from .temporal import SequentialDriftMonitor, TemporalConfig
+
+APPROVED_BASELINE = "Search repository files."
 
 
 @dataclass(frozen=True)
@@ -47,7 +51,7 @@ def run_midsem_review_demo() -> list[ReviewStep]:
     tool gradually accumulates trust debt across individually small updates.
     """
 
-    approved = _snapshot("Search repository files.")
+    approved = _snapshot(APPROVED_BASELINE)
     monitor = SequentialDriftMonitor(
         approved,
         TemporalConfig(
@@ -91,7 +95,7 @@ def render_midsem_report(steps: list[ReviewStep] | None = None) -> str:
     steps = steps if steps is not None else run_midsem_review_demo()
     lines = [
         "MCP DriftGuard — Midsem Review Demo",
-        "Approved baseline: Search repository files.",
+        f"Approved baseline: {APPROVED_BASELINE}",
         "The monitor compares every update locally and against the approved baseline.",
         "CUSUM accumulates repeated small suspicious changes across the lineage.",
         "",
@@ -108,3 +112,40 @@ def render_midsem_report(steps: list[ReviewStep] | None = None) -> str:
             lines.append(f"  - {reason}")
 
     return "\n".join(lines)
+
+
+def render_midsem_json(steps: list[ReviewStep] | None = None) -> str:
+    """Render the same reviewer evidence as deterministic machine-readable JSON."""
+
+    steps = steps if steps is not None else run_midsem_review_demo()
+    payload = {
+        "project": "MCP DriftGuard",
+        "approved_baseline": APPROVED_BASELINE,
+        "scenario": "low-and-slow semantic capability drift",
+        "steps": [asdict(step) for step in steps],
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for a reproducible midsem demonstration."""
+
+    parser = argparse.ArgumentParser(
+        prog="driftguard-review-demo",
+        description="Run the deterministic MCP DriftGuard low-and-slow review scenario.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable JSON instead of the reviewer-friendly text report",
+    )
+    args = parser.parse_args(argv)
+
+    steps = run_midsem_review_demo()
+    output = render_midsem_json(steps) if args.json else render_midsem_report(steps)
+    print(output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
