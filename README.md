@@ -21,7 +21,7 @@ The current paper direction is:
 
 > **DriftGuard: Capability-Aware Temporal Detection of Low-and-Slow Rug Pulls in Model Context Protocol Tool Definitions**
 
-See [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md), [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md), and [`docs/LABELING_GUIDE.md`](docs/LABELING_GUIDE.md).
+For the research framing and review material, see [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md), [`docs/PAPER_PROTOCOL.md`](docs/PAPER_PROTOCOL.md), [`docs/PAPER_READINESS.md`](docs/PAPER_READINESS.md), and [`docs/MIDSEM_REVIEW.md`](docs/MIDSEM_REVIEW.md).
 
 ## Core task
 
@@ -55,26 +55,55 @@ Implemented:
 - typed structural old/new deltas
 - five field-aware views: purpose, input contract, output contract, capability/safety metadata, and full schema
 - interpretable effective-capability profiles across operation/resource/effect/scope/destination/sensitivity dimensions
-- capability-delta extraction and a transparent capability-escalation feature
+- capability-delta extraction and transparent capability-escalation features
 - stable model-ready pair features
 - embedding-provider protocol, cache, cosine-distance utilities, and lazy SentenceTransformer adapter
 - optional field-aware semantic drift features
-- first learned C0-C3 logistic-regression pair classifier
+- learned C0-C3 logistic-regression pair classifier
+- XGBoost attack-family holdout baseline
 - repository-disjoint train/validation/test splitting
 - formal C0/C1/C2/C3 labeling framework and evidence tags
 - controlled benign/malicious mutation primitives
 - deterministic low-and-slow capability-creep trajectory generator
-- Git-backed JSON tool-manifest history miner that does not execute repository code
+- approved-baseline lineage monitor and deterministic CUSUM-style temporal baseline
+- consent-reset and stateful policy simulation
+- Git-backed JSON tool-manifest history mining without executing repository code
+- static Python MCP tool extraction
+- static TypeScript/Zod MCP tool extraction
 - adjacent historical version-pair extraction
 - dependency-free hash, lexical, and rule-risk baseline evaluation harness
-- C2+C3 consent-significant and C3-only metrics
-- reproducible experiment JSON output
-- approved-baseline lineage monitor and deterministic CUSUM-style temporal baseline
-- tests for structural, capability, embedding, labeling, history, leakage, evaluation, and temporal behavior
+- semantic baselines, attack-family holdouts, repeated-seed and temporal benchmark infrastructure
+- annotation agreement and adjudication tooling
+- reviewer-facing deterministic integration demo with text and JSON output
+- CI linting, full tests, and installed-CLI smoke testing
 
 The current capability extractor, mutation fixtures, and temporal risk scalar are intentionally transparent research baselines. They are **not** presented as learned ground truth or proof of runtime behavior.
 
-## Planned pipeline
+## Reviewer / midsem demo
+
+Install the project in editable mode:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run the human-readable low-and-slow demonstration:
+
+```bash
+driftguard-review-demo
+```
+
+Export exactly the same evidence as JSON:
+
+```bash
+driftguard-review-demo --json
+```
+
+The scenario begins with an approved local repository-search tool and gradually adds metadata inspection, sharing, external sharing, and upload language. The output shows `step_risk`, `baseline_risk`, cumulative `CUSUM`, explanatory reasons, and the final policy action. CI invokes the installed console command directly so the demo path is continuously checked, not just the underlying Python function.
+
+For the presentation explanation, architecture, limitations, and viva questions, read [`docs/MIDSEM_REVIEW.md`](docs/MIDSEM_REVIEW.md). For engineering decisions and file-level orientation, read [`STEPS.md`](STEPS.md).
+
+## Pipeline
 
 ```text
 MCP tools/list or tools/list_changed
@@ -108,7 +137,7 @@ semantic views      structural deltas
 
 ## Baselines
 
-The paper will compare DriftGuard against progressively stronger baselines:
+The paper compares or plans to compare DriftGuard against progressively stronger baselines:
 
 1. hash-only change detection
 2. textual diff / edit-distance threshold
@@ -121,6 +150,8 @@ The paper will compare DriftGuard against progressively stronger baselines:
 9. pairwise logistic regression
 10. pairwise XGBoost / stronger learned model
 11. proposed capability-aware pair classifier + sequential drift detector
+
+The repository already contains several of these baselines; the remaining ones are tracked explicitly in `docs/PAPER_READINESS.md`.
 
 ## Main research questions
 
@@ -135,30 +166,34 @@ The paper will compare DriftGuard against progressively stronger baselines:
 
 ```text
 mcp-driftguard/
-├── src/driftguard/       # research core package
+├── src/driftguard/       # research core package and review demo
 ├── tests/                # unit/integration tests
-├── examples/             # benign and malicious schema evolution demos
-├── data/                 # private dataset manifests / generated samples
+├── examples/             # benign and malicious schema-evolution demos
+├── data/                 # corpus manifests / generated samples
 ├── experiments/          # training and evaluation entry points
-├── policies/             # policy / re-consent prototypes
-├── docs/                 # threat model, research positioning, labeling guide
+├── docs/                 # threat model, research protocol, review material
+├── STEPS.md              # engineering decision and codebase overview
 └── pyproject.toml
 ```
 
 ## Immediate next milestones
 
-1. curate real MCP repositories and run the history miner
-2. add Python and TypeScript source extractors for tool registrations that do not use JSON manifests
-3. benchmark a real local sentence-transformer on the five schema views
-4. build the first manually reviewed real-benign dataset subset
-5. add full-schema and field-aware cosine baselines to the experiment runner
-6. train/evaluate logistic regression and XGBoost on the same frozen repository-disjoint split
-7. expand low-and-slow trajectories and compare drift budget, CUSUM, and Bayesian change-point detection
-8. add calibrated re-consent thresholds and false re-consent metrics
+1. expand the real MCP history corpus to at least 30 repositories, then target 50+
+2. independently label a substantial real-history transition set and report agreement / Cohen's kappa
+3. reserve at least one independent external poisoning source for frozen transfer evaluation
+4. add future-version temporal holdout and cross-dataset transfer experiments
+5. complete the required ablation matrix on identical frozen splits
+6. add calibration, Brier/ECE, OOD/abstention, and repeated-seed aggregate reports
+7. compare adjacent-only, approved-baseline-only, CUSUM, and stronger temporal strategies on frozen bounded trajectories
+8. measure median/P95 latency, throughput, memory, embedding/cache cost, and snapshot storage overhead
+9. build an end-to-end MCP `tools/list_changed` interception integration around the existing detector
+10. re-run the literature search immediately before freezing any publication novelty claim
 
 ## Research status
 
-**Deterministic core, first learned pair baseline, labeling protocol, controlled mutation generator, history-ingestion foundation, and baseline experiment harness are implemented. Real-corpus construction is the next major phase.**
+**The deterministic detector core, learned pair baselines, labeling protocol, controlled attack generator, static history/source ingestion, temporal monitor, benchmark infrastructure, and reproducible reviewer demo are implemented. The highest-value remaining work is broader real-corpus evidence, independent evaluation, systems measurements, and live MCP interception.**
+
+Controlled development benchmarks have shown promising results, including >95% in some synthetic/development settings. These results are **development evidence only** and must not be described as real-world MCP attack-detection accuracy.
 
 ## License and confidentiality
 
