@@ -34,6 +34,7 @@ from ..signals import (
 )
 from ..timeline import TimelineEvent, build_server_timeline, timeline_events_after
 from ..views import RevisionView, build_revision_view
+from .attestation import TrustAttestation, build_trust_attestation
 from .audit import ReviewDecision, ReviewEvent, seal_review_event
 from .policy import DefaultPolicy, PolicyDecision
 from .store import InMemorySnapshotStore, SnapshotStore
@@ -147,6 +148,21 @@ class DriftGuardService:
             checkpoints=self.store.checkpoints(server_id),
             freshness=self.catalog_freshness(server_id),
             trusted_snapshots=self.store.trusted_tools(server_id),
+        )
+
+    def trust_attestation(self, server_id: str) -> TrustAttestation | None:
+        """Return a deterministic digest over the server's current durable trust state."""
+
+        revision = self.store.latest_revision(server_id)
+        if revision is None:
+            return None
+        return build_trust_attestation(
+            revision=revision,
+            security_check=self.store.get_revision_check(server_id, revision.revision_id),
+            checkpoints=self.store.checkpoints(server_id),
+            trusted_snapshots=self.store.trusted_tools(server_id),
+            reviews=self.store.server_reviews(server_id),
+            freshness=self.catalog_freshness(server_id),
         )
 
     def timeline(
