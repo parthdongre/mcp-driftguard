@@ -1,3 +1,8 @@
+from .attestation import (
+    ATTESTATION_SCHEMA_VERSION,
+    TrustAttestation,
+    build_trust_attestation,
+)
 from .audit import (
     AuditIntegrityReport,
     ReviewDecision,
@@ -12,6 +17,7 @@ from .store import InMemorySnapshotStore, SnapshotStore, SQLiteSnapshotStore
 from .temporal import DriftBudget, DriftBudgetEvidence, TemporalStep
 
 __all__ = [
+    "ATTESTATION_SCHEMA_VERSION",
     "AuditIntegrityReport",
     "DefaultPolicy",
     "DriftBudget",
@@ -26,6 +32,8 @@ __all__ = [
     "SQLiteSnapshotStore",
     "SnapshotStore",
     "TemporalStep",
+    "TrustAttestation",
+    "build_trust_attestation",
     "compute_review_hash",
     "seal_review_event",
     "verify_review_chain",
