@@ -1,6 +1,6 @@
 name: CI
 
-# Main quality gate: install, lint, then run the full test suite.
+# Main quality gate: install, lint, run the full test suite, then smoke-test the reviewer CLI.
 on:
   push:
     branches: [main, "dev/**"]
@@ -33,3 +33,10 @@ jobs:
           retention-days: 7
       - name: Test
         run: pytest -q
+      - name: Reviewer CLI smoke test
+        shell: bash
+        run: |
+          set -o pipefail
+          driftguard-review-demo | tee review-demo.txt
+          grep -q "QUARANTINE" review-demo.txt
+          driftguard-review-demo --json | python -m json.tool >/dev/null
