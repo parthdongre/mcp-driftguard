@@ -1,0 +1,48 @@
+{
+  "evidence_level": "generated_fixture_engineering_measurements",
+  "paper_claim_eligible": false,
+  "git_head": "0ab5b1c7626ab4a52c699fc0269ccb4e7d272757",
+  "working_tree_diff_sha256": "3819bcf7c89e5667097077193b1f69da4c8f60a5fe1a76dea398cdd9c53986a0",
+  "script_sha256": "afaf667297f60ad8d47bf332cc067863961e3b1f7cc0f7f5e463f673dc9735e2",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+  "pydantic": "2.13.5",
+  "embedding_model": null,
+  "cache": "No embedding/feature cache used; OS/interpreter warm-up uncontrolled",
+  "timing_instrumentation": "tracemalloc enabled; results include its overhead",
+  "measurements": [
+    {
+      "catalog_tools": 10,
+      "repeats": 100,
+      "cold_snapshot_catalog_ms": 2.000225,
+      "pair_median_ms": 5.726380499999999,
+      "pair_p95_ms": 7.834194,
+      "pairs_per_second": 166.42842105336035,
+      "tracemalloc_peak_bytes": 114563,
+      "canonical_snapshot_bytes": 1930,
+      "peak_scope": "Python allocations during snapshots+pair extraction; excludes native/RSS"
+    },
+    {
+      "catalog_tools": 100,
+      "repeats": 100,
+      "cold_snapshot_catalog_ms": 20.134363,
+      "pair_median_ms": 5.783118999999999,
+      "pair_p95_ms": 7.812943,
+      "pairs_per_second": 162.52023007130867,
+      "tracemalloc_peak_bytes": 365182,
+      "canonical_snapshot_bytes": 19390,
+      "peak_scope": "Python allocations during snapshots+pair extraction; excludes native/RSS"
+    },
+    {
+      "catalog_tools": 1000,
+      "repeats": 100,
+      "cold_snapshot_catalog_ms": 208.746443,
+      "pair_median_ms": 5.696923,
+      "pair_p95_ms": 8.403323,
+      "pairs_per_second": 160.93430215997813,
+      "tracemalloc_peak_bytes": 3336818,
+      "canonical_snapshot_bytes": 194890,
+      "peak_scope": "Python allocations during snapshots+pair extraction; excludes native/RSS"
+    }
+  ]
+}
