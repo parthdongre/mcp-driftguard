@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .dataset import AnnotationCandidate, PairDatasetRecord
 from .labeling import EvidenceTag
@@ -24,6 +24,13 @@ class HumanAnnotation(BaseModel):
     rationale: str
     requires_second_review: bool = False
 
+    @model_validator(mode="after")
+    def validate_identity(self) -> HumanAnnotation:
+        for value in (self.annotation_id, self.candidate_id, self.annotator_id, self.rationale):
+            if not value.strip():
+                raise ValueError("Annotation identifiers and rationale must not be blank")
+        return self
+
 
 class AdjudicationRecord(BaseModel):
     """Final reviewed decision after comparing independent annotations."""
@@ -36,14 +43,33 @@ class AdjudicationRecord(BaseModel):
     adjudicator_id: str
     rationale: str
 
+    @model_validator(mode="after")
+    def validate_independent_references(self) -> AdjudicationRecord:
+        if len(self.annotation_ids) != len(self.annotator_ids):
+            raise ValueError("annotation_ids and annotator_ids must have equal length")
+        if len(set(self.annotation_ids)) != len(self.annotation_ids):
+            raise ValueError("Adjudication requires distinct annotation IDs")
+        if len(set(self.annotator_ids)) != len(self.annotator_ids):
+            raise ValueError("Adjudication requires independent, distinct annotator IDs")
+        if any(not value.strip() for value in (
+            self.candidate_id, self.adjudicator_id, self.rationale,
+            *self.annotation_ids, *self.annotator_ids,
+        )):
+            raise ValueError("Adjudication identifiers and rationale must not be blank")
+        return self
+
 
 @dataclass(frozen=True)
 class AnnotationAgreement:
     matched_candidates: int
     raw_agreement: float
-    cohen_kappa: float
+    cohen_kappa: float | None
     disagreements: int
     c2_c3_disagreements: int
+    labels: tuple[str, ...] = ()
+    confusion_matrix: tuple[tuple[int, ...], ...] = ()
+    unmatched_left: int = 0
+    unmatched_right: int = 0
 
 
 def _read_jsonl(path: str | Path, model_type: type[BaseModel]) -> list[BaseModel]:
@@ -79,18 +105,41 @@ def read_adjudications_jsonl(path: str | Path) -> list[AdjudicationRecord]:
 
 def _by_candidate(annotations: Iterable[HumanAnnotation]) -> dict[str, HumanAnnotation]:
     result: dict[str, HumanAnnotation] = {}
+    annotation_ids: set[str] = set()
     for annotation in annotations:
         if annotation.candidate_id in result:
             raise ValueError(
                 "Each annotation sequence may contain at most one decision per candidate"
             )
+        if annotation.annotation_id in annotation_ids:
+            raise ValueError("Human annotation IDs must be unique")
+        annotation_ids.add(annotation.annotation_id)
         result[annotation.candidate_id] = annotation
     return result
 
 
-def _cohen_kappa(left: list[ChangeClass], right: list[ChangeClass]) -> float:
+def _independent_annotation_sets(
+    annotations_a: Iterable[HumanAnnotation],
+    annotations_b: Iterable[HumanAnnotation],
+) -> tuple[dict[str, HumanAnnotation], dict[str, HumanAnnotation]]:
+    left = _by_candidate(annotations_a)
+    right = _by_candidate(annotations_b)
+    left_raters = {item.annotator_id for item in left.values()}
+    right_raters = {item.annotator_id for item in right.values()}
+    if len(left_raters) > 1 or len(right_raters) > 1:
+        raise ValueError("Cohen's kappa requires one consistent annotator per input sequence")
+    if left_raters & right_raters:
+        raise ValueError("Agreement requires two independent annotators")
+    if {item.annotation_id for item in left.values()} & {
+        item.annotation_id for item in right.values()
+    }:
+        raise ValueError("Independent annotation sequences must not reuse annotation IDs")
+    return left, right
+
+
+def _cohen_kappa(left: list[ChangeClass], right: list[ChangeClass]) -> float | None:
     if not left:
-        return 0.0
+        return None
     observed = sum(a == b for a, b in zip(left, right, strict=True)) / len(left)
     left_counts = Counter(left)
     right_counts = Counter(right)
@@ -99,7 +148,9 @@ def _cohen_kappa(left: list[ChangeClass], right: list[ChangeClass]) -> float:
         for label in ChangeClass
     )
     if expected == 1.0:
-        return 1.0 if observed == 1.0 else 0.0
+        # With both raters assigning only one class, chance agreement is one:
+        # (observed - expected)/(1 - expected) is undefined, not perfect kappa.
+        return None
     return (observed - expected) / (1.0 - expected)
 
 
@@ -109,16 +160,19 @@ def annotation_agreement(
 ) -> AnnotationAgreement:
     """Compute agreement only over candidates independently labeled by both annotators."""
 
-    left_by_id = _by_candidate(annotations_a)
-    right_by_id = _by_candidate(annotations_b)
+    left_by_id, right_by_id = _independent_annotation_sets(annotations_a, annotations_b)
     candidate_ids = sorted(set(left_by_id) & set(right_by_id))
     if not candidate_ids:
         return AnnotationAgreement(
             matched_candidates=0,
             raw_agreement=0.0,
-            cohen_kappa=0.0,
+            cohen_kappa=None,
             disagreements=0,
             c2_c3_disagreements=0,
+            labels=tuple(label.value for label in ChangeClass),
+            confusion_matrix=tuple(tuple(0 for _ in ChangeClass) for _ in ChangeClass),
+            unmatched_left=len(left_by_id),
+            unmatched_right=len(right_by_id),
         )
 
     left = [left_by_id[candidate_id].label for candidate_id in candidate_ids]
@@ -133,12 +187,21 @@ def annotation_agreement(
         for a, b in zip(left, right, strict=True)
     )
     raw = 1.0 - disagreements / len(candidate_ids)
+    kappa = _cohen_kappa(left, right)
     return AnnotationAgreement(
         matched_candidates=len(candidate_ids),
         raw_agreement=round(raw, 6),
-        cohen_kappa=round(_cohen_kappa(left, right), 6),
+        cohen_kappa=round(kappa, 6) if kappa is not None else None,
         disagreements=disagreements,
         c2_c3_disagreements=c2_c3_disagreements,
+        labels=tuple(label.value for label in ChangeClass),
+        confusion_matrix=tuple(
+            tuple(sum(a is row and b is column for a, b in zip(left, right, strict=True))
+                  for column in ChangeClass)
+            for row in ChangeClass
+        ),
+        unmatched_left=len(set(left_by_id) - set(right_by_id)),
+        unmatched_right=len(set(right_by_id) - set(left_by_id)),
     )
 
 
@@ -148,8 +211,7 @@ def disagreement_candidate_ids(
     *,
     c2_c3_only: bool = False,
 ) -> list[str]:
-    left = _by_candidate(annotations_a)
-    right = _by_candidate(annotations_b)
+    left, right = _independent_annotation_sets(annotations_a, annotations_b)
     consent_boundary = {
         ChangeClass.CAPABILITY_EXPANSION,
         ChangeClass.MALICIOUS_DRIFT,
@@ -169,10 +231,21 @@ def disagreement_candidate_ids(
 def adjudications_to_pair_records(
     candidates: Iterable[AnnotationCandidate],
     adjudications: Iterable[AdjudicationRecord],
+    *,
+    annotations: Iterable[HumanAnnotation] | None = None,
 ) -> list[PairDatasetRecord]:
     """Create reviewed pair records without silently inventing missing adjudications."""
 
+    candidates = list(candidates)
     candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
+    if len(candidate_by_id) != len(candidates):
+        raise ValueError("Duplicate annotation candidate ID")
+    annotation_by_id: dict[str, HumanAnnotation] | None = None
+    if annotations is not None:
+        annotations = list(annotations)
+        annotation_by_id = {item.annotation_id: item for item in annotations}
+        if len(annotation_by_id) != len(annotations):
+            raise ValueError("Duplicate human annotation ID")
     records: list[PairDatasetRecord] = []
     seen: set[str] = set()
     for adjudication in adjudications:
@@ -184,6 +257,16 @@ def adjudications_to_pair_records(
             raise ValueError(
                 f"Adjudication references unknown candidate {adjudication.candidate_id}"
             )
+        if annotation_by_id is not None:
+            for annotation_id, annotator_id in zip(
+                adjudication.annotation_ids, adjudication.annotator_ids, strict=True
+            ):
+                annotation = annotation_by_id.get(annotation_id)
+                if annotation is None:
+                    raise ValueError(f"Adjudication references unknown annotation {annotation_id}")
+                if (annotation.candidate_id != candidate.candidate_id
+                        or annotation.annotator_id != annotator_id):
+                    raise ValueError("Adjudication annotation reference does not match its source")
         records.append(
             PairDatasetRecord(
                 record_id=f"reviewed-{candidate.candidate_id}",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,10 +149,22 @@ def discover_mcp_sources(
     root = Path(repository_path).resolve()
     if not root.is_dir():
         raise ValueError(f"Repository path is not a directory: {root}")
+    if max_file_bytes < 1:
+        raise ValueError("max_file_bytes must be positive")
 
     discoveries: list[SourceDiscovery] = []
-    for path in root.rglob("*"):
-        if not path.is_file() or _ignored(path, root):
+    # Prune ignored directories before traversal. A repository may contain links
+    # outside its checkout; source mining must never follow those links.
+    paths: list[Path] = []
+    for directory, child_dirs, files in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        child_dirs[:] = [
+            name for name in child_dirs
+            if name not in _IGNORED_PARTS and not (parent / name).is_symlink()
+        ]
+        paths.extend(parent / name for name in files)
+    for path in paths:
+        if path.is_symlink() or not path.is_file() or _ignored(path, root):
             continue
         suffix = path.suffix.lower()
         if suffix not in {".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".json"}:
