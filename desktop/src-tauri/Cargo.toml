@@ -1,0 +1,19 @@
+[package]
+name = "driftguard-desktop"
+version = "0.1.0"
+description = "Private MCP tool-definition review workspace"
+authors = ["Parth Dongre"]
+license = "LicenseRef-Proprietary"
+edition = "2021"
+publish = false
+
+[lib]
+name = "driftguard_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"

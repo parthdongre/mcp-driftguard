@@ -1,0 +1,65 @@
+name: Cross-platform prototype validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["dev/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-ui:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Python core and validation dependencies
+        run: python -m pip install -e ".[dev]" "scikit-learn>=1.5" -c requirements/core-constraints.txt
+      - name: Python correctness and security tests
+        run: python -m pytest -q
+      - name: Lint source and tests
+        run: python -m ruff check src tests
+      - name: Install pinned UI dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Generate guided evidence from current core
+        run: python desktop/scripts/generate-demo.py
+      - name: Validate UI logic and TypeScript production build
+        working-directory: desktop
+        run: npm test && npm run build
+
+  native-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install locked UI dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
+      - name: Build unsigned prototype without installer or publication
+        working-directory: desktop
+        run: npm run desktop:build -- --no-bundle
