@@ -2,6 +2,12 @@ import type { AuditEvent, ToolDefinition } from './types';
 
 export const MAX_IMPORT_BYTES = 1_048_576;
 
+export function matchesActivityFilter(event: string, filter: string): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'deny') return /deny|denied/.test(event);
+  return event.includes(filter);
+}
+
 export function parseDefinitions(text: string): ToolDefinition[] {
   if (new TextEncoder().encode(text).byteLength > MAX_IMPORT_BYTES) throw new Error('Choose a JSON file smaller than 1 MiB.');
   const value: unknown = JSON.parse(text);

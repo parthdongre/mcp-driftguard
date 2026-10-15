@@ -44,6 +44,13 @@ test('default audit export strips identities, tool definitions, arguments and de
   assert.equal(JSON.parse(result).events[0].event, 'tool_approved');
 });
 
+test('denial filter covers both native and fixture event names', () => {
+  assert.equal(utils.matchesActivityFilter('tool_denied', 'deny'), true);
+  assert.equal(utils.matchesActivityFilter('fixture_deny', 'deny'), true);
+  assert.equal(utils.matchesActivityFilter('tool_approved', 'deny'), false);
+  assert.equal(utils.matchesActivityFilter('catalog_observed', 'observ'), true);
+});
+
 test('guided fixture cannot bypass quarantine through deny and approve, and rejects stale revisions', async () => {
   const workspace = new bridge.DemoWorkspace();
   const tools = await workspace.request({ action: 'list_tools' });

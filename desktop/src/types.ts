@@ -10,7 +10,7 @@ export interface ToolDefinition {
 }
 export interface ToolRecord {
   server_id: string; tool_name: string; sha256: string; status: string;
-  description?: string; classification?: ChangeClass | null; reasons?: string[];
+  description?: string; classification?: ChangeClass | 'unreviewed' | null; reasons?: string[];
   observed_at?: string; revision?: number;
 }
 export interface TemporalEvidence {
@@ -31,6 +31,7 @@ export interface AuditEvent {
 export interface Overview {
   protection_status: 'review_only' | 'gateway_ready'; servers: number; tools: number;
   pending: number; approved: number; quarantined: number; last_verification: string | null; scope: string;
+  server_list?: { server_id: string }[];
 }
 export interface Workspace {
   overview: Overview; tools: ToolRecord[]; activity: AuditEvent[];

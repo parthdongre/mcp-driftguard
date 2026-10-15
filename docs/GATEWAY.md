@@ -33,7 +33,9 @@ driftguard-gateway serve --config /absolute/path/to/connection.json --state /abs
 
 Configure the MCP client to run the second command as its server, separating the
 executable and arguments as required by that client's configuration format. Supply
-the same absolute state path to the desktop review app. Keep the gateway running
+the desktop application's default state path for `--state`; OS paths are listed
+in [desktop/README.md](../desktop/README.md). The CLI review bridge can inspect an
+explicit path, while the native renderer cannot choose arbitrary storage. Keep the gateway running
 while reviewing newly discovered definitions; every new tool is initially withheld.
 After local approval, the client's next `tools/list` returns approved tools. Every
 `tools/call` performs another complete upstream listing before authorization.
@@ -41,8 +43,8 @@ After local approval, the client's next `tools/list` returns approved tools. Eve
 Local approvals never travel over MCP. A model cannot approve, revoke or change
 policy through this gateway. The local desktop bridge uses the separate
 `driftguard-desktop-bridge --db /absolute/path/to/driftguard.sqlite3` entry point.
-Imported review examples are separate from an actual transport connection unless
-the configured identity matches. For normal protection, review the catalog that
+Manual imports use a distinct `import:` namespace and principal; their approvals
+cannot authorize a live transport connection. For normal protection, review the catalog that
 the running gateway discovers directly.
 
 Standard output carries JSON-RPC only. Diagnostic messages use standard error and
