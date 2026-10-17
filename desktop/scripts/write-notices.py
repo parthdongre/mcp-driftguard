@@ -34,11 +34,11 @@ def main() -> int:
         if path.is_file():
             sections.extend(["## CPython runtime", path.read_text(encoding="utf-8", errors="replace")])
             break
-    target = subprocess.check_output(["rustc", "-vV"], text=True).split("host: ", 1)[1].splitlines()[0]
+    target = subprocess.check_output(["rustc", "-vV"], text=True, encoding="utf-8").split("host: ", 1)[1].splitlines()[0]
     metadata = json.loads(subprocess.check_output([
         "cargo", "metadata", "--locked", "--format-version", "1",
         "--filter-platform", target, "--manifest-path",
-        str(ROOT / "desktop/src-tauri/Cargo.toml")], text=True, cwd=ROOT))
+        str(ROOT / "desktop/src-tauri/Cargo.toml")], text=True, encoding="utf-8", cwd=ROOT))
     selected = {node["id"] for node in metadata["resolve"]["nodes"]}
     for package in metadata["packages"]:
         if package["id"] not in selected:
