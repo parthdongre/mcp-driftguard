@@ -9,6 +9,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -26,8 +27,9 @@ def main() -> int:
     database = directory / "guard.sqlite3"
     if database.exists():
         raise RuntimeError("Native startup verification requires a fresh disposable runner store")
+    diagnostics = tempfile.TemporaryFile()
     process = subprocess.Popen([str(executable)], stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL,
+                               stderr=diagnostics,
                                env={key: value for key, value in os.environ.items()
                                     if key not in {"DRIFTGUARD_PYTHON", "PYTHONHOME", "PYTHONPATH"}})
     try:
@@ -59,6 +61,11 @@ def main() -> int:
             if check.returncode != 0 or check.stdout.strip() == "0" or not check.stdout.strip():
                 raise RuntimeError("The Windows native window handle was unavailable")
         print("Actual packaged WebView startup and renderer-to-engine SQLite initialization passed.")
+    except BaseException:
+        diagnostics.seek(0)
+        print("Native startup diagnostics (fresh, empty disposable runner only):",
+              diagnostics.read(4096).decode("utf-8", errors="replace"), file=sys.stderr)
+        raise
     finally:
         if process.poll() is None:
             process.terminate()
@@ -67,6 +74,7 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        diagnostics.close()
     return 0
 
 

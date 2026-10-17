@@ -47,7 +47,10 @@ def main() -> int:
             executable, = [Path(path) for path in files if path.endswith("/bin/driftguard-desktop")]
             subprocess.run(["xvfb-run", "-a", sys.executable,
                             str(ROOT / "desktop/scripts/smoke-window.py"), str(executable)],
-                           check=True, timeout=60)
+                           check=True, timeout=60,
+                           env={**os.environ, "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
+                                "WEBKIT_DISABLE_DMABUF_RENDERER": "1",
+                                "LIBGL_ALWAYS_SOFTWARE": "1"})
         finally:
             subprocess.run(["sudo", "dpkg", "--remove", package], check=True, timeout=120)
     else:

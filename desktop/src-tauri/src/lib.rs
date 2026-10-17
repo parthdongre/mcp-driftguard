@@ -286,7 +286,9 @@ async fn driftguard_request(
             },
         }));
     }
-    run_bridge(owned, bytes).await
+    run_bridge(owned, bytes)
+        .await
+        .inspect_err(|error| eprintln!("DriftGuard local engine: {error}"))
 }
 
 pub fn run() {
