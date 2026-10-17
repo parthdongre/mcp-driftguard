@@ -232,7 +232,11 @@ class StdioPeer:
                 self._messages.put_nowait(item)
         except queue.Full:
             self._overflow.set()
-        except (TransportError, OSError) as exc:
+        except (TransportError, OSError, ValueError) as exc:
+            # Closing the owned pipe can race a reader iteration. FileIO reports
+            # that normal shutdown as ValueError on some runtimes/platforms.
+            if self._closed:
+                return
             try:
                 self._messages.put_nowait(exc if isinstance(exc, TransportError)
                                           else TransportError("Upstream read failed"))

@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 
@@ -38,7 +39,9 @@ def test_persistent_review_roundtrip_and_stale_decision_rejection(tmp_path):
 @pytest.mark.parametrize("raw", [b'{"action":"overview","action":"approve"}',
                                  b'{"action":NaN}', b'[]', b'null',
                                  b'{"action":"forward_call"}', b'\xff',
-                                 b'x' * (MAX_REQUEST_BYTES + 1)])
+                                 b'x' * (MAX_REQUEST_BYTES + 1)],
+                         ids=["duplicate-action", "nonfinite-json", "array", "null",
+                              "unsupported-action", "invalid-utf8", "oversized-request"])
 def test_invalid_ambiguous_and_unallowlisted_requests_fail_safely(tmp_path, raw):
     result = execute(tmp_path / "review.db", raw)
     assert not result["ok"]
@@ -53,4 +56,23 @@ def test_subprocess_protocol_returns_one_json_response_without_input_echo(tmp_pa
     )
     assert json.loads(completed.stdout)["data"]["tools"] == 0
     assert len(completed.stdout.splitlines()) == 1
+    assert not completed.stderr
+
+
+def test_subprocess_protocol_preserves_unicode_with_ascii_text_streams(tmp_path):
+    description = "Read résumé notes — 测试 🌙"
+    payload = {"action": "import_definitions", "server_id": "unicode",
+               "identity": "local-unicode-fixture",
+               "tools": [{"name": "read_note", "description": description,
+                          "inputSchema": {"type": "object"}}]}
+    completed = subprocess.run(
+        [sys.executable, "-m", "driftguard.desktop_bridge", "--db",
+         str(tmp_path / "révision 测试.db")],
+        input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        env={**os.environ, "PYTHONIOENCODING": "ascii"},
+        capture_output=True, check=True, timeout=10,
+    )
+    response = json.loads(completed.stdout.decode("utf-8"))
+    assert response["ok"]
+    assert response["data"][0]["definition"]["description"] == description
     assert not completed.stderr

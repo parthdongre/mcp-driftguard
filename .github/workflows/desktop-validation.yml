@@ -34,6 +34,9 @@ jobs:
         run: python -m pytest -vv --durations=20 --timeout=60 --timeout-method=thread -o faulthandler_timeout=30
       - name: Lint source and tests
         run: python -m ruff check src tests
+      - name: Test native process boundary without GUI dependencies
+        if: runner.os == 'Linux'
+        run: python desktop/scripts/check-native.py --headless
       - name: Install pinned UI dependencies
         working-directory: desktop
         run: npm ci
@@ -52,6 +55,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -60,6 +66,8 @@ jobs:
         run: npm ci
       - name: Check Rust formatting
         run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
+      - name: Test native IPC with isolated Python engine
+        run: python desktop/scripts/check-native.py
       - name: Build unsigned prototype without installer or publication
         working-directory: desktop
         run: npm run desktop:build -- --no-bundle

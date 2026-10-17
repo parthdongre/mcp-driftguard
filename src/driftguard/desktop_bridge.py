@@ -136,7 +136,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     raw = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
     result = execute(args.db, raw)
-    sys.stdout.write(json.dumps(result, ensure_ascii=False, allow_nan=False) + "\n")
+    # The IPC contract is UTF-8 bytes, independent of a Windows/locale text codec.
+    payload = json.dumps(result, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
+    sys.stdout.buffer.write(payload)
+    sys.stdout.buffer.flush()
     return 0 if result["ok"] else 1
 
 
