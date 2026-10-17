@@ -1,5 +1,8 @@
 // Take a look at the license at the top of the repository in the LICENSE file.
 
+// The maintained helper emits this absolute crate name in attribute expansions.
+extern crate proc_macro_error as proc_macro_error2;
+
 mod attribute_parser;
 mod composite_template_derive;
 mod util;

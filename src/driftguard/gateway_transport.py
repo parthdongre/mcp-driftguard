@@ -404,16 +404,28 @@ class ProtectedGateway:
         self.identity = self.peer.identity
         self._closed = False
         self._lock = threading.RLock()
+        self._heartbeat_stop = threading.Event()
         try:
             self.store.register_server(self.identity)
             self.peer.initialize()
             self.refresh_catalog()
+            self.store.mark_gateway(self.identity, active=True)
+            self._heartbeat = threading.Thread(target=self._watch_heartbeat, daemon=True)
+            self._heartbeat.start()
             if getattr(self.peer, "process", None) is not None:
                 self._monitor = threading.Thread(target=self._watch_disconnect, daemon=True)
                 self._monitor.start()
         except Exception:
             self.close()
             raise
+
+    def _watch_heartbeat(self) -> None:
+        while not self._heartbeat_stop.wait(2):
+            try:
+                self.store.mark_gateway(self.identity, active=True)
+            except (GateError, OSError, sqlite3.Error):
+                self._heartbeat_stop.set()
+                return
 
     def _watch_disconnect(self) -> None:
         self.peer.process.wait()
@@ -538,8 +550,10 @@ class ProtectedGateway:
             if self._closed:
                 return
             self._closed = True
+            self._heartbeat_stop.set()
             try:
                 try:
+                    self.store.mark_gateway(self.identity, active=False)
                     self.store.invalidate_server(self.config.server_id,
                                                  "Gateway disconnected; reconnect requires review",
                                                  identity=self.identity)

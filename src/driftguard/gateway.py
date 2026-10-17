@@ -146,6 +146,8 @@ class GuardStore:
         self._db.execute("PRAGMA foreign_keys=ON")
         self._db.execute("PRAGMA busy_timeout=5000")
         self._db.executescript("""
+            CREATE TABLE IF NOT EXISTS guard_runtime(
+                server_id TEXT PRIMARY KEY, heartbeat_at TEXT NOT NULL, active INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS guard_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS guard_servers(
                 server_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, auth_context TEXT NOT NULL,
@@ -271,12 +273,38 @@ class GuardStore:
                     self._invalidate_server(
                         identity.server_id, "Server identity or authorization changed"
                     )
+                    self._db.execute("DELETE FROM guard_runtime WHERE server_id=?",
+                                     (identity.server_id,))
                 self._db.execute(
                     "UPDATE guard_servers SET fingerprint=?,auth_context=?,protocol_version=?,"
                     "display_name=? WHERE server_id=?",
                     (*binding, identity.display_name or identity.server_id, identity.server_id),
                 )
             return dict(self._server(identity.server_id))
+
+    def mark_gateway(self, identity: ServerIdentity, *, active: bool) -> None:
+        """Record process heartbeat metadata; this never grants or proves consent."""
+        if type(active) is not bool:
+            raise TypeError("Gateway activity must be boolean")
+        with self._transaction():
+            server = self._server(identity.server_id)
+            if (identity.fingerprint, identity.auth_context, identity.protocol_version) != (
+                server["fingerprint"], server["auth_context"], server["protocol_version"]
+            ):
+                raise IdentityMismatch("Heartbeat connection identity is no longer current")
+            self._db.execute(
+                "INSERT INTO guard_runtime VALUES(?,?,?) ON CONFLICT(server_id) DO UPDATE SET "
+                "heartbeat_at=excluded.heartbeat_at,active=excluded.active",
+                (identity.server_id, _now(), int(active)),
+            )
+
+    def gateway_health(self) -> list[dict[str, Any]]:
+        """Historical heartbeats, not proof of upstream health or client routing."""
+        with self._lock:
+            return [dict(row) for row in self._db.execute(
+                "SELECT r.server_id,r.heartbeat_at,r.active FROM guard_runtime r "
+                "JOIN guard_servers s ON s.server_id=r.server_id ORDER BY r.server_id"
+            )]
 
     def list_servers(self) -> list[dict[str, Any]]:
         with self._lock:

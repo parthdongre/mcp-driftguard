@@ -107,6 +107,26 @@ try {
   check('Minimum-width layout has no document overflow', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.screenshot({ path: new URL('overview-narrow-light.png', output).pathname, fullPage: true });
   await auditAccessibility('overview-narrow-light');
+  // Exercise source setup without starting a server or fabricating a connection.
+  await page.getByRole('button', { name: 'MCP connections', exact: true }).click();
+  await page.getByLabel('Source identifier', { exact: true }).fill('qa-configured-source');
+  await page.getByLabel('Working directory', { exact: true }).fill('/tmp/driftguard-source');
+  await page.getByLabel('Server command as JSON', { exact: false }).fill('["/usr/bin/python3","/tmp/server.py"]');
+  await page.getByRole('button', { name: 'Prepare source profile', exact: true }).click();
+  const [profileDownload] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download source profile', exact: true }).click()]);
+  const profile = JSON.parse(await readFile(await profileDownload.path(), 'utf8'));
+  check('Guided source setup preserves argument boundaries', profile.argv[1] === '/tmp/server.py');
+  await page.getByLabel('Connection transport', { exact: true }).selectOption('http');
+  await page.getByLabel('HTTPS endpoint', { exact: true }).fill('https://fixture.invalid/mcp');
+  await page.getByLabel('HTTP authentication', { exact: true }).selectOption('environment');
+  await page.getByLabel('Bearer environment variable', { exact: false }).fill('FIXTURE_MCP_TOKEN');
+  await page.getByRole('button', { name: 'Prepare source profile', exact: true }).click();
+  const [httpDownload] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download source profile', exact: true }).click()]);
+  const httpProfile = JSON.parse(await readFile(await httpDownload.path(), 'utf8'));
+  check('HTTP setup exports a credential name without a credential value', httpProfile.auth_token_env === 'FIXTURE_MCP_TOKEN' && httpProfile.transport === 'http');
+  await page.getByLabel('HTTP authentication', { exact: true }).selectOption('vault');
+  check('Browser preview cannot store native credentials', await page.getByRole('button', { name: 'Save to OS credential store', exact: true }).isDisabled());
+  await auditAccessibility('connection-setup');
   // Test-only IPC stand-in: renderer -> actual Python module -> temporary SQLite.
   // This does not exercise native Rust IPC or establish a real MCP connection.
   const temporary = await mkdtemp(resolve(tmpdir(), 'driftguard-ui-'));

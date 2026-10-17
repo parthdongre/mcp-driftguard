@@ -63,6 +63,11 @@ def main() -> int:
         if count != 1:
             raise RuntimeError("Macro maintenance replacement context differs")
         manifest.write_text(source, encoding="utf-8")
+        root_source = DESTINATION / name / "src/lib.rs"
+        body = root_source.read_text(encoding="utf-8")
+        root_source.write_text(body.replace(
+            "\n\nmod ", "\n\n// The maintained helper emits this absolute crate name in attribute expansions.\n"
+            "extern crate proc_macro_error as proc_macro_error2;\n\nmod ", 1), encoding="utf-8")
     provenance = {
         "archive_checksums": {name: {"version": version, "sha256": checksum}
                               for name, (version, checksum) in CRATES.items()},
@@ -78,7 +83,8 @@ def main() -> int:
         "These MIT-licensed upstream crates retain their individual licenses and ownership.\n"
         "The GLib change exactly backports upstream commit b5a4071e439bef2b5eea76c3aa25e5ae84839e34.\n"
         "The two macro manifests replace unmaintained proc-macro-error with the maintained\n"
-        "proc-macro-error2 2.0.1 under the same Rust import name. No other source is changed.\n"
+        "proc-macro-error2 2.0.1 under the same Rust import name. Each macro crate root adds\n"
+        "the absolute crate alias expected by maintained attribute expansions.\n"
         "PROVENANCE.json records original archive checksums. Reproduce from an empty\n"
         "third_party directory using desktop/scripts/vendor-gtk.py.\n", encoding="utf-8")
     manifest = ROOT / "desktop/src-tauri/Cargo.toml"

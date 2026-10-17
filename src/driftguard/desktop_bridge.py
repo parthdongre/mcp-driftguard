@@ -62,6 +62,7 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
             "pending": counts["pending"], "approved": counts["approved"],
             "quarantined": counts["quarantined"], "last_verification": last,
             "server_list": servers,
+            "gateway_health": store.gateway_health(),
             "scope": "Only clients explicitly configured to route through the gateway are "
                      "protected. Imported definitions are review-only. Desktop status does "
                      "not establish that a gateway process is running.",

@@ -15,6 +15,6 @@
   },
   "glib_fix": "https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
   "glib_advisory": "RUSTSEC-2024-0429",
-  "macro_change": "Rename maintained proc-macro-error2 2.0.1 to the existing import name",
+  "macro_change": "Rename maintained proc-macro-error2 2.0.1 to the existing import name; each macro crate root aliases proc_macro_error as proc_macro_error2 for generated absolute paths",
   "status": "Compatibility backport; requires optimized regression and native platform tests"
 }
