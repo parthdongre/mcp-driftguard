@@ -108,6 +108,7 @@ try {
   await page.screenshot({ path: new URL('overview-narrow-light.png', output).pathname, fullPage: true });
   await auditAccessibility('overview-narrow-light');
   // Exercise source setup without starting a server or fabricating a connection.
+  await page.getByRole('button', { name: 'Exit demo', exact: true }).click();
   await page.getByRole('button', { name: 'MCP connections', exact: true }).click();
   await page.getByLabel('Source identifier', { exact: true }).fill('qa-configured-source');
   await page.getByLabel('Working directory', { exact: true }).fill('/tmp/driftguard-source');
