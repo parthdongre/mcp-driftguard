@@ -16,6 +16,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const TIMEOUT_ERROR: &str =
     "The local engine timed out. No decision was assumed; refresh the workspace before retrying.";
 const ACTIONS: &[&str] = &[
+    "runtime_info",
     "overview",
     "list_tools",
     "review",
@@ -30,6 +31,7 @@ const ACTIONS: &[&str] = &[
 #[derive(Clone)]
 struct BridgeRuntime {
     python: Option<PathBuf>,
+    frozen: bool,
     db: PathBuf,
     lock: Arc<Mutex<()>>,
 }
@@ -45,7 +47,7 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
     }
     // Deny unexpected arguments at the native boundary, including executable/DB/path overrides.
     let allowed: &[&str] = match action {
-        "overview" | "activity" => &["action"],
+        "overview" | "activity" | "runtime_info" => &["action"],
         "list_tools" => &["action", "server_id"],
         "review" | "history" => &["action", "server_id", "tool_name"],
         "import_definitions" => &["action", "server_id", "identity", "tools"],
@@ -216,16 +218,20 @@ async fn run_bridge_before(
         .await
         .map_err(|_| TIMEOUT_ERROR)?;
     let python = runtime.python.as_ref().ok_or(
-        "Local engine unavailable. Set DRIFTGUARD_PYTHON to the absolute Python executable in a virtual environment with mcp-driftguard installed, then restart the desktop app.",
+        "Local engine unavailable. Reinstall the packaged app. For debug builds, set DRIFTGUARD_PYTHON to a trusted absolute virtual-environment executable.",
     )?;
     if !python.is_absolute() || !python.is_file() {
         return Err(
-            "DRIFTGUARD_PYTHON must identify an existing absolute Python executable".into(),
+            "The local engine must be an existing absolute executable".into(),
         );
     }
     let mut command = Command::new(python);
+    if runtime.frozen {
+        command.args(["bridge", "--db"]);
+    } else {
+        command.args(["-I", "-m", "driftguard.desktop_bridge", "--db"]);
+    }
     command
-        .args(["-I", "-m", "driftguard.desktop_bridge", "--db"])
         .arg(&runtime.db)
         .env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME");
@@ -251,6 +257,30 @@ async fn driftguard_request(
     }
     let bytes = validate_request(&request)?;
     let owned = runtime.inner().clone();
+    if request["action"] == "runtime_info" {
+        let executable = owned.python.as_ref().map(|path| path.to_string_lossy().to_string());
+        let argv = executable.map(|path| {
+            if owned.frozen {
+                vec![path, "gateway".to_string()]
+            } else {
+                vec![
+                    path,
+                    "-I".to_string(),
+                    "-m".to_string(),
+                    "driftguard.gateway_cli".to_string(),
+                ]
+            }
+        });
+        return Ok(serde_json::json!({
+            "ok": true,
+            "data": {
+                "gateway_argv": argv,
+                "state_path": owned.db,
+                "packaged": owned.frozen,
+                "engine_available": owned.python.as_ref().is_some_and(|path| path.is_file()),
+            },
+        }));
+    }
     run_bridge(owned, bytes).await
 }
 
@@ -264,8 +294,25 @@ pub fn run() {
                 use std::os::unix::fs::PermissionsExt;
                 std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
             }
+            let engine_name = if cfg!(windows) {
+                "driftguard-engine.exe"
+            } else {
+                "driftguard-engine"
+            };
+            let packaged = app.path().resource_dir()?.join("engine").join(engine_name);
+            let (python, frozen) = if packaged.is_file() {
+                (Some(packaged), true)
+            } else if cfg!(debug_assertions) {
+                (
+                    std::env::var_os("DRIFTGUARD_PYTHON").map(PathBuf::from),
+                    false,
+                )
+            } else {
+                (None, false)
+            };
             app.manage(BridgeRuntime {
-                python: std::env::var_os("DRIFTGUARD_PYTHON").map(PathBuf::from),
+                python,
+                frozen,
                 db: directory.join("guard.sqlite3"),
                 lock: Arc::new(Mutex::new(())),
             });
@@ -337,6 +384,7 @@ mod tests {
         fn runtime(&self, python: PathBuf) -> BridgeRuntime {
             BridgeRuntime {
                 python: Some(python),
+                frozen: false,
                 db: self.0.join("review store.sqlite3"),
                 lock: Arc::new(Mutex::new(())),
             }
@@ -503,6 +551,7 @@ mod tests {
             let _guard = lock.lock().await;
             let runtime = BridgeRuntime {
                 python: None,
+                frozen: false,
                 db: PathBuf::new(),
                 lock: lock.clone(),
             };

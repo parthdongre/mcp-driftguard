@@ -36,7 +36,7 @@ export interface Overview {
 export interface Workspace {
   overview: Overview; tools: ToolRecord[]; activity: AuditEvent[];
 }
-export type BridgeAction = 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
+export type BridgeAction = 'runtime_info' | 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
   'import_definitions' | 'approve' | 'deny' | 'quarantine';
 export interface BridgeRequest {
   action: BridgeAction; server_id?: string; tool_name?: string; expected_sha256?: string; expected_revision?: number;

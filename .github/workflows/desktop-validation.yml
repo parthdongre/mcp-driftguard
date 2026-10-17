@@ -68,6 +68,23 @@ jobs:
         run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
       - name: Test native IPC with isolated Python engine
         run: python desktop/scripts/check-native.py
-      - name: Build unsigned prototype without installer or publication
+      - name: Install pinned engine packager
+        run: python -m pip install -e . -c requirements/core-constraints.txt pyinstaller==6.22.3
+      - name: Build and verify the self-contained engine
+        run: python desktop/scripts/build-engine.py
+      - name: Build unsigned macOS application bundle
+        if: runner.os == 'macOS'
         working-directory: desktop
-        run: npm run desktop:build -- --no-bundle
+        run: npm run desktop:package -- --bundles app
+      - name: Build unsigned Windows installer
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: npm run desktop:package -- --bundles nsis
+      - name: Verify bundled or installed engine without system Python
+        run: python desktop/scripts/verify-package.py
+      - name: Retain runtime provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-provenance-${{ matrix.os }}
+          path: desktop/build/engine/engine-manifest.json
+          retention-days: 14
