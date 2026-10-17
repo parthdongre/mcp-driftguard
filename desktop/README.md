@@ -88,3 +88,24 @@ temporary ignored files under `verification/`.
 Regenerate guided evidence with `python desktop/scripts/generate-demo.py` from the
 repository root after core changes. Evidence and release limits are recorded in
 [RELEASE_READINESS.md](../docs/RELEASE_READINESS.md).
+
+## Native bridge regression checks
+
+From the repository root with Rust/Cargo on PATH:
+
+```bash
+python desktop/scripts/check-native.py
+# Linux process-helper verification without GTK/Tauri GUI prerequisites:
+python desktop/scripts/check-native.py --headless
+```
+
+The runner creates an ignored desktop/.venv-native, installs the constrained core,
+and requires that absolute venv executable for Rust tests. Tests cover actual
+Unicode import/review/approval, stale revisions, quarantine, blocked input/output,
+size limits, malformed envelopes and exit status. Headless mode copies process
+helpers/tests unchanged, strips only Tauri GUI wiring and rejects any dependency
+identity differing from the production Cargo.lock. It is not a GUI launch test.
+
+A timed-out mutation may already have committed. Refresh before another decision;
+the native bridge does not automatically repeat requests. See the security model
+for Windows worker and descendant-lifetime limitations.

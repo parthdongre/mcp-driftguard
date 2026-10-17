@@ -1,40 +1,60 @@
 # Verification and platform status
 
-These results apply to the current internal prototype. No native macOS/Windows
-execution, signed installer or publication-grade accuracy is established here.
+Current engineering followup: **17 October 2026**, code revision
+`449bef11d20ae0e9a7a7321adbd2bea1c357b2cd`.
+[Platform CI](https://github.com/parthdongre/mcp-driftguard/actions/runs/39051463275)
+records actual runner results. Passing a native build or process-helper test does
+not establish native window interaction, installation or publication accuracy.
 
 | Check | Verified outcome | Boundary |
 |---|---|---|
-| Python full suite, Linux / Python 3.12.14 | **217 passed, 1 skipped**, 35.60 s; coverage **84.80%** (4339/5117 statements) | Optional XGBoost absent; no downloaded embedding models |
-| Source/test Ruff | Passed | Static lint does not prove security |
-| Frontend logic | **6 tests passed** | Import/blinding/export/privacy/filtering/quarantine/stale decisions |
-| TypeScript/Vite production build | Passed | Browser assets; not a native executable |
-| Browser workflow | **20 checks passed**, Chromium 141.0.7390.37 on Linux | Isolated fixture plus actual Python/SQLite through test IPC |
-| Sampled automated accessibility | Zero WCAG 2 A/AA and 2.1 AA violations in **5 sampled states** | Manual VoiceOver/NVDA, all screens and native WebViews untested |
-| Screenshot visual review | Light overview/review/history, dark settings and 900px layout inspected | QA screenshots remain temporary |
-| Installed reviewer CLI | JSON parsed and final scenario quarantined | Controlled demonstration |
-| Python wheel | Built with `pip wheel . --no-deps --no-build-isolation` | Packaging smoke check; no bit-for-bit reproducibility certification |
-| Rust formatting | `cargo fmt --check` passed | Native Rust tests/typecheck remain blocked |
-| Linux native build | `cargo check` blocked at `glib-sys`: required `pkg-config`/GTK-WebKit build prerequisites unavailable | No native launch/build success claimed |
-| macOS / Windows native build/run | Not executed here | CI prepared; no remote result yet |
-| Frozen corpus reproduction | **721/721 records exactly matched**, labels 0 | 494 primary +227 reference; upstream runtimes never executed |
-| Local secret scan | detect-secrets 1.5.0, no network verification; 71 candidates reviewed as hashes or authored test marker; 0 live secrets identified | Default scanner filters; no history/upstream/dependency scan; not proof of absence |
-| Dependency advisory lookup | No known advisories for 10 pinned Python runtime packages or current npm lock graph | Dated lookup; Rust advisory/independent supply-chain review pending |
+| Python full suite, local Linux / Python 3.12.14 | **218 passed, 1 skipped**, coverage **84.75%** (4340/5121 statements) | Optional XGBoost absent; no downloaded embedding models. Coverage run overlapped Rust tool builds; elapsed time is not a performance comparison. |
+| Linux CI Python/UI | **218 passed, 1 skipped**; lint, 6 frontend tests and build passed | Source revision above |
+| macOS CI Python/UI | **218 passed, 1 skipped**; lint, 6 frontend tests and build passed | Source revision above |
+| Windows CI Python/UI | **214 passed, 5 skipped**; lint, 6 frontend tests and build passed | XGBoost plus four POSIX permissions/symlink checks skipped; Windows ACL behavior is not certified |
+| Native process helpers, Linux | **11 Rust tests passed** locally and in CI with required isolated Python engine | Exact production helpers/tests, with only Tauri command/window wiring removed; all dependency identities match the production lock |
+| macOS native Rust/Python and build | 11 native Rust/Python tests and unsigned no-bundle build passed | Actual native library code; no GUI startup/interaction or signed installation test |
+| Windows native Rust/Python and build | 11 native Rust/Python tests and unsigned no-bundle build passed | No GUI startup/interaction or signed installation test |
+| Source/test Ruff and Rust formatting | Passed | Static checks do not prove security |
+| Linux full native build | Blocked at glib-sys by missing pkg-config/GTK-WebKit prerequisites locally | Headless process tests are not a substitute for GTK validation; dependency finding below blocks production release |
+| Browser workflow, initial UI verification | **20 checks passed**, Chromium 141.0.7390.37 on Linux | Guided fixture plus Python/SQLite test IPC; browser UI source unchanged in this followup |
+| Sampled accessibility, initial UI verification | Zero automated WCAG A/AA violations in **5 sampled states** | Native WebViews, manual VoiceOver/NVDA and all screens untested |
+| Visual review, initial UI verification | Light overview/review/history, dark settings and 900px layout inspected | QA screenshots remain temporary |
+| Reviewer CLI and Python wheel, initial verification | JSON parsed, controlled trace quarantined, wheel built | Controlled smoke checks, not accuracy/build reproducibility certification |
+| Frozen corpus reproduction | **721/721 records exactly matched**, labels **0** | 494 primary +227 reference; upstream runtimes never executed; extractor source unchanged in this followup |
+| Secret scan, 15 October | 71 candidates reviewed as hashes/authored test marker; 0 live secrets identified | Default scanner filters, no network verification/history/upstream/dependency scan; not absence proof |
+| Python/npm advisory lookup, 15 October | No known entries in scoped runtime/npm graph | Dated lookup; independent supply-chain review pending |
+| Rust audit, 17 October | 411 packages; 0 vulnerability-category entries, **1 unsound +1 unmaintained warning** | **Not clean**: Linux GTK path selects affected GLib/proc-macro-error. See audit/DEPENDENCY_FINDINGS.md. |
 
-Initial browser contrast failures are archived in
-`audit/browser-check-initial-failures.json`; current sampled states pass after
-token corrections. npm audit identified Windows development-server advisories
-in Vite 6.4.2; the dependency was upgraded to 6.4.4. Audit JSON, test XML, coverage,
-environment and browser evidence are in `docs/audit/`.
+Initial evidence remains in `audit/final-*`, `audit/browser-check.json` and
+`audit/verification-summary.json`. Followup evidence uses `audit/continuation-*`,
+`audit/native-headless-*`, `audit/rust-dependency-*` and CI snapshots. The initial
+Windows Python job was cancelled after hanging; it was never counted as a pass.
+The followup source passes the Windows suite with bounded per-test diagnostics and
+short adversarial parameter IDs. The evidence does not isolate one exclusive cause
+for the original cancelled run.
 
 ## Reproduction
 
+From the repository root:
+
 ```bash
 python -m pip install -e '.[dev]' scikit-learn -c requirements/core-constraints.txt
-python -m ruff check src tests
-python -m pytest -q --cov=driftguard
-python desktop/scripts/generate-demo.py
-cd desktop
+python -m ruff check src tests desktop/scripts/check-native.py
+python -m pytest -q --timeout=60 --timeout-method=thread -o faulthandler_timeout=30
+python desktop/scripts/check-native.py --headless
+# With native platform prerequisites, run actual Tauri library tests:
+python desktop/scripts/check-native.py
+```
+
+The native runner requires Rust/Cargo, creates ignored `desktop/.venv-native`,
+installs the constrained core, checks Python `-I` import and supplies a required
+absolute venv executable to Rust tests. Headless mode rejects dependency identities
+not in the production lock before tests run. It does not compile Tauri GUI wiring.
+
+Frontend/browser checks, from `desktop/`:
+
+```bash
 npm ci
 npm test
 npm run build
@@ -44,17 +64,11 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 npm run desktop:build -- --no-bundle
 ```
 
-Browser tests self-host the built bundle on a temporary loopback port. Their IPC
-stand-in invokes the actual Python bridge with a temporary database. It validates
-renderer→Python→SQLite behavior, not native Rust IPC or OS packaging. Chromium
-download was unavailable here; the recorded run used installed Chromium 141 via
-`DRIFTGUARD_BROWSER_EXECUTABLE`.
+Browser tests self-host the built bundle. Their test-only IPC invokes actual
+Python/SQLite, not native Rust IPC. Original Chromium download was unavailable;
+that run selected installed Chromium via DRIFTGUARD_BROWSER_EXECUTABLE.
 
-`.github/workflows/desktop-validation.yml` prepares Python/UI jobs on Linux,
-macOS and Windows, plus unsigned no-bundle native builds on macOS/Windows. It
-does not publish installers. Run and inspect it after authorized branch publication.
-
-Before release, test native startup/shutdown, paths, file selection/downloads,
-engine failure, connection loss, sleep/wake, long catalogs, high-DPI scaling,
-keyboard/focus, reduced motion, screen readers, installation/signing and updates
-on actual target platforms.
+CI does not publish installers. Before release, verify native startup/shutdown,
+file selection/downloads, engine failure, sleep/wake, high-DPI, keyboard/focus,
+reduced motion, screen readers, installation/signing and updates on actual target
+systems. Resolve the Linux dependency findings before a Linux production release.

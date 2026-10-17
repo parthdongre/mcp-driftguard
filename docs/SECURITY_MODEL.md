@@ -150,3 +150,25 @@ Official sources checked on 15 October 2026:
   adapter must be explicitly versioned and must not claim 2026 compliance.
 
 The store is transport-independent and does not itself claim wire-protocol compliance.
+
+## Native bridge deadline and response boundary
+
+The native reviewer uses one 20-second deadline for queueing behind another
+request, writing stdin, consuming bounded stdout/stderr and waiting for child
+exit. The fixed Python module emits UTF-8 JSON bytes, independent of platform text
+encoding. Strict envelope/exit checks reject malformed or success-looking output
+from an unsuccessful process; the module's intentional safe error envelope on
+exit 1 remains usable. Diagnostics are counted/discarded and never echoed.
+
+Timeout cancellation releases the response awaits and requests direct-child
+termination; it does not promise hard real-time OS termination or descendant
+sandboxing. On Windows, Tokio can use internal blocking pipe workers which may
+outlive cancellation when descendants retain handles. No bounded underlying-worker
+lifetime or full process-tree cleanup is claimed. A review mutation may commit
+before its response times out: the client must refresh, not automatically replay.
+
+The 11 process-helper tests run with an actual installed isolated Python module.
+Headless Linux validation removes only Tauri window/command wiring and verifies
+all resolved dependency identities against the production lock. It does not
+exercise native windows or certify the Linux GTK stack; see
+[audit/DEPENDENCY_FINDINGS.md](audit/DEPENDENCY_FINDINGS.md).

@@ -21,7 +21,12 @@ operations and invokes a fixed module with `DRIFTGUARD_PYTHON`, an absolute trus
 virtual-environment executable, using Python `-I`. The renderer cannot choose the
 executable, database or module. No shell, HTTP service, browser auth integration,
 filesystem plugin or remote analysis provider is enabled. The response is bounded
-and the worker has a deadline. Permission/capability files restrict this command to
+and one async deadline covers queueing, stdin, stdout/stderr and process exit.
+Tokio is already part of Tauri's dependency graph; explicitly enabling its small
+process/I/O feature set avoids unbounded synchronous writes and reader joins.
+This change follows reproduced pipe/deadline failure scenarios, not a performance
+claim. Cancellation requests direct-child cleanup; Windows internal pipe workers
+and descendants may outlive a request, and OS calls are not hard real-time. Permission/capability files restrict this command to
 the local main window. Native code remains privileged and must be independently
 reviewed; CSP is defense in depth, not a substitute for boundary validation.
 

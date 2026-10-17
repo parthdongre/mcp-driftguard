@@ -70,6 +70,11 @@ and Cargo lock are committed. Models and experiment data are not installer asset
 Profile measurements describe generated fixtures and Python allocations, not whole
 app memory or production latency. See [audit/local-core-profile.json](audit/local-core-profile.json).
 
+The native IPC path uses one deadline for queueing, input/output and exit, validates
+response envelopes and emits explicit UTF-8 bytes across the Python boundary.
+Timeouts require refresh because a review mutation may already have committed;
+no automatic replay or descendant sandbox is claimed.
+
 The current desktop requires a separately installed Python virtual environment.
 Bundled sidecars, OS vaults, signed installers, secure updates and macOS/Windows
 native verification are release work, not completed guarantees. The architecture
