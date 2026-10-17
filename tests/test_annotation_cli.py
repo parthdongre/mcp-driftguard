@@ -36,6 +36,6 @@ def test_annotation_cli_checks_adjudication_references_before_export(tmp_path, f
         "--adjudications", str(tmp_path / "adjudications.jsonl"),
         "--reviewed-output", str(output),
     ], cwd=root, env={**os.environ, "PYTHONPATH": str(root / "src")},
-       capture_output=True, timeout=20)
+       capture_output=True, timeout=20, check=False)
     assert (result.returncode != 0) is forged
     assert output.exists() is not forged

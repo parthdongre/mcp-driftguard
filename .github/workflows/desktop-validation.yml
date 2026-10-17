@@ -106,6 +106,15 @@ jobs:
         run: npm run desktop:package -- --bundles deb
       - name: Verify bundled or installed engine and native window startup
         run: python desktop/scripts/verify-package.py
+      - name: Prepare verified unsigned review package
+        run: python desktop/scripts/prepare-review-artifact.py
+      - name: Retain unsigned preview for owner review
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-desktop-preview-${{ matrix.os }}
+          path: desktop/build/review/
+          retention-days: 14
+          if-no-files-found: error
       - name: Retain runtime provenance
         uses: actions/upload-artifact@v4
         with:

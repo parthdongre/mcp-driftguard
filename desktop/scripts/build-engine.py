@@ -88,6 +88,9 @@ def main() -> int:
     )
     engine = OUTPUT / NAME / (NAME + (".exe" if os.name == "nt" else ""))
     verify(engine)
+    subprocess.run([sys.executable, str(ROOT / "desktop/scripts/write-notices.py"),
+                    str(engine.parent / "THIRD_PARTY_NOTICES.md")],
+                   cwd=ROOT, check=True, timeout=180)
     files = {}
     for path in sorted(engine.parent.rglob("*")):
         if path.is_file():
