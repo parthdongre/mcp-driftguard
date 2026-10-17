@@ -6,9 +6,20 @@ on:
     branches: [main]
   push:
     branches: ["dev/**"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "desktop/**"
+      - "requirements/**"
+      - "pyproject.toml"
+      - ".github/workflows/desktop-validation.yml"
 
 permissions:
   contents: read
+
+concurrency:
+  group: desktop-validation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-and-ui:
