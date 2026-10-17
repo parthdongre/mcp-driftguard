@@ -31,7 +31,7 @@ jobs:
       - name: Install Python core and validation dependencies
         run: python -m pip install -e ".[dev]" "scikit-learn>=1.5" -c requirements/core-constraints.txt
       - name: Python correctness and security tests
-        run: python -m pytest -q
+        run: python -m pytest -vv --durations=20 --timeout=60 --timeout-method=thread -o faulthandler_timeout=30
       - name: Lint source and tests
         run: python -m ruff check src tests
       - name: Install pinned UI dependencies
