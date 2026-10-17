@@ -125,7 +125,8 @@ and directories retain their permissions. Database symlinks and other nonregular
 targets are rejected. Existing parent directories remain part of the trusted local
 boundary; this is not protection against an attacker who can replace paths in those
 directories during opening. Windows access remains governed by the user's filesystem
-ACLs; no credentials vault or credential persistence is implemented here.
+ACLs. HTTP credentials use endpoint-bound native OS stores or explicitly named
+environment variables; they are not stored in SQLite. See the credential boundary below.
 
 ## Current MCP protocol guidance
 
@@ -145,7 +146,7 @@ Official sources checked on 15 October 2026:
   remain bound to the authorization context; notifications invalidate cached responses.
   Pagination provides no cross-page consistency guarantee.
 - [Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
-  future HTTP adapters must implement per-message POST, required routing/version headers,
+  HTTP adapters must implement per-message POST, required routing/version headers,
   body/header agreement, JSON/SSE responses and subscription streams. An older protocol
   adapter must be explicitly versioned and must not claim 2026 compliance.
 
@@ -172,3 +173,37 @@ Headless Linux validation removes only Tauri window/command wiring and verifies
 all resolved dependency identities against the production lock. It does not
 exercise native windows or certify the Linux GTK stack; see
 [audit/DEPENDENCY_FINDINGS.md](audit/DEPENDENCY_FINDINGS.md).
+
+## Packaged runtime and HTTP credential boundary — 17 October followup
+
+Packaged release builds resolve one fixed engine from the installed application's
+resources. They do not accept `DRIFTGUARD_PYTHON` environment overrides. Debug builds
+retain the explicitly configured virtual-environment workflow. The renderer cannot
+choose an executable, module, state path or command-line arguments for review IPC.
+The packaged engine dispatches only the fixed bridge/gateway/credential entry points.
+
+The HTTP upstream validates TLS, disables redirects/ambient proxies, serializes
+bounded JSON/SSE exchanges and never automatically replays failed calls.
+Modern routing mirrors body metadata into required method/name/parameter headers;
+invalid routing annotations withhold the affected tool. Legacy remote session
+identifiers are opaque, bounded and never persisted. Modern HTTP has no such
+protocol sessions; the fresh local approval nonce still separates gateway instances.
+
+Native credential accounts bind the exact configured source identifier and HTTPS
+endpoint. Store/remove actions return availability metadata only, never a stored
+value. Windows uses Credential Manager; macOS uses Keychain; Linux uses Secret
+Service through `secret-tool`, with no plaintext fallback. Secrets necessarily
+exist in process memory while authenticating and checking output. This does not
+claim memory erasure, a compromised-renderer defense, or resistance to another
+process with the same local account and native-store authority. Credential unlock
+may require OS interaction. No OAuth discovery/refresh implementation is claimed.
+
+Heartbeats record process activity only and cannot create consent. Old gateway
+instances cannot overwrite replacement activity. A recent local heartbeat is not
+remote liveness, execution attestation or proof of systemwide interception.
+
+The compatibility sources backport the upstream GLib mutable out-pointer fix and
+replace unmaintained macro helpers. The raw dated RustSec report is retained
+separately from the source-level compatibility decision; neither substitutes for
+independent security review. Signing, notarization, update trust and manual native
+usability/accessibility verification remain production-release requirements.

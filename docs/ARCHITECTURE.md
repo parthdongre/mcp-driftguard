@@ -10,7 +10,7 @@ flowchart TD
   UI["React desktop review"] --> R["Tauri allowlisted IPC"]
   R --> B["Fixed Python JSON bridge"]
   B --> DB["SQLite approvals and evidence"]
-  C["Explicitly routed MCP client"] --> G["Tools-only stdio gateway"]
+  C["Explicitly routed MCP client"] --> G["Tools-only stdio facade"]
   G --> DB
   G --> S["Configured upstream subprocess"]
   DB --> E["Existing deterministic research core"]
@@ -22,10 +22,10 @@ flowchart TD
 | `canonicalize.py`, `diff.py`, `models.py` | Context-aware canonicalization, separate exact hashes, typed changes, integrity verification | Descriptors are untrusted data; normalized hashes never grant consent |
 | `features.py`, `capabilities.py`, `temporal.py` | Interpretable inferred capabilities and approved/adjacent temporal evidence | Heuristic evidence; no runtime capability verification |
 | `gateway.py` | Persistent identities, catalogs, approvals, quarantine latches, revisions, audit and protected dispatch | Trusted local SQLite store; bounded comparison with manual fallback |
-| `gateway_transport.py` | Fixed-argv subprocess, identity/session binding, bounded JSON-RPC, complete relisting and independent text egress checks | Explicit legacy/modern tools subset; no HTTP, sandbox, server callbacks or complete output protection |
+| `gateway_transport.py` / `gateway_http.py` | Fixed-argv stdio or configured HTTPS upstream; identity binding, JSON/SSE, routing headers, complete relisting and independent text egress checks | Explicit legacy/modern tools subset; no OAuth, sandbox, general server callbacks or complete output protection |
 | `gateway_cli.py` | Opt-in client-facing stdio facade and safe identity diagnostic | Stdout is protocol only; no approval method is exposed through MCP |
 | `desktop_bridge.py` | One JSON request per process; fixed review action allowlist | Native host selects DB; imported sources use a namespace distinct from live gateway identities |
-| `desktop/src-tauri` | Native shell, capability/CSP, fixed isolated Python invocation and bounded response | No shell/filesystem/network plugins, renderer path/executable override or production HTTP listener |
+| `desktop/src-tauri` | Native shell, capability/CSP, fixed packaged engine or debug-only isolated Python and bounded response | No shell/filesystem/network plugins, renderer path/executable override or HTTP listener |
 | `desktop/src` | Overview, imported/observed sources, review, history, activity, annotation, appearance | Browser fixture mode is isolated and explicit; UI does not establish live gateway health |
 | `sequential_experiments.py` | Isolated EWMA and standardized multivariate CUSUM | Experimental; not plugged into authorization |
 | `capability_graph.py` | Typed evidence-bearing reachability witnesses and graph updates | Explicit graph inputs; not inferred runtime authority, not deployed enforcement |
@@ -75,7 +75,23 @@ response envelopes and emits explicit UTF-8 bytes across the Python boundary.
 Timeouts require refresh because a review mutation may already have committed;
 no automatic replay or descendant sandbox is claimed.
 
-The current desktop requires a separately installed Python virtual environment.
-Bundled sidecars, OS vaults, signed installers, secure updates and macOS/Windows
-native verification are release work, not completed guarantees. The architecture
+Source development may use a separately installed Python virtual environment.
+Packaged builds include the fixed Python engine and reject environment executable overrides.
+Bundled engines, endpoint-bound OS credentials and automated native startup checks
+are implemented. Signed production installation, secure update trust and manual
+native interaction/accessibility verification remain release work. The architecture
 decision is [adr/desktop.md](adr/desktop.md).
+
+## Native completion followup
+
+The setup screen generates explicit stdio/HTTPS profiles and the chosen client's
+gateway configuration. HTTP credentials are endpoint-bound OS-store entries or
+named environment references; only store/remove metadata returns to the renderer.
+Local heartbeat rows describe gateway process activity, independently of approval.
+
+Packaged verification executes the frozen engine, checks the installed/bundled
+resource and launches the real WebView. Renderer-triggered SQLite initialization
+provides end-to-end startup evidence. Linux's headless runner uses software
+compositing under Xvfb; that is a test-environment setting, not a product default.
+See the current platform matrix for executed results rather than treating the
+existence of a test script as proof of a pass.

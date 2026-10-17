@@ -1,7 +1,8 @@
 # DriftGuard desktop research preview
 
 React/TypeScript/Vite interface with a Tauri 2 shell. This is a development
-prototype requiring a local Python environment; no signed installer is delivered.
+preview. Native package builds include their own Python engine; source development
+can use a local virtual environment. No signed/notarized production installer is delivered.
 
 ## Browser interface
 
@@ -109,3 +110,42 @@ identity differing from the production Cargo.lock. It is not a GUI launch test.
 A timed-out mutation may already have committed. Refresh before another decision;
 the native bridge does not automatically repeat requests. See the security model
 for Windows worker and descendant-lifetime limitations.
+
+## Self-contained preview packages
+
+From an installed, constrained Python 3.12 development environment at repository root:
+
+```bash
+python -m pip install -e . -c requirements/core-constraints.txt pyinstaller==6.22.3
+python desktop/scripts/build-engine.py
+cd desktop
+npm ci
+npm run desktop:package -- --bundles app
+```
+
+Use `--bundles nsis` on Windows and `--bundles deb` on Linux. Tauri platform
+prerequisites still apply to the build machine. The installed preview does not
+need a separately installed Python environment. Release builds require the fixed
+packaged resource; `DRIFTGUARD_PYTHON` is for debug builds only.
+
+CI verifies the frozen engine's actual Unicode review/approval/quarantine behavior,
+the installed or bundled resource, and real native process/WebView startup through
+renderer-triggered SQLite initialization. Linux additionally checks a visible
+window under Xvfb; Windows checks a native window handle. These are startup and
+integration checks, not manual native interaction or screen-reader certification.
+
+Verified unsigned previews are retained as GitHub Actions artifacts for owner
+review, alongside package SHA-256, source revision, engine file hashes and
+dependency notices. They are not a signed production release or an automatic update
+channel. Platform details are in [CROSS_PLATFORM_TESTING.md](../docs/CROSS_PLATFORM_TESTING.md).
+
+The connection screen prepares stdio/HTTPS profiles and a client configuration
+using the installed engine and shared store. Saving a profile does not execute
+server code. Merge the generated entry into the chosen MCP client's own
+configuration, restart that client, then return to review the new session.
+Raw profiles can include private executable paths/arguments; inspect before sharing.
+
+On Linux, hardware/virtual-display graphics can require the
+[documented WebKitGTK workarounds](https://v2.tauri.app/develop/debug/linux-graphics/).
+The CI virtual display uses software compositing only for its disposable startup
+test. Manual checks on the intended desktop/GPU remain part of release review.

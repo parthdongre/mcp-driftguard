@@ -1,8 +1,9 @@
-# Explicit stdio MCP protection gateway
+# Explicit MCP protection gateway
 
 `driftguard-gateway` is a working, opt-in, tools-only stdio mediator. It starts
-one explicitly configured subprocess with a fixed argument vector, discovers its
-tool catalog, and exposes definitions only after exact local approval. The desktop
+one explicitly configured subprocess or HTTP upstream, discovers its tool catalog,
+and exposes definitions only after exact local approval. The stdio subprocess path
+uses a fixed argument vector. The desktop
 review app and gateway share a SQLite state file. It does not intercept clients
 that connect directly to the original server.
 
@@ -23,8 +24,8 @@ such as the following, using your own server executable, script and directory:
 ```
 
 To connect a legacy server, explicitly choose `2025-11-25`. There is no automatic
-version downgrade. HTTP URLs and shell command strings are not accepted transports.
-Arguments are executed directly, with `shell=False`.
+version downgrade. A stdio profile uses a fixed argument vector, with `shell=False`.
+Use the separate explicit HTTP profile below for a remote endpoint.
 
 ```bash
 driftguard-gateway identity --config /absolute/path/to/connection.json
@@ -100,9 +101,8 @@ the launch environment and never written into the configuration or audit records
 Exact known-credential checks cover passed values at least eight characters long,
 including tool definitions before persistence. Shorter values, transformed secrets,
 and secrets obtained independently by the server are not comprehensively detected.
-Use your OS credential manager or host to supply secrets. DriftGuard does not yet
-provide an OS keychain integration. Changing passed environment values invalidates
-the connection identity.
+Use the endpoint-bound OS credential store or explicitly named environment variables.
+Changing the configured credential invalidates the connection identity.
 
 ## Protocol implementation and limits
 
@@ -118,18 +118,16 @@ Verified against official primary specifications on 2026-10-15:
 | Subscriptions | Unsupported; no subscription/list-change capability advertised |
 | MRTR / input-required results | Rejected; no roots, sampling, elicitation or extension capability advertised |
 | Request cancellation | Calls are serialized and time-bounded; concurrent cancellation is not implemented |
-| Streamable HTTP | **Not implemented**; no HTTP compatibility claim |
+| Streamable HTTP | Explicit HTTPS endpoint; JSON and bounded request-scoped SSE; current method/name/parameter routing headers; legacy sessions only in the legacy profile |
 | JSON Schema | Core validates definition schemas against supported JSON Schema 2020-12 metaschema; argument/output instance validation and external `$ref` resolution are not implemented; outputSchema tools are withheld |
-| Platform validation | Authored subprocess tests run on Linux here; macOS/Windows runtime validation remains pending |
+| Platform validation | Actual authored stdio and loopback HTTP tests run on Linux/macOS/Windows; see the current platform evidence for native packaging/startup results |
 
 This is a restricted interoperable tools subset, **not full MCP conformance**.
-Modern MCP additionally requires subscription/MRTR mechanics and schema support
-that remain work items. In particular, modern HTTP requires per-request metadata
-mirrored into `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers, matching
-body/header validation, schema-derived `Mcp-Param-*` headers, JSON and request-scoped
-SSE responses, and changed lifecycle rules. None of these are simulated by the
-stdio implementation. A later HTTP adapter also needs credential-manager/OAuth
-integration, TLS validation, redirect restrictions, Origin checks and SSRF policy.
+The supported HTTP subset includes per-message POST, required protocol/method/name
+headers, schema-derived primitive parameter headers with sentinel encoding, and JSON
+or request-scoped SSE responses. Modern HTTP does not send legacy session headers.
+Subscriptions, MRTR, general cancellation, OAuth discovery/refresh and arbitrary
+schema-instance evaluation remain unsupported. This is not full MCP conformance.
 
 Official references:
 
@@ -177,3 +175,66 @@ modern/legacy wire formats, withholding before approval, changed and revoked
 definitions, policy revisions, reconnect, malformed and duplicate catalogs,
 pagination loops, oversized frames, wrong response IDs, timeouts, executable-file
 identity changes, output-secret checks, method restrictions and JSON-only CLI output.
+
+## Configured Streamable HTTP upstream
+
+The downstream MCP client still launches the stdio gateway. Its upstream may be
+an explicitly configured HTTP endpoint:
+
+```json
+{
+  "transport": "http",
+  "server_id": "my-remote-server",
+  "url": "https://server.example/mcp",
+  "protocol_version": "2026-07-28",
+  "use_os_vault": true,
+  "timeout_seconds": 15
+}
+```
+
+The connection screen generates this profile and the client command using the
+installed engine and exact native database path. With a source checkout, store an
+endpoint-bound bearer credential without placing it on a command line:
+
+```bash
+driftguard-credentials set --server-id my-remote-server --url https://server.example/mcp
+```
+
+The bundled engine provides the same operation as
+`driftguard-engine credentials set --server-id ... --url ...`.
+Use `delete` to remove it. The desktop can store/remove a credential; it never
+returns a saved value to the renderer. macOS uses Keychain, Windows Credential
+Manager, and Linux Secret Service through `secret-tool`. An unavailable/locked
+store fails; no plaintext fallback is created. Linux needs an installed
+`secret-tool` and unlocked Secret Service session.
+
+Alternatively replace `use_os_vault` with `"auth_token_env": "MCP_API_TOKEN"`.
+Only the variable name belongs in the profile. The two sources are exclusive.
+Credential rotation changes the identity binding and requires a new review.
+OAuth discovery, interactive authorization and refresh are not implemented.
+
+HTTPS uses the system trust store. Redirects and ambient HTTP proxy settings are
+not followed; authentication/session failure does not automatically retry a call.
+Plain HTTP requires `allow_insecure_loopback: true` and a literal loopback address.
+The desktop setup deliberately offers HTTPS endpoints only. URLs with embedded
+credentials, queries or fragments are rejected.
+
+Modern routing validates statically reachable primitive `x-mcp-header`
+annotations and omits invalid tools with a metadata-only event. Literal schema
+defaults/examples are not interpreted as routing instructions. Values containing
+Unicode, controls, outer whitespace or the literal Base64 sentinel use the
+specified sentinel encoding; header counts/bytes are bounded. The gateway does
+not fetch endpoint URLs supplied by tools.
+
+Request deadlines bound the HTTP worker exchange. Socket shutdown interrupts
+stalled body reads without waiting on a buffered-reader lock. OS credential
+unlock, scheduling, DNS and direct OS operations are not a hard real-time
+guarantee; cancellation is best effort. A timed-out call may already have caused
+remote effects. Refresh local state and investigate before retrying.
+
+## Process activity
+
+The connection screen shows identity-bound local process heartbeats. A stale or
+stopped heartbeat is not silently presented as an active connection. A recent
+heartbeat does not prove that an MCP client routes all its calls through this
+gateway, that a remote endpoint is reachable, or that its implementation is safe.

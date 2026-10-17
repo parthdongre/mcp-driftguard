@@ -1,37 +1,59 @@
 # Native dependency findings — 17 October 2026
 
-`cargo-audit 0.22.2` inspected **411** packages in the production Cargo.lock against
-RustSec database commit `999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b`
-(1338 advisories; last update 2026-10-17T17:23:59+02:00).
+The initial scan found GLib unsoundness and an obsolete macro helper. The current
+compatibility sources and lockfile address those paths explicitly; raw historical
+evidence is retained below rather than overwritten.
 
-The tool reports **0 vulnerability-category entries**, **1 unsoundness warning**
-and **1 unmaintained warning**. This is **not a clean audit**. Raw results are in
-[rust-dependency-audit.json](rust-dependency-audit.json).
+## Current compatibility-source evidence
 
-| Finding | Locked dependency and path | Decision |
-|---|---|---|
-| [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html): unsound VariantStrIter iteration | glib 0.18.5 through the Linux GTK/WebKit/Tauri stack | Linux native production release remains blocked pending a compatible reviewed fix. RustSec lists >=0.20.0 patched; GTK 0.18 currently requires the 0.18 line, so a direct version override is not a validated solution. |
-| [RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370.html): unmaintained proc-macro-error | proc-macro-error 1.0.4 through Linux glib-macros/gtk3-macros | Retain the maintenance finding; replace through a compatible upstream dependency path or reviewed backport before release. No blanket ignore was added. |
+[Native dependency workflow 39056535860](https://github.com/parthdongre/mcp-driftguard/actions/runs/39056535860)
+uses `cargo-audit 0.22.2` and RustSec database commit
+`999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b` (1338 advisories). It reports
+**0 vulnerability entries and 0 warnings** for the revised lockfile.
 
-`cargo tree --locked -i PACKAGE --target TARGET` selects both dependencies for
-`x86_64-unknown-linux-gnu` and neither for `aarch64-apple-darwin` or
-`x86_64-pc-windows-msvc`. Exact commands and trees are in
-[rust-dependency-paths.json](rust-dependency-paths.json). This establishes target
-dependency selection, not whether an affected function is reachable from an
-untrusted input. No exploit-reachability or whole-product safety claim follows.
+This requires qualification: GLib 0.18.5 is now a local path patch, so the registry
+version scan alone is insufficient evidence. The audit separately verifies the
+exact upstream mutable out-pointer backport, while optimized native regression
+tests exercise forward/backward string iteration. Third-party sources retain their
+licenses, original archive checksums and narrow change provenance.
 
-The Linux headless bridge tests omit GUI wiring and select only the process
-helper dependencies; they do not exercise or certify GTK. macOS/Windows builds
-and tests are likewise not a substitute for independent security review, native
-GUI validation, signing, installation or secure updates.
+| Original finding | Implemented resolution |
+|---|---|
+| RUSTSEC-2024-0429, GLib VariantStrIter unsoundness | Exact upstream fix b5a4071e439bef2b5eea76c3aa25e5ae84839e34 backported to the compatible 0.18.5 source |
+| RUSTSEC-2024-0370, unmaintained proc-macro-error 1 | Remove the helper from the lock; the two macro crates use proc-macro-error3 3.1.1 with explicit syn2-error compatibility |
+| RUSTSEC-2026-0173, unmaintained proc-macro-error2 | Fresh audit rejected the initially proposed replacement; version 2 is absent from the final lock |
 
-Reproduce from the repository root:
+The macro root aliases account for the maintained helper's generated absolute
+crate paths. `third_party/PROVENANCE.json` and
+`desktop/scripts/vendor-gtk.py` record/reproduce the compatibility source changes.
+The official fork metadata and exact crates.io index checksums were checked before
+selecting 3.1.1; no blanket advisory ignore was added.
+
+The raw scan and interpreted summary are retained as workflow artifacts.
+The committed [current summary](rust-dependency-followup.json) records the counts,
+database revision and explicit lack of an independent audit. Neither a zero-count
+lockfile scan nor these tests establish whole-product safety, signing, installation
+compatibility on every distribution, or independent security certification.
+
+## Historical initial scan
+
+The following records describe the original registry-only lockfile before the
+compatibility changes and are retained for audit history:
+
+- [Initial raw audit](rust-dependency-audit.json): zero vulnerability-category
+  entries, GLib unsoundness warning and proc-macro-error maintenance warning.
+- [Initial target dependency paths](rust-dependency-paths.json): both original
+  dependencies selected for Linux, not macOS/Windows.
+- An intermediate fresh scan additionally identified RUSTSEC-2026-0173 in
+  proc-macro-error2; that candidate was replaced, not suppressed.
+
+Reproduce the current scan:
 
 ```bash
 cargo install cargo-audit --version 0.22.2 --locked
-cargo audit --file desktop/src-tauri/Cargo.lock --json
-cargo tree --locked --manifest-path desktop/src-tauri/Cargo.toml -i glib@0.18.5 --target x86_64-unknown-linux-gnu
+python desktop/scripts/audit-native.py
 ```
 
-Advisory lookup is dated evidence. Recheck the current database before release;
-retain warnings even when the tool's default exit status is zero.
+Recheck the advisory database before production release. Native GUI/manual
+accessibility validation, signing, update trust and independent security review
+remain separate requirements.

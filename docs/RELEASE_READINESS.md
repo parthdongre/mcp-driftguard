@@ -1,51 +1,58 @@
 # Release readiness
 
-**Reviewable internal prototype; not ready for native production release or
-publication-grade research claims.** The owner-approved feature branch is public.
-No main merge, installer, raw research corpus or manuscript submission was published.
+**Unsigned review preview. Production signing and publication-grade research remain
+separate completion gates.** Source and review documentation are on the approved
+feature branch; main is preserved. Preview artifacts are produced only after their
+installation/runtime/startup checks pass. No public production release or manuscript
+submission is claimed.
 
-| Area | Present evidence | Release blocker / limitation |
+| Area | Implemented | Remaining boundary |
 |---|---|---|
-| Correctness | 218 Python tests passed locally, 1 optional skip; schema/integrity/research regressions covered | Independent audit and optional-model paths remain |
-| Consent | Exact hash, revision, principal, server/session, protocol and policy binding; persistent quarantine; local dispatch transaction | Remote check/use race only reduced; no distributed audit/effect transaction or exactly-once guarantee |
-| Gateway | Tools-only stdio subset for 2026-07-28 and separately configured 2025-11-25; subprocess tests | HTTP/OAuth, callbacks/subscriptions/cancellation and broad MCP parity absent |
-| Untrusted runtime | Bounded input, fixed action surface, timeouts, session invalidation and text output checks | No sandbox, Windows Job Object guarantee, dependency attestation, broad DLP or arbitrary prompt-injection protection |
-| Desktop | 6 logic tests, production build, 20 browser checks and 5 sampled accessibility states pass | 11 process-helper tests pass locally/Linux CI; native macOS/Windows IPC tests and unsigned builds pass; manual GUI interaction unverified |
-| Platforms | Tauri source, Rust formatting; macOS/Windows native IPC tests and unsigned builds pass | Linux full native prerequisites absent and GTK dependency unsoundness unresolved; no native GUI launch/interaction tested |
-| Distribution | Attribution retained; npm/Cargo locks, runtime constraints and wheel smoke check | No bundled Python, signing/notarization, installers, secure updates or OS installation verification |
-| Privacy | Local state, metadata-only audit, no configured cloud/telemetry; new POSIX DB 0600 and own directories 0700 | No OS vault, retention/rotation UI, DB encryption or complete export anonymization guarantee; descriptors may be sensitive |
-| Dependencies | Dated Python runtime and npm lookups report no known advisories | Rust audit: 0 vulnerability-category entries, 2 actual warnings in Linux GTK path; Linux production release blocked. See audit/DEPENDENCY_FINDINGS.md; full independent review pending |
-| Data | 494 primary candidates from 11 groups, 227 reference rows, 721 exact reproductions | 0 human labels; language/source concentration, licensing/extraction review and >=30 contributing primary groups still required |
-| Research | Narrow hypothesis, verified overlap, corrected utilities, controlled experiments explicitly ineligible | No frozen independent final evaluation, complete baselines/ablations, repeated seeds or final manuscript |
-| Authorization | Dedicated local branch; original main unchanged | Branch code/review-doc publication approved; raw restricted corpus, installers and main merge still require explicit approval |
+| Engine correctness | Literal-safe schemas, exact identity/revision binding, bounded catalogs, persistent quarantine and evaluation safeguards | Independent audit and optional-model paths |
+| Gateway | Real stdio and configured HTTPS upstreams; JSON/SSE; current routing headers; complete pre-call relisting; metadata audit and text egress checks | Tools-only subset; no OAuth, MRTR/subscriptions, broad DLP, sandbox, handler attestation or distributed exactly-once guarantee |
+| Credentials | Endpoint-bound macOS Keychain / Windows Credential Manager / Linux Secret Service access; no plaintext fallback; stored values never returned to renderer | Linux needs an unlocked Secret Service session; credentials exist in process memory; no OAuth discovery or refresh |
+| Desktop | Review/history/activity, guided stdio/HTTP setup, process heartbeats, blinded annotation/export, themes and keyboard support | Client configuration is explicitly merged by the user; heartbeats do not prove routing or upstream safety; manual native usability/accessibility remains |
+| Packaging | Fixed bundled Python engine, release override rejection, platform installers/bundle paths, dependency notices, package/file hashes and source provenance | Unsigned/unnotarized previews; secure update trust and broad OS installation compatibility remain |
+| Native verification | Fixed-module IPC tests, actual frozen-engine decisions, installed/bundled resource checks and renderer-triggered SQLite startup | These checks do not certify manual interactions, screen readers, high-DPI behavior or all lifecycle/OS combinations |
+| Linux dependencies | Exact GLib source backport and current compatible macro helper; fresh dated RustSec scan has 0 vulnerability entries / 0 warnings | Registry scanning alone does not certify local patched source; retain backport tests and independent review |
+| Data | 494 primary candidates from 11 groups, 227 separate reference records, 721 exact reproductions | Zero human labels; broaden to >=30 contributing primary groups, validate extraction/licensing and obtain >=500 eligible independently reviewed transitions |
+| Research | Verified prior-art overlap, protocol, corrected utilities and explicitly ineligible development experiments | Independent attacks/final evaluation, complete baselines/ablations, calibration/repeated seeds/cluster intervals and final manuscript |
 
-## Visible security boundaries
+## Verification record
 
-Only explicitly routed supported connections are covered. Every changed exact tool
-definition needs reapproval. Reduced re-consent at comparable security recall is
-**not demonstrated**; it remains a research hypothesis. Quarantine may include
-heuristic false positives and is latched for the exact definition. Recovery needs
-separately reviewed authority rather than silently clearing evidence.
+All six jobs pass on source revision `1248ebc` in
+[platform run 39057785978](https://github.com/parthdongre/mcp-driftguard/actions/runs/39057785978).
+The Python suites pass 256/252/255 tests on macOS/Windows/Linux respectively;
+9 frontend logic tests and 23 browser checks pass, with zero automated violations
+in six sampled accessibility states. Native IPC, packaged engines, installations
+and actual WebView startup pass on all three CI targets.
 
-A malicious server can change a handler without changing its declaration, access
-local resources under the user's privileges or race a descriptor check. Config
-hashes and self-reported metadata do not prove behavior. The gateway does not
-establish end-to-end formation consistency or complete cross-tool information-flow
-control. Graph witnesses describe supplied evidence, not enforcement. Heuristic
-risk floors are not calibrated probabilities.
+See [CROSS_PLATFORM_TESTING.md](CROSS_PLATFORM_TESTING.md) for the exact revision,
+platform jobs, counts and any open failure. The presence of a packaging or smoke
+script is not itself evidence that the corresponding platform passed.
 
-## Release sequence
+The native startup check launches the actual packaged WebView and requires its
+renderer to initialize the bundled Python/SQLite engine. Linux additionally checks
+a visible Xvfb window using software compositing; Windows checks a real native
+window handle. This is stronger than a compile-only check and still distinct from
+manual native interaction.
 
-1. Inspect the passing native followup evidence; exercise native window and
-   ordinary/failure workflows on actual targets; resolve the Linux GTK warnings.
-2. Resolve native integration, credentials, packaging and update trust; independently
-   review authorization, IPC, transport and recovery.
-3. Freeze dependencies/artifacts and build provenance; verify installation,
-   accessibility, lifecycle and performance on target systems.
-4. Finish independent annotation, licensing and preregistered evaluation before
-   separately releasing research data or a paper.
-5. Obtain explicit owner approval for the concrete public release or main merge.
+## Release gates
 
-Results: [CROSS_PLATFORM_TESTING.md](CROSS_PLATFORM_TESTING.md).
-Progress: [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
-Boundaries: [SECURITY_MODEL.md](SECURITY_MODEL.md).
+1. Review the verified unsigned preview on the intended macOS/Windows/Linux systems,
+   including ordinary/failure workflows, accessibility, display scaling and lifecycle.
+2. Complete independent authorization/IPC/transport/credential/recovery review.
+3. Configure owner-controlled signing/notarization and secure update trust, freeze
+   artifacts/provenance and verify the signed installation/update paths.
+4. Complete independent human annotation and the frozen research protocol before
+   finalizing paper results or releasing restricted raw data.
+5. Approve the concrete production release or main merge separately.
+
+Every changed exact definition still requires reapproval. Reduced re-consent at
+comparable malicious recall remains an unproven research hypothesis. A recent
+process heartbeat, a zero-count advisory scan and passing engineering tests do not
+establish detector superiority or whole-product security.
+
+[Annotation handoff](research/ANNOTATION_HANDOFF.md) ·
+[Dependency findings](audit/DEPENDENCY_FINDINGS.md) ·
+[Security model](SECURITY_MODEL.md)

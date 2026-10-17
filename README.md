@@ -26,12 +26,14 @@ For the research framing and review material, see [`docs/RESEARCH_POSITIONING.md
 ## Unreleased implementation branch
 
 The research core now has a persistent exact-consent store, an opt-in tools-only
-stdio gateway, and a React/TypeScript desktop review interface with a Tauri 2 shell.
+stdio/HTTP gateway, and a React/TypeScript desktop review interface with a Tauri 2 shell.
 Start with [desktop setup](desktop/README.md), [gateway setup](docs/GATEWAY.md),
 [architecture](docs/ARCHITECTURE.md), and [verified progress](docs/IMPLEMENTATION_PROGRESS.md).
 
-The gateway supports a restricted stdio surface for MCP `2025-11-25` and `2026-07-28`.
-Streamable HTTP and signed desktop distribution are not implemented. Only clients
+The gateway supports restricted stdio and Streamable HTTP tools for MCP `2025-11-25`
+and `2026-07-28`, including modern routing headers and JSON/SSE responses. Native
+preview packaging includes the Python engine. Signing/notarization and secure
+updates remain release gates. Only clients
 explicitly routed through the gateway are mediated. Browser preview and imported
 definitions do not protect clients. See [security boundaries](docs/SECURITY_MODEL.md)
 and [release readiness](docs/RELEASE_READINESS.md).

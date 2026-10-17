@@ -1,0 +1,17 @@
+{
+  "vulnerability_count": 0,
+  "raw_warnings": [],
+  "unresolved_warnings": [],
+  "exact_upstream_glib_out_pointer_backport_present": true,
+  "unmaintained_proc_macro_error_absent": true,
+  "upstream_fix": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+  "independent_security_audit_completed": false,
+  "database": {
+    "advisory-count": 1338,
+    "last-commit": "999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b",
+    "last-updated": "2026-10-17T17:23:59+02:00"
+  },
+  "scope": "Dated Cargo.lock scan and exact local compatibility-source verification",
+  "source_revision": "6d268878c4a2a93fdb2520cf78154d9b448a824e",
+  "workflow_run_url": "https://github.com/parthdongre/mcp-driftguard/actions/runs/39056535860"
+}

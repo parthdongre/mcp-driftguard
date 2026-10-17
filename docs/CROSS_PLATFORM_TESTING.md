@@ -1,5 +1,73 @@
 # Verification and platform status
 
+Current packaged implementation: **17 October 2026**, source revision
+`1248ebc72075c2e55373cc80521d4870c2c18234`.
+[Platform run 39057785978](https://github.com/parthdongre/mcp-driftguard/actions/runs/39057785978)
+is the authoritative executed matrix for this code. Documentation-only followups
+do not change those runtime sources.
+
+| Check | macOS CI | Windows CI | Linux CI |
+|---|---|---|---|
+| Python correctness/security | 256 passed, 1 optional skip | 252 passed, 5 skips | 255 passed, 2 skips |
+| Frontend logic / TypeScript / Vite | 9 logic tests and production build pass | 9 logic tests and production build pass | 9 logic tests and production build pass |
+| Browser workflows | Executed in Linux browser job | Executed in Linux browser job | 23 checks; 6 sampled WCAG states, zero automated violations |
+| Rust / actual Python bridge | 11 pass | 11 pass | 11 pass with full native wiring; 11 additional headless-helper checks pass |
+| Optimized GLib backport regression | Not selected on this target | Not selected on this target | Forward/reverse/nth/last string iteration passes |
+| Frozen packaged engine | Unicode import/review/approval/stale rejection/quarantine passes | Same | Same |
+| Package validation | Bundled macOS app engine verified | NSIS install, installed engine and uninstall verified | Debian install, installed engine and removal verified |
+| Real native startup | WebView launches; renderer initializes bundled Python/SQLite store | Same plus native window handle | Same plus visible Xvfb window using software compositing |
+| Manual GUI / screen readers / high DPI | Not established | Not established | Not established |
+| Signed production installation / updates | Not established | Not established | Not established |
+
+The Linux extra skip is the native OS credential-store integration test because
+an unlocked Secret Service session is not configured there. macOS and Windows
+execute actual fixture-only credential create/read/update/delete checks. Windows
+also skips four POSIX-specific permission/symlink checks. The optional XGBoost
+path remains skipped. The frozen engine uses the constrained runtime versions;
+the independent core workflow also checks the declared supported dependency range.
+
+## What native startup establishes
+
+The actual installed/bundled application launches its native WebView. Frontend
+startup must invoke the real Rust command, launch the packaged Python engine and
+initialize the real SQLite policy table. A compile or separately executed Python
+helper alone cannot satisfy that assertion. Windows additionally requires a
+nonzero window handle; Linux requires a visible titled window under Xvfb.
+
+Linux's virtual-display launch uses a fresh D-Bus session, Openbox window manager,
+explicit X11 backend and a 1600x1200 Xvfb screen. Bare Xvfb did not map/initialize
+the window, so that incomplete desktop session was rejected rather than treated as
+a passing platform check. The launch sets `WEBKIT_DISABLE_COMPOSITING_MODE=1`,
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` and `LIBGL_ALWAYS_SOFTWARE=1` for that CI process.
+This is a headless-runner adaptation, not a change to normal product graphics
+defaults. See [Tauri Linux graphics guidance](https://v2.tauri.app/develop/debug/linux-graphics/).
+Hardware-specific display/driver behavior still needs target-machine testing.
+
+These checks do not click through native controls, exercise native screen readers,
+certify every OS version, test signed Gatekeeper/SmartScreen handling or prove
+graceful recovery in every process/OS failure. Browser QA is separate: its
+Python-backed test IPC stand-in does not claim native Rust IPC coverage.
+
+## Review artifacts and provenance
+
+The platform run retains unsigned per-platform preview packages for owner review.
+macOS archives preserve bundle symlinks. Each artifact includes package SHA-256 and
+the source revision; the separately retained engine manifest lists bundled file
+hashes and build versions. Installed packages include dependency notices.
+Artifacts are previews with 14-day retention, not a production release/update feed.
+
+The fresh [native dependency run](https://github.com/parthdongre/mcp-driftguard/actions/runs/39056535860)
+reports zero registry vulnerability entries/warnings and separately verifies the
+exact local GLib backport. See [dependency findings](audit/DEPENDENCY_FINDINGS.md)
+for why registry scanning is insufficient for locally patched source.
+
+## Historical pre-packaging evidence
+
+The following earlier verification record is preserved for traceability. Its
+limitations describe those earlier revisions rather than overriding the current
+packaged matrix above.
+
+
 Current engineering followup: **17 October 2026**, code revision
 `449bef11d20ae0e9a7a7321adbd2bea1c357b2cd`.
 [Platform CI](https://github.com/parthdongre/mcp-driftguard/actions/runs/39051463275)
@@ -72,3 +140,9 @@ CI does not publish installers. Before release, verify native startup/shutdown,
 file selection/downloads, engine failure, sleep/wake, high-DPI, keyboard/focus,
 reduced motion, screen readers, installation/signing and updates on actual target
 systems. Resolve the Linux dependency findings before a Linux production release.
+
+### Executed preview artifacts
+
+- [unsigned-desktop-preview-windows-latest](https://github.com/parthdongre/mcp-driftguard/actions/runs/39057785978/artifacts/12110560968) — artifact digest `sha256:d68f528ee756cde45355d3eabc23632316f504adee5392d0484ac870a0d0117c`
+- [unsigned-desktop-preview-ubuntu-latest](https://github.com/parthdongre/mcp-driftguard/actions/runs/39057785978/artifacts/12110296761) — artifact digest `sha256:53f6850d5cc95559200aa0c9ffdca96558e1d65e830477092884835f358d352b`
+- [unsigned-desktop-preview-macos-latest](https://github.com/parthdongre/mcp-driftguard/actions/runs/39057785978/artifacts/12109897372) — artifact digest `sha256:aa3faab63a5269f97a9fb802f4e8efe30f4fb19e789e8b198817014eb284b9c0`

@@ -1,4 +1,4 @@
-# Implementation progress — private review prototype
+# Implementation progress — unsigned review preview
 
 Authoritative baseline: `parthdongre/mcp-driftguard`, main at
 `9fcab36176279d77c4dd7f1950d47e4991697cf7` (v0.4.0). Work is on local branch
@@ -8,7 +8,36 @@ review documentation are public on that branch. No main merge, installer, raw
 corpus release or manuscript submission was performed.
 The research/source cutoff is **2026-10-15T18:06:27Z**, the initial request time.
 
-## 17 October continuation
+## 17 October native completion followup
+
+- Added configured HTTP upstream mediation with JSON/SSE responses, TLS validation,
+  explicit bearer authorization, no redirects/retries and bounded stream handling.
+- Matched the official modern HTTP method/name/parameter routing requirements,
+  including primitive schema paths, safe sentinel encoding and rejection of invalid
+  annotations. Modern remote protocol sessions are not reused from the legacy adapter.
+- Added endpoint-bound macOS/Windows OS credential access and Linux Secret Service
+  support without plaintext fallback; stored values never return to the renderer.
+- Added guided stdio/HTTPS profile and client configuration, plus identity-bound
+  process heartbeats distinct from consent or remote-health claims.
+- Packaged the Python engine, fixed release resource resolution, rejected release
+  environment overrides and preserved dependency notices/hashes/source provenance.
+- All six jobs pass on source `1248ebc`: 256/252/255 Python tests on
+  macOS/Windows/Linux, 9 frontend tests, 23 browser checks, six clean sampled
+  accessibility states, native IPC and actual packaged installation/startup.
+  See the current [platform matrix](CROSS_PLATFORM_TESTING.md) for exact evidence.
+- Backported the exact GLib iterator fix, removed both obsolete macro helpers and
+  verified the revised lockfile with a fresh retained RustSec scan.
+- Closed a real research-export gap: the annotation CLI now verifies adjudications
+  against both original annotation files before writing reviewed pairs.
+- Main, ownership and proprietary licensing are preserved. Review artifacts are
+  unsigned previews; independent research labels, signed distribution/update trust
+  and manual native interaction remain separate requirements.
+
+The primary research counts remain **494 candidates / 11 groups / zero human labels**.
+The [annotation handoff](research/ANNOTATION_HANDOFF.md) gives the concrete independent
+human work and validation commands; these engineering checks do not supply labels.
+
+## Earlier 17 October hardening continuation
 
 - Fixed the native bridge deadline bypass: one async deadline now covers queueing,
   writing, reading both pipes and child exit. Response envelopes/exit status are
@@ -45,9 +74,9 @@ checks do not establish classifier superiority or publication readiness.
 | A — audit | Baseline suite, coverage, environment, file map, architecture, defects and literature overlap recorded. Targeted review verifies supplied references and additional prior art. | Search coverage is not exhaustive; repeat searches and preserve index exports before submission. |
 | B — research infrastructure | Literal-safe snapshots, integrity, schema unions, annotation/agreement, UTC splits, approved-version trajectories, post-onset detection and repository bootstrap corrected. Acquired 494 primary candidates from 11 groups plus 227 reference rows; exactly reproduced all 721 records. | Zero human labels; fewer than 30 contributing primary groups. Broaden sources, independently annotate, adjudicate and freeze final splits. |
 | C — isolated algorithms | EWMA, standardized multivariate CUSUM, typed provenance-bearing capability graph and controlled comparison added outside authorization. Raw scores, configurations and source hashes retained. | Tiny templated comparison cannot select a production classifier or establish superiority. Kernel/Bayesian/conformal methods remain assessed alternatives. |
-| D — gateway | Opt-in tools-only stdio mediator, exact approval, policy/principal/session binding, persistent quarantine, stale revision/replay rejection, bounded catalogs, pre-call relisting, audit and text egress checks. Real subprocess tests exercise the subset. | HTTP, remote OAuth, general subscriptions/callbacks and cancellation unsupported. No OS sandbox, handler attestation, complete DLP or exactly-once guarantee. |
-| E — desktop | Interactive review, parallel definitions, recorded history, activity/export, isolated guided scenario, blinded annotation/export, appearance and honest empty states. Tauri source supplies fixed allowlisted Python IPC and app-data state. | Browser workflows and Linux process-helper tests pass; native macOS/Windows library tests and builds pass; manual GUI work remains. Connections require explicit CLI setup; no vault, bundled Python, live health monitor or full research-results explorer. |
-| F — hardening | Python/security tests, UI logic/build, browser checks, sampled accessibility, screenshot review, profiling and dependency lookups recorded. Native macOS/Windows IPC tests and unsigned builds pass. | Linux GUI prerequisites/dependency findings, manual native window/screen-reader verification, signing, updates and independent audit remain. |
+| D — gateway | Opt-in tools-only stdio mediator, exact approval, policy/principal/session binding, persistent quarantine, stale revision/replay rejection, bounded catalogs, pre-call relisting, audit and text egress checks. Real subprocess tests exercise the subset. | Configured JSON/SSE HTTP now exists; remote OAuth, general subscriptions/callbacks and concurrent cancellation remain unsupported. No OS sandbox, handler attestation, complete DLP or exactly-once guarantee. |
+| E — desktop | Interactive review, parallel definitions, recorded history, activity/export, isolated guided scenario, blinded annotation/export, appearance and honest empty states. Tauri source supplies fixed allowlisted Python IPC and app-data state. | Browser workflows and Linux process-helper tests pass; native macOS/Windows library tests and builds pass; manual GUI work remains. Guided profiles/client configuration, endpoint-bound OS credentials, bundled Python and process heartbeats now exist. Manual client configuration merge and a full research-results explorer remain. |
+| F — hardening | Python/security tests, UI logic/build, browser checks, sampled accessibility, screenshot review, profiling and dependency lookups recorded. Native macOS/Windows IPC tests and unsigned builds pass. | Linux prerequisites/backports and packaged startup checks are now automated; manual native workflows/screen readers, signing, update trust and independent audit remain. |
 | G — publication | Literature comparison, narrower hypothesis, threat model, methodology comparison, protocol and venue/readiness notes maintained. | Final labeled benchmark, independent attacks, baselines/ablations/statistics and manuscript incomplete. No submission or publication claim. |
 
 ## Material corrections
