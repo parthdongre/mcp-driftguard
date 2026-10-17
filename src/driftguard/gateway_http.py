@@ -6,6 +6,7 @@ available only with explicit opt-in for a literal loopback address.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import http.client
 import ipaddress
@@ -131,6 +132,58 @@ def load_config(path: str | Path) -> StdioConfig | HttpConfig:
     return StdioConfig.from_file(path)
 
 
+def encode_header(value: str) -> str:
+    """Modern MCP sentinel encoding, including sentinel-looking literal values."""
+    plain = (value == value.strip(" \t")
+             and all(32 <= ord(char) <= 126 or char == "\t" for char in value)
+             and not (value.startswith("=?base64?") and value.endswith("?=")))
+    encoded = value if plain else "=?base64?" + base64.b64encode(value.encode("utf-8")).decode("ascii") + "?="
+    if len(encoded) > 8192:
+        raise TransportError("HTTP routing header exceeds its byte limit")
+    return encoded
+
+
+def routing_paths(schema: dict[str, Any]) -> list[tuple[tuple[str, ...], str, str]]:
+    """Recognize schema positions without confusing literal default/enum data."""
+    routes: list[tuple[tuple[str, ...], str, str]] = []
+    names: set[str] = set()
+    stack: list[tuple[Any, tuple[str, ...] | None, bool]] = [(schema, (), False)]
+    maps = {"patternProperties", "$defs", "definitions", "dependentSchemas"}
+    single = {"items", "additionalProperties", "unevaluatedProperties", "propertyNames",
+              "contains", "not", "if", "then", "else", "contentSchema", "unevaluatedItems"}
+    arrays = {"allOf", "anyOf", "oneOf", "prefixItems"}
+    nodes = 0
+    while stack:
+        node, path, property_schema = stack.pop()
+        nodes += 1
+        if nodes > 10000:
+            raise ValueError("Routing schema complexity limit")
+        if not isinstance(node, dict):
+            continue
+        if "x-mcp-header" in node:
+            name, kind = node["x-mcp-header"], node.get("type")
+            if (not property_schema or path is None or not isinstance(name, str)
+                    or not 1 <= len(name) <= 128
+                    or not re.fullmatch(r"[!#$%&'*+\-.^_\x60|~0-9A-Za-z]+", name)
+                    or name.casefold() in names or kind not in ("string", "integer", "boolean")):
+                raise ValueError("Invalid HTTP routing annotation")
+            names.add(name.casefold())
+            routes.append((path, name, kind))
+            if len(routes) > 64:
+                raise ValueError("Too many routing annotations")
+        for key, child in node.items():
+            if key == "properties" and isinstance(child, dict):
+                stack.extend((definition, (*path, name) if path is not None else None, True)
+                             for name, definition in child.items())
+            elif key in maps and isinstance(child, dict):
+                stack.extend((definition, None, False) for definition in child.values())
+            elif key in single:
+                stack.append((child, None, False))
+            elif key in arrays and isinstance(child, list):
+                stack.extend((definition, None, False) for definition in child)
+    return routes
+
+
 class HttpPeer:
     """One HTTP session with serialized exchanges and a caller-visible deadline.
 
@@ -146,11 +199,62 @@ class HttpPeer:
             "http-user:session:" + secrets.token_hex(16),
             protocol_version=config.protocol_version, display_name=config.server_id)
         self._session_id: str | None = None
+        self._routing: dict[str, list[tuple[tuple[str, ...], str, str]]] = {}
         self._sequence = 0
         self._lock = threading.Lock()
         self._closed = threading.Event()
         self._connection: http.client.HTTPConnection | None = None
         self._active_socket: socket.socket | None = None
+
+    def configure_catalog(self, tools: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+        if self.config.protocol_version != MODERN:
+            return tools, []
+        accepted, rejected, routing = [], [], {}
+        for tool in tools:
+            try:
+                routes = routing_paths(tool["inputSchema"])
+            except (ValueError, TypeError):
+                rejected.append(tool["name"])
+            else:
+                accepted.append(tool)
+                routing[tool["name"]] = routes
+        self._routing = routing
+        return accepted, rejected
+
+    def _routing_headers(self, method: str, payload: bytes) -> dict[str, str]:
+        if self.config.protocol_version != MODERN:
+            return {}
+        headers = {"Mcp-Method": method}
+        if method == "tools/call":
+            params = decode_message(payload, max_bytes=self.config.max_message_bytes)["params"]
+            name, arguments = params["name"], params.get("arguments", {})
+            if name not in self._routing or not isinstance(arguments, dict):
+                raise TransportError("HTTP tool routing requires the current validated catalog")
+            headers["Mcp-Name"] = encode_header(name)
+            for path, header, kind in self._routing[name]:
+                current: Any = arguments
+                missing = False
+                for component in path:
+                    if not isinstance(current, dict):
+                        raise TransportError("HTTP routing argument path has the wrong type")
+                    if component not in current:
+                        missing = True
+                        break
+                    current = current[component]
+                if missing:
+                    continue
+                valid = ((kind == "string" and isinstance(current, str))
+                         or (kind == "boolean" and type(current) is bool)
+                         or (kind == "integer" and type(current) is int
+                             and -(2 ** 53) + 1 <= current <= 2 ** 53 - 1))
+                if not valid:
+                    raise TransportError("HTTP routing argument has an unsupported primitive type")
+                text = current if isinstance(current, str) else (
+                    "true" if current is True else "false" if current is False else str(current))
+                headers["Mcp-Param-" + header] = encode_header(text)
+            if sum(len(key) + len(value) for key, value in headers.items()) > 16384:
+                raise TransportError("HTTP routing headers exceed their total byte limit")
+        return headers
 
     def verify_identity(self) -> None:
         if self._closed.is_set():
@@ -242,6 +346,7 @@ class HttpPeer:
             headers = {"Content-Type": "application/json",
                        "Accept": "application/json, text/event-stream",
                        "MCP-Protocol-Version": self.config.protocol_version}
+            headers.update(self._routing_headers(method, payload))
             token = self.config.token()
             if token:
                 headers["Authorization"] = "Bearer " + token
@@ -258,6 +363,8 @@ class HttpPeer:
             # Session values are opaque credentials: bounded, never logged or persisted.
             session = response.getheader("Mcp-Session-Id")
             if session is not None:
+                if self.config.protocol_version == MODERN:
+                    raise TransportError("Modern HTTP does not use protocol-level sessions")
                 if len(session) > 128 or not session or re.search(r"[^\x21-\x7e]", session):
                     raise TransportError("Invalid HTTP session identifier")
                 if self._session_id is not None and session != self._session_id:

@@ -469,6 +469,12 @@ class ProtectedGateway:
                         raise TransportError("Upstream catalog tool limit exceeded")
                     cursor = result.get("nextCursor")
                     if cursor is None:
+                        if hasattr(self.peer, "configure_catalog"):
+                            tools, rejected = self.peer.configure_catalog(tools)
+                            for name in rejected:
+                                self.store.record_event(
+                                    "gateway_tool_withheld", self.config.server_id, name,
+                                    reason="invalid_http_routing_annotation")
                         return self.store.ingest_catalog(self.config.server_id, tools,
                                                          identity=self.identity)
                     if not isinstance(cursor, str) or not cursor or cursor in cursors:

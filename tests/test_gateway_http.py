@@ -10,7 +10,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from driftguard.gateway import GateError, GuardStore
-from driftguard.gateway_http import HttpConfig, HttpPeer, load_config
+from driftguard.gateway_http import (
+    HttpConfig,
+    HttpPeer,
+    encode_header,
+    load_config,
+    routing_paths,
+)
 from driftguard.gateway_transport import LEGACY, MODERN, ProtectedGateway, TransportError
 
 TOOL = {"name": "read_notes", "description": "Read selected résumé notes",
@@ -66,7 +72,8 @@ def server(*, sse=False, failure=None):
             self.send_response(302 if failure == "redirect" else 200)
             self.send_header("Content-Type", "text/event-stream" if sse else "application/json")
             self.send_header("Content-Length", str(len(payload)))
-            self.send_header("Mcp-Session-Id", state["session"])
+            if self.headers.get("MCP-Protocol-Version") == LEGACY:
+                self.send_header("Mcp-Session-Id", state["session"])
             if failure == "redirect":
                 self.send_header("Location", "https://unrequested.invalid/")
             if failure == "compressed":
@@ -140,8 +147,16 @@ def test_actual_http_gateway_requires_exact_approval_and_preserves_session(tmp_p
             with pytest.raises(GateError):
                 gateway.call("read_notes", {})
             assert state["calls"] == 1
-            assert any(headers.get("Mcp-Session-Id") == "fixture-session-one"
-                       for _, headers in state["requests"][1:])
+            if protocol == LEGACY:
+                assert any(headers.get("Mcp-Session-Id") == "fixture-session-one"
+                           for _, headers in state["requests"][1:])
+            else:
+                assert all(headers.get("Mcp-Method") == message["method"]
+                           for message, headers in state["requests"])
+                assert all("Mcp-Session-Id" not in headers for _, headers in state["requests"])
+                calls = [(message, headers) for message, headers in state["requests"]
+                         if message["method"] == "tools/call"]
+                assert calls[0][1]["Mcp-Name"] == "read_notes"
         finally:
             gateway.close()
 
@@ -211,3 +226,48 @@ def test_slow_sse_cannot_hold_a_buffered_read_lock_past_the_deadline():
         with pytest.raises(TransportError):
             peer.initialize()
         assert time.monotonic() - started < 0.5
+
+
+def test_modern_routing_mirrors_nested_primitives_and_encodes_untrusted_values(tmp_path):
+    definition = {**TOOL, "inputSchema": {"type": "object", "properties": {
+        "context": {"type": "object", "properties": {
+            "region": {"type": "string", "x-mcp-header": "Region"},
+            "attempt": {"type": "integer", "x-mcp-header": "Attempt"},
+            "dry": {"type": "boolean", "x-mcp-header": "Dry"}}}}}}
+    with server() as (url, state), GuardStore(tmp_path / "guard.sqlite3") as store:
+        state["tools"] = [definition]
+        gateway = ProtectedGateway(config(url, protocol_version=MODERN), store)
+        try:
+            record = store.get_tool("http-fixture", "read_notes")
+            store.approve("http-fixture", "read_notes", expected_hash=record["sha256"],
+                          expected_revision=record["revision"])
+            gateway.call("read_notes", {"context": {"region": "résumé\r\nInjected: bad",
+                                                    "attempt": 7, "dry": True}})
+            _, headers = state["requests"][-1]
+            assert headers["Mcp-Param-Region"] == encode_header("résumé\r\nInjected: bad")
+            assert headers["Mcp-Param-Attempt"] == "7"
+            assert headers["Mcp-Param-Dry"] == "true"
+            assert "\r" not in headers["Mcp-Param-Region"]
+            assert "\n" not in headers["Mcp-Param-Region"]
+        finally:
+            gateway.close()
+
+
+@pytest.mark.parametrize("schema", [
+    {"type": "string", "x-mcp-header": "Root"},
+    {"properties": {"bad": {"type": "number", "x-mcp-header": "Bad"}}},
+    {"items": {"properties": {"bad": {"type": "string", "x-mcp-header": "Bad"}}}},
+    {"oneOf": [{"properties": {"bad": {"type": "string", "x-mcp-header": "Bad"}}}]},
+    {"properties": {"a": {"type": "string", "x-mcp-header": "Same"},
+                    "b": {"type": "string", "x-mcp-header": "same"}}},
+])
+def test_invalid_modern_header_annotations_are_rejected(schema):
+    with pytest.raises(ValueError):
+        routing_paths(schema)
+
+
+def test_literal_schema_data_is_not_interpreted_as_routing_and_sentinels_are_escaped():
+    assert routing_paths({"properties": {"text": {"type": "string",
+                          "default": {"x-mcp-header": "literal-data"}}}}) == []
+    assert encode_header("=?base64?literal?=") != "=?base64?literal?="
+    assert encode_header(" plain ").startswith("=?base64?")
