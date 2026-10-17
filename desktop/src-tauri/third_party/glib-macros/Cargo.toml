@@ -37,8 +37,10 @@ version = "0.4"
 version = "2.0"
 
 [dependencies.proc-macro-error]
-package = "proc-macro-error2"
-version = "=2.0.1"
+package = "proc-macro-error3"
+version = "=3.1.1"
+default-features = false
+features = ["syn2-error"]
 
 [dependencies.proc-macro2]
 version = "1.0"

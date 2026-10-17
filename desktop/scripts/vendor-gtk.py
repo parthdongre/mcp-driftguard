@@ -59,7 +59,7 @@ def main() -> int:
         source = manifest.read_text(encoding="utf-8")
         source, count = re.subn(
             r'(\[dependencies\.proc-macro-error\]\n)version = "[^"]+"',
-            r'\g<1>package = "proc-macro-error2"\nversion = "=2.0.1"', source)
+            r'\g<1>package = "proc-macro-error3"\nversion = "=3.1.1"\ndefault-features = false\nfeatures = ["syn2-error"]', source)
         if count != 1:
             raise RuntimeError("Macro maintenance replacement context differs")
         manifest.write_text(source, encoding="utf-8")
@@ -73,7 +73,7 @@ def main() -> int:
                               for name, (version, checksum) in CRATES.items()},
         "glib_fix": "https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
         "glib_advisory": "RUSTSEC-2024-0429",
-        "macro_change": "Rename maintained proc-macro-error2 2.0.1 to the existing import name",
+        "macro_change": "Rename maintained proc-macro-error3 3.1.1 to the existing import name",
         "status": "Compatibility backport; requires optimized regression and native platform tests",
     }
     (DESTINATION / "PROVENANCE.json").write_text(
@@ -83,7 +83,7 @@ def main() -> int:
         "These MIT-licensed upstream crates retain their individual licenses and ownership.\n"
         "The GLib change exactly backports upstream commit b5a4071e439bef2b5eea76c3aa25e5ae84839e34.\n"
         "The two macro manifests replace unmaintained proc-macro-error with the maintained\n"
-        "proc-macro-error2 2.0.1 under the same Rust import name. Each macro crate root adds\n"
+        "proc-macro-error3 3.1.1 under the same Rust import name. Each macro crate root adds\n"
         "the absolute crate alias expected by maintained attribute expansions.\n"
         "PROVENANCE.json records original archive checksums. Reproduce from an empty\n"
         "third_party directory using desktop/scripts/vendor-gtk.py.\n", encoding="utf-8")

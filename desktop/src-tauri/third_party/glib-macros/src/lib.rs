@@ -1,7 +1,7 @@
 // Take a look at the license at the top of the repository in the LICENSE file.
 
 // The maintained helper emits this absolute crate name in attribute expansions.
-extern crate proc_macro_error as proc_macro_error2;
+extern crate proc_macro_error as proc_macro_error3;
 
 mod boxed_derive;
 mod clone;

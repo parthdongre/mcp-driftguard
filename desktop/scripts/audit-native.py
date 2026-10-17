@@ -22,7 +22,8 @@ def main() -> int:
                 and "\n                &mut p," in variant
                 and "\n                &p," not in variant)
     lock = (ROOT / "desktop/src-tauri/Cargo.lock").read_text()
-    obsolete_macro_absent = 'name = "proc-macro-error"' not in lock
+    obsolete_macro_absent = ('name = "proc-macro-error"' not in lock
+                             and 'name = "proc-macro-error2"' not in lock)
     vulnerabilities = audit.get("vulnerabilities", {}).get("list", [])
     unresolved = []
     warnings = []
