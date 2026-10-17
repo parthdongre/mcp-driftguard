@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .gateway import GuardStore
+from .gateway_http import HttpConfig, load_config
 from .gateway_transport import (
     DownstreamSession,
     ProtectedGateway,
@@ -18,7 +19,7 @@ from .gateway_transport import (
 )
 
 
-def serve(config: StdioConfig, store: GuardStore) -> int:
+def serve(config: StdioConfig | HttpConfig, store: GuardStore) -> int:
     """Only JSON-RPC goes to stdout. No upstream stderr or raw exception content."""
     gateway = ProtectedGateway(config, store)
     session = DownstreamSession(gateway)
@@ -61,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "serve" and args.state is None:
         parser.error("serve requires an explicit --state path")
     try:
-        config = StdioConfig.from_file(args.config)
+        config = load_config(args.config)
         if args.action == "identity":
             identity = config.identity()
             print(json.dumps({"server_id": identity.server_id, "fingerprint": identity.fingerprint,

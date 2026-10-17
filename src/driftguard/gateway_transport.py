@@ -384,8 +384,16 @@ class StdioPeer:
 
 class ProtectedGateway:
     def __init__(self, config: StdioConfig, store: GuardStore,
-                 peer_factory: Callable[[StdioConfig], StdioPeer] = StdioPeer):
+                 peer_factory: Callable[[Any], Any] | None = None):
         self.config, self.store = config, store
+        if peer_factory is None:
+            if isinstance(config, StdioConfig):
+                peer_factory = StdioPeer
+            else:
+                from .gateway_http import HttpConfig, HttpPeer
+                if not isinstance(config, HttpConfig):
+                    raise ValueError("Unsupported gateway transport configuration")
+                peer_factory = HttpPeer
         self.peer = peer_factory(config)
         self._credentials = tuple(os.environ[name] for name in config.pass_env
                                   if name in os.environ and len(os.environ[name]) >= 8)
@@ -396,8 +404,9 @@ class ProtectedGateway:
             self.store.register_server(self.identity)
             self.peer.initialize()
             self.refresh_catalog()
-            self._monitor = threading.Thread(target=self._watch_disconnect, daemon=True)
-            self._monitor.start()
+            if getattr(self.peer, "process", None) is not None:
+                self._monitor = threading.Thread(target=self._watch_disconnect, daemon=True)
+                self._monitor.start()
         except Exception:
             self.close()
             raise
