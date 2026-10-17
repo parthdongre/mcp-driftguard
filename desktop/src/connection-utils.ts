@@ -29,3 +29,15 @@ export function buildClientConfig(runtime: RuntimeInfo, profilePath: string, ser
   const [command, ...args] = runtime.gateway_argv;
   return { mcpServers: { [server]: { command, args: [...args, 'serve', '--config', profilePath, '--state', runtime.state_path] } } };
 }
+
+export function buildHttpProfile(server: string, endpoint: string, protocol: string, auth: string, envName: string) {
+  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(server)) throw new Error('Use a short source identifier.');
+  const url = new URL(endpoint);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || /[\\u0000-\\u0020\\u007f]/.test(endpoint)) throw new Error('Use an HTTPS endpoint without embedded credentials, query or fragment.');
+  if (!['2025-11-25', '2026-07-28'].includes(protocol)) throw new Error('Select a supported protocol.');
+  if (!['none', 'environment', 'vault'].includes(auth)) throw new Error('Select an authentication source.');
+  if (auth === 'environment' && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(envName)) throw new Error('Enter an environment variable name without its value.');
+  return { server_id: server, transport: 'http' as const, url: endpoint, protocol_version: protocol,
+    ...(auth === 'environment' ? { auth_token_env: envName } : {}),
+    ...(auth === 'vault' ? { use_os_vault: true } : {}) };
+}

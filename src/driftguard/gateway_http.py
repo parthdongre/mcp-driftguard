@@ -23,8 +23,16 @@ from urllib.parse import urlsplit
 
 from .gateway import ServerIdentity
 from .gateway_transport import (
-    LEGACY, META_PREFIX, MODERN, RpcError, StdioConfig, TransportError,
-    _pairs_unique, decode_message, encode_message, protocol_meta,
+    LEGACY,
+    META_PREFIX,
+    MODERN,
+    RpcError,
+    StdioConfig,
+    TransportError,
+    _pairs_unique,
+    decode_message,
+    encode_message,
+    protocol_meta,
 )
 
 
@@ -35,6 +43,7 @@ class HttpConfig:
     transport: str = "http"
     protocol_version: str = LEGACY
     auth_token_env: str | None = None
+    use_os_vault: bool = False
     allow_insecure_loopback: bool = False
     timeout_seconds: float = 15.0
     max_message_bytes: int = 1024 * 1024
@@ -51,7 +60,8 @@ class HttpConfig:
                     max_message_bytes=self.max_message_bytes,
                     max_catalog_bytes=self.max_catalog_bytes,
                     max_tools=self.max_tools, max_pages=self.max_pages)
-        if self.transport != "http" or type(self.allow_insecure_loopback) is not bool:
+        if (self.transport != "http" or type(self.allow_insecure_loopback) is not bool
+                or type(self.use_os_vault) is not bool or (self.use_os_vault and self.auth_token_env)):
             raise ValueError("Invalid HTTP transport configuration")
         if not isinstance(self.url, str) or len(self.url) > 4096 or re.search(r"[\x00-\x20\x7f]", self.url):
             raise ValueError("Invalid endpoint")
@@ -78,10 +88,17 @@ class HttpConfig:
         return (self.auth_token_env,) if self.auth_token_env else ()
 
     def token(self) -> str | None:
-        if self.auth_token_env is None:
+        if self.use_os_vault:
+            from .credentials import CredentialError, read
+            try:
+                token = read(self.server_id, self.url) or ""
+            except CredentialError as error:
+                raise TransportError("Unlock the operating system credential store") from error
+        elif self.auth_token_env is None:
             return None
-        token = os.environ.get(self.auth_token_env, "")
-        if not token or len(token) > 8192 or re.search(r"[^\x21-\x7e]", token):
+        else:
+            token = os.environ.get(self.auth_token_env, "")
+        if len(token) < 8 or len(token) > 8192 or re.search(r"[^\x21-\x7e]", token):
             raise TransportError("The configured bearer credential is unavailable or invalid")
         return token
 
@@ -105,7 +122,7 @@ def load_config(path: str | Path) -> StdioConfig | HttpConfig:
     except RecursionError as error:
         raise ValueError("Configuration nesting limit exceeded") from error
     if not isinstance(data, dict):
-        raise ValueError("Configuration must be an object")
+        raise TypeError("Configuration must be an object")
     if data.get("transport") == "http":
         if set(data) - set(HttpConfig.__dataclass_fields__):
             raise ValueError("Unknown HTTP configuration keys")
@@ -260,7 +277,7 @@ class HttpPeer:
         def worker() -> None:
             try:
                 replies.put((True, self._exchange(method, payload, request_id)))
-            except Exception:
+            except (OSError, ValueError, TypeError, TransportError, http.client.HTTPException):
                 # Never return upstream response text, TLS diagnostics or URLs with secrets.
                 replies.put((False, None))
 

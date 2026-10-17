@@ -36,10 +36,10 @@ export interface Overview {
 export interface Workspace {
   overview: Overview; tools: ToolRecord[]; activity: AuditEvent[];
 }
-export type BridgeAction = 'runtime_info' | 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
+export type BridgeAction = 'store_http_credential' | 'remove_http_credential' | 'runtime_info' | 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
   'import_definitions' | 'approve' | 'deny' | 'quarantine';
 export interface BridgeRequest {
   action: BridgeAction; server_id?: string; tool_name?: string; expected_sha256?: string; expected_revision?: number;
-  identity?: string; tools?: ToolDefinition[];
+  identity?: string; tools?: ToolDefinition[]; url?: string; secret?: string;
 }
 export interface DemoFixture { overview: Overview; tools: ToolRecord[]; reviews: Review[]; history: HistoryVersion[]; activity: AuditEvent[]; }

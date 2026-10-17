@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
+driftguard-credentials = "driftguard.credentials:main"
 driftguard-review-demo = "driftguard.review_demo:main"
 driftguard-gateway = "driftguard.gateway_cli:main"
 driftguard-desktop-bridge = "driftguard.desktop_bridge:main"

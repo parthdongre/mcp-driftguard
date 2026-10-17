@@ -16,6 +16,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const TIMEOUT_ERROR: &str =
     "The local engine timed out. No decision was assumed; refresh the workspace before retrying.";
 const ACTIONS: &[&str] = &[
+    "store_http_credential",
+    "remove_http_credential",
     "runtime_info",
     "overview",
     "list_tools",
@@ -51,6 +53,8 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
         "list_tools" => &["action", "server_id"],
         "review" | "history" => &["action", "server_id", "tool_name"],
         "import_definitions" => &["action", "server_id", "identity", "tools"],
+        "store_http_credential" => &["action", "server_id", "url", "secret"],
+        "remove_http_credential" => &["action", "server_id", "url"],
         _ => &[
             "action",
             "server_id",

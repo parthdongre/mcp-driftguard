@@ -21,6 +21,7 @@ MAX_REQUEST_BYTES = 2_100_000
 ACTIONS = frozenset({
     "overview", "list_tools", "review", "history", "activity",
     "import_definitions", "approve", "deny", "quarantine",
+    "store_http_credential", "remove_http_credential",
 })
 
 
@@ -88,6 +89,18 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
             protocol_version="2026-07-28", display_name=server_id.removeprefix("import:"),
         ))
         return store.ingest_catalog(server_id, tools)
+    if action in {"store_http_credential", "remove_http_credential"}:
+        from .credentials import CredentialError, write
+        from .gateway_http import HttpConfig
+        endpoint = _text(request, "url", maximum=4096)
+        HttpConfig(server_id, endpoint)  # Native credential setup requires HTTPS.
+        secret = _text(request, "secret", maximum=2048) if action == "store_http_credential" else None
+        try:
+            write(server_id, endpoint, secret)
+        except CredentialError:
+            return {"stored": False, "available": False,
+                    "message": "Unlock the OS credential store; no plaintext fallback is used."}
+        return {"stored": secret is not None, "available": True}
     tool_name = _text(request, "tool_name", maximum=128)
     if action == "review":
         return store.get_tool(server_id, tool_name)

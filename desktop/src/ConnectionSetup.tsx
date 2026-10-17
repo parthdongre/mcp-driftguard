@@ -1,18 +1,25 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { request } from './bridge';
-import { buildClientConfig, buildProfile } from './connection-utils';
+import { buildClientConfig, buildHttpProfile, buildProfile } from './connection-utils';
 import type { RuntimeInfo } from './connection-utils';
 import { downloadText } from './review-utils';
 
 export function ConnectionSetup({ native }: { native: boolean }) {
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [server, setServer] = useState('');
+  const [transport, setTransport] = useState('stdio');
+  const [endpoint, setEndpoint] = useState('');
+  const [auth, setAuth] = useState('none');
+  const [tokenEnv, setTokenEnv] = useState('');
+  const [secret, setSecret] = useState('');
+  const [credentialBusy, setCredentialBusy] = useState(false);
+  const [credentialNotice, setCredentialNotice] = useState('');
   const [argv, setArgv] = useState('');
   const [cwd, setCwd] = useState('');
   const [protocol, setProtocol] = useState('2025-11-25');
   const [env, setEnv] = useState('');
-  const [profile, setProfile] = useState<ReturnType<typeof buildProfile> | null>(null);
+  const [profile, setProfile] = useState<ReturnType<typeof buildProfile> | ReturnType<typeof buildHttpProfile> | null>(null);
   const [profilePath, setProfilePath] = useState('');
   const [client, setClient] = useState('');
   const [error, setError] = useState('');
@@ -25,18 +32,33 @@ export function ConnectionSetup({ native }: { native: boolean }) {
   }, [native]);
   const prepare = (event: FormEvent) => {
     event.preventDefault(); setError(''); setClient('');
-    try { setProfile(buildProfile(server.trim(), argv, cwd.trim(), protocol, env)); }
+    try { setProfile(transport === 'http'
+      ? buildHttpProfile(server.trim(), endpoint.trim(), protocol, auth, tokenEnv.trim())
+      : buildProfile(server.trim(), argv, cwd.trim(), protocol, env)); }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Check the source fields.'); }
   };
   return <section className="panel connection-setup">
     <div className="section-heading"><div><h2>Set up a protected connection</h2><p>Create a source profile, then route your MCP client through the local gateway.</p></div><span className="badge">{runtime?.packaged ? 'Bundled engine' : 'Explicit setup'}</span></div>
     <form onSubmit={prepare}>
       <div className="connection-fields">
+        <label className="form-label">Connection transport<select value={transport} onChange={event => { setTransport(event.target.value); setProfile(null); setClient(''); setSecret(''); }}><option value="stdio">Local process · stdio</option><option value="http">Remote endpoint · Streamable HTTP</option></select></label>
         <label className="form-label">Source identifier<input required maxLength={128} value={server} onChange={event => { setServer(event.target.value); setProfile(null); setClient(''); }} placeholder="my-local-server" /></label>
-        <label className="form-label">Working directory<input required value={cwd} onChange={event => { setCwd(event.target.value); setProfile(null); setClient(''); }} placeholder="Absolute directory containing the server" /></label>
-        <label className="form-label">Server command as JSON<textarea required rows={3} value={argv} onChange={event => { setArgv(event.target.value); setProfile(null); setClient(''); }} placeholder={'["/absolute/path/to/executable", "/absolute/path/to/server.py"]'} /><small>Each argument is separate. Review the executable before connecting; launching it gives it your user permissions.</small></label>
+        {transport === 'stdio' ? <><label className="form-label">Working directory<input required value={cwd} onChange={event => { setCwd(event.target.value); setProfile(null); setClient(''); }} placeholder="Absolute directory containing the server" /></label>
+        <label className="form-label">Server command as JSON<textarea required rows={3} value={argv} onChange={event => { setArgv(event.target.value); setProfile(null); setClient(''); }} placeholder={'["/absolute/path/to/executable", "/absolute/path/to/server.py"]'} /><small>Each argument is separate. Review the executable before connecting; launching it gives it your user permissions.</small></label></> : <label className="form-label">HTTPS endpoint<input required type="url" value={endpoint} onChange={event => { setEndpoint(event.target.value); setProfile(null); setClient(''); setCredentialNotice(''); }} placeholder="https://server.example/mcp" /></label>}
         <label className="form-label">MCP protocol<select value={protocol} onChange={event => { setProtocol(event.target.value); setProfile(null); setClient(''); }}><option value="2025-11-25">2025-11-25 · initialize handshake</option><option value="2026-07-28">2026-07-28 · discovery handshake</option></select></label>
-        <label className="form-label">Environment variable names<input value={env} onChange={event => { setEnv(event.target.value); setProfile(null); setClient(''); }} placeholder="Optional: API_TOKEN, OTHER_VARIABLE" /><small>Names only. Configure their values in the trusted MCP client environment.</small></label>
+        {transport === 'stdio' ? <label className="form-label">Environment variable names<input value={env} onChange={event => { setEnv(event.target.value); setProfile(null); setClient(''); }} placeholder="Optional: API_TOKEN, OTHER_VARIABLE" /><small>Names only. Configure their values in the trusted MCP client environment.</small></label> : <>
+          <label className="form-label">HTTP authentication<select value={auth} onChange={event => { setAuth(event.target.value); setProfile(null); setClient(''); setSecret(''); }}><option value="none">No bearer credential</option><option value="environment">Named environment variable</option><option value="vault">Operating system credential store</option></select></label>
+          {auth === 'environment' ? <label className="form-label">Bearer environment variable<input required value={tokenEnv} onChange={event => { setTokenEnv(event.target.value); setProfile(null); setClient(''); }} placeholder="MCP_API_TOKEN" /><small>Configure its value in your trusted MCP client environment.</small></label> : null}
+          {auth === 'vault' ? <div><label className="form-label">Bearer credential<input type="password" autoComplete="off" value={secret} onChange={event => setSecret(event.target.value)} /><small>Bound to this exact source and endpoint. Stored values are never returned to the interface.</small></label><button className="button subtle" type="button" disabled={!native || credentialBusy || !secret} onClick={() => {
+            try { buildHttpProfile(server.trim(), endpoint.trim(), protocol, 'vault', ''); }
+            catch (failure) { setError(failure instanceof Error ? failure.message : 'Check the source and endpoint.'); return; }
+            setCredentialBusy(true); setError(''); setCredentialNotice('');
+            void request<{ available: boolean; stored: boolean; message?: string }>({ action: 'store_http_credential', server_id: server.trim(), url: endpoint.trim(), secret })
+              .then(result => { setSecret(''); if (!result.available) throw new Error(result.message ?? 'Unlock your OS credential store.'); setCredentialNotice('Credential saved in the operating system store.'); })
+              .catch(failure => { setSecret(''); setError(failure instanceof Error ? failure.message : 'Credential storage failed.'); })
+              .finally(() => setCredentialBusy(false));
+          }}>{credentialBusy ? 'Saving…' : 'Save to OS credential store'}</button>{credentialNotice ? <p className="small" role="status">{credentialNotice}</p> : null}</div> : null}
+        </>}
       </div>
       <button className="button primary" type="submit">Prepare source profile</button>
     </form>

@@ -392,11 +392,15 @@ class ProtectedGateway:
             else:
                 from .gateway_http import HttpConfig, HttpPeer
                 if not isinstance(config, HttpConfig):
-                    raise ValueError("Unsupported gateway transport configuration")
+                    raise TypeError("Unsupported gateway transport configuration")
                 peer_factory = HttpPeer
         self.peer = peer_factory(config)
         self._credentials = tuple(os.environ[name] for name in config.pass_env
                                   if name in os.environ and len(os.environ[name]) >= 8)
+        if hasattr(config, "token"):
+            token = config.token()
+            if token:
+                self._credentials = (*self._credentials, token)
         self.identity = self.peer.identity
         self._closed = False
         self._lock = threading.RLock()
