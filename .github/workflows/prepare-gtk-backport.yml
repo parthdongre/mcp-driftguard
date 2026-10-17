@@ -1,0 +1,33 @@
+name: Prepare reviewed GTK compatibility sources
+
+on:
+  push:
+    branches: ["dev/research-gateway-desktop"]
+    paths: ["desktop/scripts/vendor-gtk.py", ".github/workflows/prepare-gtk-backport.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev/research-gateway-desktop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev/research-gateway-desktop
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Preserve checksum-verified sources and apply the exact compatibility fixes
+        run: python desktop/scripts/vendor-gtk.py
+      - name: Resolve only the requested patched dependencies
+        run: cargo update --manifest-path desktop/src-tauri/Cargo.toml -p glib -p glib-macros -p gtk3-macros
+      - name: Commit generated dependency sources to the approved feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add desktop/src-tauri/third_party desktop/src-tauri/Cargo.toml desktop/src-tauri/Cargo.lock
+          git commit -m "fix: backport GLib iterator soundness and replace unmaintained macro helper"
+          git push origin HEAD:dev/research-gateway-desktop

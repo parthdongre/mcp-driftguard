@@ -221,9 +221,7 @@ async fn run_bridge_before(
         "Local engine unavailable. Reinstall the packaged app. For debug builds, set DRIFTGUARD_PYTHON to a trusted absolute virtual-environment executable.",
     )?;
     if !python.is_absolute() || !python.is_file() {
-        return Err(
-            "The local engine must be an existing absolute executable".into(),
-        );
+        return Err("The local engine must be an existing absolute executable".into());
     }
     let mut command = Command::new(python);
     if runtime.frozen {
@@ -258,7 +256,10 @@ async fn driftguard_request(
     let bytes = validate_request(&request)?;
     let owned = runtime.inner().clone();
     if request["action"] == "runtime_info" {
-        let executable = owned.python.as_ref().map(|path| path.to_string_lossy().to_string());
+        let executable = owned
+            .python
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string());
         let argv = executable.map(|path| {
             if owned.frozen {
                 vec![path, "gateway".to_string()]
