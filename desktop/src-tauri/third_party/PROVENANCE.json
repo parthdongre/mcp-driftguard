@@ -1,0 +1,20 @@
+{
+  "archive_checksums": {
+    "glib": {
+      "version": "0.18.5",
+      "sha256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5"
+    },
+    "glib-macros": {
+      "version": "0.18.5",
+      "sha256": "0bb0228f477c0900c880fd78c8759b95c7636dbd7842707f49e132378aa2acdc"
+    },
+    "gtk3-macros": {
+      "version": "0.18.2",
+      "sha256": "52ff3c5b21f14f0736fed6dcfc0bfb4225ebf5725f3c0209edeec181e4d73e9d"
+    }
+  },
+  "glib_fix": "https://github.com/gtk-rs/gtk-rs-core/commit/b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+  "glib_advisory": "RUSTSEC-2024-0429",
+  "macro_change": "Rename maintained proc-macro-error2 2.0.1 to the existing import name",
+  "status": "Compatibility backport; requires optimized regression and native platform tests"
+}
