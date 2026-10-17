@@ -5,6 +5,7 @@ not manual interaction, screen-reader behavior or visual layout.
 """
 from __future__ import annotations
 
+import base64
 import os
 import sqlite3
 import subprocess
@@ -18,19 +19,23 @@ IDENTIFIER = "io.driftguard.desktop"
 
 def main() -> int:
     executable = Path(sys.argv[1])
+    isolated = tempfile.TemporaryDirectory(prefix="driftguard-native-startup-")
+    environment = dict(os.environ)
+    if sys.platform.startswith("linux"):
+        environment["XDG_DATA_HOME"] = str(Path(isolated.name) / "data")
     if sys.platform == "darwin":
         directory = Path.home() / "Library/Application Support" / IDENTIFIER
     elif os.name == "nt":
         directory = Path(os.environ["APPDATA"]) / IDENTIFIER
     else:
-        directory = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / IDENTIFIER
+        directory = Path(environment["XDG_DATA_HOME"]) / IDENTIFIER
     database = directory / "guard.sqlite3"
     if database.exists():
         raise RuntimeError("Native startup verification requires a fresh disposable runner store")
     diagnostics = tempfile.TemporaryFile()
     process = subprocess.Popen([str(executable)], stdout=subprocess.DEVNULL,
                                stderr=diagnostics,
-                               env={key: value for key, value in os.environ.items()
+                               env={key: value for key, value in environment.items()
                                     if key not in {"DRIFTGUARD_PYTHON", "PYTHONHOME", "PYTHONPATH"}})
     try:
         deadline = time.monotonic() + 30
@@ -62,6 +67,13 @@ def main() -> int:
                 raise RuntimeError("The Windows native window handle was unavailable")
         print("Actual packaged WebView startup and renderer-to-engine SQLite initialization passed.")
     except BaseException:
+        print(f"Startup state directory exists: {directory.is_dir()}; database exists: {database.is_file()}", file=sys.stderr)
+        if sys.platform.startswith("linux"):
+            screenshot = subprocess.run(
+                ["import", "-window", "root", "-resize", "1000x700", "png:-"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5, check=False)
+            if screenshot.returncode == 0 and len(screenshot.stdout) <= 4 * 1024 * 1024:
+                print("DRIFTGUARD_NATIVE_SCREENSHOT=" + base64.b64encode(screenshot.stdout).decode())
         diagnostics.seek(0)
         print("Native startup diagnostics (fresh, empty disposable runner only):",
               diagnostics.read(4096).decode("utf-8", errors="replace"), file=sys.stderr)
@@ -75,6 +87,7 @@ def main() -> int:
             process.kill()
             process.wait(timeout=5)
         diagnostics.close()
+        isolated.cleanup()
     return 0
 
 
