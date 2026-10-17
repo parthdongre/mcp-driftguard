@@ -59,6 +59,8 @@ def server(*, sse=False, failure=None):
                 payload = json.dumps({"jsonrpc": "2.0", "id": 9, "method": "sampling/createMessage"}).encode()
             else:
                 payload = json.dumps(message).encode()
+            if failure == "slow_sse":
+                payload = b"data:" + b"x" * 40
             if sse:
                 payload = b": keepalive\n\ndata: " + payload + b"\n\n"
             self.send_response(302 if failure == "redirect" else 200)
@@ -71,7 +73,13 @@ def server(*, sse=False, failure=None):
                 self.send_header("Content-Encoding", "gzip")
             self.end_headers()
             try:
-                self.wfile.write(payload)
+                if failure == "slow_sse":
+                    for byte in payload:
+                        self.wfile.write(bytes([byte]))
+                        self.wfile.flush()
+                        time.sleep(0.03)
+                else:
+                    self.wfile.write(payload)
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
@@ -195,3 +203,11 @@ def test_loader_preserves_explicit_transport_and_rejects_unknown_keys(tmp_path):
     path.write_text('{"transport":"http","server_id":"fixture","url":"https://example.com","token":"secret"}')
     with pytest.raises(ValueError):
         load_config(path)
+
+def test_slow_sse_cannot_hold_a_buffered_read_lock_past_the_deadline():
+    with server(sse=True, failure="slow_sse") as (url, _):
+        peer = HttpPeer(config(url, timeout_seconds=0.05))
+        started = time.monotonic()
+        with pytest.raises(TransportError):
+            peer.initialize()
+        assert time.monotonic() - started < 0.5

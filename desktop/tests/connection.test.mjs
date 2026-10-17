@@ -21,3 +21,14 @@ test('client setup binds the installed runtime and shared store without shell qu
   assert.throws(() => utils.buildClientConfig({ ...runtime, engine_available: false }, '/tmp/profile.json', 'notes'));
   assert.throws(() => utils.buildClientConfig(runtime, 'relative.json', 'notes'));
 });
+
+test('HTTP setup exports only explicit authentication references', () => {
+  const profile = utils.buildHttpProfile('remote', 'https://fixture.invalid/mcp', '2025-11-25', 'vault', '');
+  assert.equal(profile.use_os_vault, true);
+  assert.equal('secret' in profile, false);
+  const environment = utils.buildHttpProfile('remote', 'https://fixture.invalid/mcp', '2025-11-25', 'environment', 'MCP_TOKEN');
+  assert.equal(environment.auth_token_env, 'MCP_TOKEN');
+  for (const url of ['http://fixture.invalid', 'https://user:password@fixture.invalid', 'https://fixture.invalid?token=secret', 'https://fixture.invalid/ bad']) {
+    assert.throws(() => utils.buildHttpProfile('remote', url, '2025-11-25', 'none', ''));
+  }
+});

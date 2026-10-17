@@ -14,6 +14,7 @@ import os
 import queue
 import re
 import secrets
+import socket
 import ssl
 import threading
 from dataclasses import dataclass
@@ -149,6 +150,7 @@ class HttpPeer:
         self._lock = threading.Lock()
         self._closed = threading.Event()
         self._connection: http.client.HTTPConnection | None = None
+        self._active_socket: socket.socket | None = None
 
     def verify_identity(self) -> None:
         if self._closed.is_set():
@@ -245,6 +247,12 @@ class HttpPeer:
                 headers["Authorization"] = "Bearer " + token
             if self._session_id:
                 headers["Mcp-Session-Id"] = self._session_id
+            if self._closed.is_set():
+                raise TransportError("HTTP session was closed before dispatch")
+            connection.connect()
+            self._active_socket = connection.sock
+            if self._closed.is_set():
+                raise TransportError("HTTP session was closed before dispatch")
             connection.request("POST", parsed.path or "/", body=payload, headers=headers)
             response = connection.getresponse()
             # Session values are opaque credentials: bounded, never logged or persisted.
@@ -268,6 +276,7 @@ class HttpPeer:
         finally:
             connection.close()
             self._connection = None
+            self._active_socket = None
 
     def _bounded_exchange(self, method: str, payload: bytes, request_id: int | None) -> dict[str, Any] | None:
         if len(payload) > self.config.max_message_bytes:
@@ -331,6 +340,12 @@ class HttpPeer:
 
     def close(self) -> None:
         self._closed.set()
-        connection = self._connection
-        if connection is not None:
-            connection.close()
+        active_socket = self._active_socket
+        if active_socket is not None:
+            # Closing HTTPResponse's buffered file from another thread can wait
+            # on its read lock. Shutdown the socket instead; the worker owns all
+            # buffered response cleanup and is never joined by the caller.
+            try:
+                active_socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
