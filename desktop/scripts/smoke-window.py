@@ -33,6 +33,11 @@ def main() -> int:
     if database.exists():
         raise RuntimeError("Native startup verification requires a fresh disposable runner store")
     diagnostics = tempfile.TemporaryFile()
+    manager = None
+    if sys.platform.startswith("linux"):
+        manager = subprocess.Popen(["openbox", "--sm-disable"], stdout=subprocess.DEVNULL,
+                                   stderr=diagnostics, env=environment)
+        time.sleep(0.5)
     process = subprocess.Popen([str(executable)], stdout=subprocess.DEVNULL,
                                stderr=diagnostics,
                                env={key: value for key, value in environment.items()
@@ -69,6 +74,10 @@ def main() -> int:
     except BaseException:
         print(f"Startup state directory exists: {directory.is_dir()}; database exists: {database.is_file()}", file=sys.stderr)
         if sys.platform.startswith("linux"):
+            listing = subprocess.run(["xwininfo", "-root", "-tree"], stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL, timeout=5, check=False)
+            print("Native X11 window tree:", listing.stdout[:8192].decode("utf-8", errors="replace"),
+                  file=sys.stderr)
             screenshot = subprocess.run(
                 ["import", "-window", "root", "-resize", "1000x700", "png:-"],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5, check=False)
@@ -86,6 +95,13 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+        if manager is not None:
+            manager.terminate()
+            try:
+                manager.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                manager.kill()
+                manager.wait(timeout=5)
         diagnostics.close()
         isolated.cleanup()
     return 0

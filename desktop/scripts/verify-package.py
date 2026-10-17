@@ -45,10 +45,10 @@ def main() -> int:
             engine, = [Path(path) for path in files if path.endswith("/engine/driftguard-engine")]
             builder.verify(engine)
             executable, = [Path(path) for path in files if path.endswith("/bin/driftguard-desktop")]
-            subprocess.run(["xvfb-run", "-a", sys.executable,
+            subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 1600x1200x24", "dbus-run-session", "--", sys.executable,
                             str(ROOT / "desktop/scripts/smoke-window.py"), str(executable)],
                            check=True, timeout=60,
-                           env={**os.environ, "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
+                           env={**os.environ, "GDK_BACKEND": "x11", "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
                                 "WEBKIT_DISABLE_DMABUF_RENDERER": "1",
                                 "LIBGL_ALWAYS_SOFTWARE": "1"})
         finally:
