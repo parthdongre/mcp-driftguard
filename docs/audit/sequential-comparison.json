@@ -1,0 +1,381 @@
+{
+  "benchmark_kind": "controlled_sequential_plumbing_comparison",
+  "command": "PYTHONPATH=src python experiments/run_sequential_comparison.py --output docs/audit/sequential-comparison.json",
+  "git_commit": "0ab5b1c7626ab4a52c699fc0269ccb4e7d272757",
+  "methods": [
+    {
+      "benign_false_alarm_trajectories": 1,
+      "benign_trajectories": 2,
+      "c2_intervention_trajectories": 2,
+      "detected_malicious_trajectories": 2,
+      "malicious_trajectories": 2,
+      "mean_post_onset_detection_delay": 0,
+      "method": "adjacent_risk",
+      "pre_onset_false_alarm_trajectories": 1,
+      "predictions": [
+        {
+          "attack_onset": null,
+          "first_alert": null,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.106136,
+            0.108465
+          ],
+          "trajectory_id": "gamma:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 2,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.106136,
+            0.108465,
+            0.140473
+          ],
+          "trajectory_id": "gamma:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 2,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.106136,
+            0.108465,
+            0.140473,
+            0.137185,
+            0.08102
+          ],
+          "trajectory_id": "gamma:bounded-c3"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 1,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.108415,
+            0.108502
+          ],
+          "trajectory_id": "delta:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 1,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.108415,
+            0.108502,
+            0.16397
+          ],
+          "trajectory_id": "delta:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 1,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": true,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.108415,
+            0.108502,
+            0.141326,
+            0.137595,
+            0.081312
+          ],
+          "trajectory_id": "delta:bounded-c3"
+        }
+      ],
+      "threshold_selection": "strictly above maximum benign validation score; no test tuning",
+      "validation_selected_threshold": 0.108466
+    },
+    {
+      "benign_false_alarm_trajectories": 1,
+      "benign_trajectories": 2,
+      "c2_intervention_trajectories": 2,
+      "detected_malicious_trajectories": 2,
+      "malicious_trajectories": 2,
+      "mean_post_onset_detection_delay": 0,
+      "method": "ewma",
+      "pre_onset_false_alarm_trajectories": 1,
+      "predictions": [
+        {
+          "attack_onset": null,
+          "first_alert": null,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.00021687500000000526,
+            0.0014898125000000068
+          ],
+          "trajectory_id": "gamma:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 2,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.00021687500000000526,
+            0.0014898125000000068,
+            0.01813028124999999
+          ],
+          "trajectory_id": "gamma:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 2,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.00021687500000000526,
+            0.0014898125000000068,
+            0.01813028124999999,
+            0.024806515624999997,
+            6.213281250000424e-05
+          ],
+          "trajectory_id": "gamma:bounded-c3"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 1,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.001356374999999993,
+            0.0020780625000000053
+          ],
+          "trajectory_id": "delta:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 1,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.001356374999999993,
+            0.0020780625000000053,
+            0.03017290625000002
+          ],
+          "trajectory_id": "delta:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 1,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": true,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.001356374999999993,
+            0.0020780625000000053,
+            0.018850906250000007,
+            0.025371828124999996,
+            0.0004907890624999967
+          ],
+          "trajectory_id": "delta:bounded-c3"
+        }
+      ],
+      "threshold_selection": "strictly above maximum benign validation score; no test tuning",
+      "validation_selected_threshold": 0.0014908125000000067
+    },
+    {
+      "benign_false_alarm_trajectories": 0,
+      "benign_trajectories": 2,
+      "c2_intervention_trajectories": 2,
+      "detected_malicious_trajectories": 2,
+      "malicious_trajectories": 2,
+      "mean_post_onset_detection_delay": 0,
+      "method": "multivariate_cusum",
+      "pre_onset_false_alarm_trajectories": 0,
+      "predictions": [
+        {
+          "attack_onset": null,
+          "first_alert": null,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.0,
+            0.0
+          ],
+          "trajectory_id": "gamma:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 2,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.0,
+            0.0,
+            2.6999999999999997
+          ],
+          "trajectory_id": "gamma:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 2,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/gamma",
+          "scores": [
+            0.0,
+            0.0,
+            2.6999999999999997,
+            9.399999999999999,
+            16.099999999999998
+          ],
+          "trajectory_id": "gamma:bounded-c3"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": null,
+          "first_post_onset_alert": null,
+          "label": "C1",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.0,
+            0.0
+          ],
+          "trajectory_id": "delta:benign"
+        },
+        {
+          "attack_onset": null,
+          "first_alert": 2,
+          "first_post_onset_alert": null,
+          "label": "C2",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.0,
+            0.0,
+            4.7
+          ],
+          "trajectory_id": "delta:c2"
+        },
+        {
+          "attack_onset": 2,
+          "first_alert": 2,
+          "first_post_onset_alert": 2,
+          "label": "C3",
+          "pre_onset_false_alarm": false,
+          "repository_id": "controlled/delta",
+          "scores": [
+            0.0,
+            0.0,
+            2.6999999999999997,
+            9.399999999999999,
+            16.099999999999998
+          ],
+          "trajectory_id": "delta:bounded-c3"
+        }
+      ],
+      "threshold_selection": "strictly above maximum benign validation score; no test tuning",
+      "validation_selected_threshold": 1e-06
+    }
+  ],
+  "paper_claim_eligible": false,
+  "python_version": "3.12.14",
+  "reference_mean": [
+    0.10570225,
+    0.0
+  ],
+  "reference_scale": [
+    0.05,
+    0.05
+  ],
+  "reference_source": "benign validation lineages only",
+  "source_sha256": {
+    "src/driftguard/__init__.py": "ee1fb495a249fa615ace93c66948d93cde36d5494df0028b535840ff02e22a43",
+    "src/driftguard/annotation_workflow.py": "356c72ef74033af48c6ba0af2a742fa3b652a2cff48204359a13a0b9d2ede924",
+    "src/driftguard/attack_family_benchmark.py": "cd4b90b350ff2805b454655633c14f748338cb2dda40168b93bffd43778a7178",
+    "src/driftguard/attack_family_stateful.py": "56083728508c04c00633d7b0fb38d5a5d003b36ca1fbc5e7bd94c898214835dd",
+    "src/driftguard/baselines.py": "68af251b94f1841ede2e471b0e3d23a27ebe6fd39c47454d035c5e2ae332a626",
+    "src/driftguard/bounded_drift.py": "da0cffa43b7a390409c0025d8ec02600d2b1074fae796c1dc07f87968a174e30",
+    "src/driftguard/calibration.py": "5dfaba1af95a66a4ec45dfa2aa90ce0451b4b1453aae648c96198d8d27cbc401",
+    "src/driftguard/canonicalize.py": "df63f2b19efe9d305dec3292304f257a333aa76f0f1d43f4c10de11ccc5c8c70",
+    "src/driftguard/capabilities.py": "bf2f7841e9dc8e9dd96c08553c67b5f2ad0eef7c9afb6239205d8438b2aea888",
+    "src/driftguard/capability_graph.py": "9cd36c052877723c56711532b24c2c5635928a4fb01bd7526572f2fcc0e62cbc",
+    "src/driftguard/consent_policy.py": "d0fbd425a1ec46b91221f99dd03913fe937be5a2a917660b1706398836a4f44c",
+    "src/driftguard/corpus.py": "a99ff4845e84f04d8e069e41d844ac4c8d4b11894e41280254cefe496ca2d8cc",
+    "src/driftguard/corpus_discovery.py": "6056a357ab6a81d797ca21a82348cf9092918b10fe33478604c1d8f7f6f6b12c",
+    "src/driftguard/dataset.py": "8199c33217c18f9f2bc6aed1db2213db3c3871114c942c68b175922907f3be59",
+    "src/driftguard/desktop_bridge.py": "53b575b00c82e8ed724a6349e82c80c20c14438ac1b5fd91de58e6c5406f9de1",
+    "src/driftguard/diff.py": "8a1c61f8cc79b532d8cf89ee90932f4bbaf256995c3e34e0e305bc91d06a15eb",
+    "src/driftguard/embeddings.py": "8367040709b45a6510fcc51e65e580d8069068bba198fce6976cddd8ec56235a",
+    "src/driftguard/evaluation.py": "d5717bc8ff8abf6bff3fb1509a699c05eb75f62084f41dee599f5a31429a6239",
+    "src/driftguard/external_benchmarks.py": "60976964e50f5d491058e06f3357b9a41a86abb1facef6442951d17f2b2b339d",
+    "src/driftguard/features.py": "b28a79e22f81b1140792138c9a63222759edd5d87d1488ab81b6ee4a7a23f9e7",
+    "src/driftguard/gateway.py": "ad7dcc4073ab4fd54ca4581f5c14949e8bfc914fbaeac40f15d5a41e2ec263ef",
+    "src/driftguard/gateway_cli.py": "686636f944e113e5cb06553a2f5c5635aaa42eb7a22625f364b913681ab399ca",
+    "src/driftguard/gateway_transport.py": "4fb060fb5a737e9f72509bf8a557483c8f36c80577eddff07eb36ad308d52287",
+    "src/driftguard/history.py": "53ede20f0f698792820ea448ade8d329ceb45645bf3a05a03d30fa49ff55b024",
+    "src/driftguard/hybrid_detector.py": "3f7daca0d5710ba340434285ed155c3fdb1c5aebd807345c657c014d84337b36",
+    "src/driftguard/labeling.py": "6a7182f93e10cd1d3623fe0545fcc07ee50cef71a225a62f8201f5a3c175fa0c",
+    "src/driftguard/learned_family_benchmark.py": "be6b682399d719ed23439c7ab47f5869bcbf82159c9d7602e28dbfac4f754ee3",
+    "src/driftguard/learning.py": "2c562622262f8f0bbda70843a58d7b9ea4ef39ebf82452f76a11cac4df7fbd9b",
+    "src/driftguard/mcptox_adapter.py": "74555c23ae4e8d3310ebf94138302e11e5bc9714d9764a9ce4bd0190fd56f21b",
+    "src/driftguard/models.py": "404539a8c31f1e8f972c9ea613098da2d9fa7f9d9ac35ad8183fad43502a3438",
+    "src/driftguard/mutations.py": "11cb97306625d888ff0b83da15ea1c5bd445db2f3fa5daa1ac3df18525238e1b",
+    "src/driftguard/paper_readiness.py": "c0b2e79964f6c936710eb6732c22ea92af60e5d20613fa442bda25787234bc23",
+    "src/driftguard/poisoning.py": "f47fb39b22a5d8407cb907125f88e643beca9407321941beb87ff9318762af78",
+    "src/driftguard/poisoning_benchmark.py": "b5dfa1612f88d61877454ee87a21b1d0cbdece51693622f2526ec65197f6c75a",
+    "src/driftguard/poisoning_challenges.py": "d45d67f9e745d233c5df4baca618cb8c6e89dd2893a0dbe3ffee0bb42eec5ac9",
+    "src/driftguard/reproducibility.py": "9e6a53a2e139e34ca49c1cfc4b8113e1dcc7d2407548f10eedb5ec1bb71defea",
+    "src/driftguard/research_baselines.py": "475d923d2c6d21ce7f0eeeb38a6e8f9a52ab3bbf0ea3342a25de006a02ece47c",
+    "src/driftguard/review_demo.py": "3a883a1cc9a148654d7fd23e39ed394ee2ac26515bcce50dc48395cc15621a0b",
+    "src/driftguard/sequential_experiments.py": "e04e28eb2f97545a226f90b2a676df6cf9228f7cfcc171f37b552544c5f07355",
+    "src/driftguard/source_extractors.py": "76c8b5286d41086aebd844db96a17c2aeb54daa9782297990e65fe7e5fe56ce6",
+    "src/driftguard/splits.py": "0e51a9e2a3fe85c91c449ad25e4607f3e28520cfb86ce1c84bb1717310fd8f24",
+    "src/driftguard/stateful_policy.py": "7ed96e9f8c21a47fd791de9b60714d9ae0005daafdffbf9e36da414a442eb688",
+    "src/driftguard/statistics.py": "2f1c534b21d643c7e65aa934afe4c94ea40dfdc2cad528fb0ec0d094f7eb8d3d",
+    "src/driftguard/structural_security.py": "8e8642163cb6240764da745ccafdabd07fbb4d5ec32d17fe3cc25c45375d29cf",
+    "src/driftguard/temporal.py": "ad25dcdf68299d29f9155672fac7df5f13d7888a884678112f4721b40fe79621",
+    "src/driftguard/thresholds.py": "d0132c3ebae82c33723d9cdf06061f212b9a7bddcc71d69b38c2c02f6984b66c",
+    "src/driftguard/trajectory_benchmark.py": "dc6adbffd2c6c2eb6ddcb3f0e6ff9f70d3ed6508bf4bd6bea9c3d58968168981",
+    "src/driftguard/trajectory_evaluation.py": "6a9baa614e69287190398c01ff51cccb5d86ac8cdfe0948c60944f1c253ba095",
+    "src/driftguard/tree_learning.py": "17ed34a0574c4281f179c473753c19bf4b9df6708dc7185deab7d09daf795d4f",
+    "src/driftguard/views.py": "f9cd8a12e4332f381c3bd8233f8c6620a120612776e99af30b1433f71d9da93b",
+    "src/driftguard/xgboost_family_benchmark.py": "9e512bc8f70434e6ed331233848682623709dc3d93d04cf09d1e3cdae7b0420b"
+  },
+  "test_repositories": [
+    "controlled/delta",
+    "controlled/gamma"
+  ],
+  "validation_repositories": [
+    "controlled/alpha",
+    "controlled/beta"
+  ],
+  "warning": "Tiny templated development corpus; no human labels, independent attack evidence, or distribution guarantees.",
+  "working_tree_dirty": true
+}

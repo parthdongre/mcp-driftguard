@@ -1,0 +1,8 @@
+{
+  "exact_record_match": true,
+  "expected": 721,
+  "reproduced": 721,
+  "human_labels": 0,
+  "source_runtime_executed": false,
+  "paper_claim_eligible": false
+}

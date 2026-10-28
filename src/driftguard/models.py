@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChangeClass(StrEnum):
@@ -18,6 +18,8 @@ class ChangeClass(StrEnum):
 
 class ToolSnapshot(BaseModel):
     """One observed version of an MCP tool definition."""
+
+    model_config = ConfigDict(frozen=True)
 
     server_id: str
     tool_name: str
@@ -37,7 +39,9 @@ class StructuralDelta(BaseModel):
     parameters_removed: list[str] = Field(default_factory=list)
     required_added: list[str] = Field(default_factory=list)
     required_removed: list[str] = Field(default_factory=list)
-    type_changes: dict[str, tuple[str | None, str | None]] = Field(default_factory=dict)
+    type_changes: dict[str, tuple[str | list[str] | None, str | list[str] | None]] = Field(
+        default_factory=dict
+    )
     default_changes: dict[str, tuple[Any, Any]] = Field(default_factory=dict)
     enum_changes: list[str] = Field(default_factory=list)
     sensitive_terms_added: list[str] = Field(default_factory=list)

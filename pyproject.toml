@@ -12,10 +12,14 @@ license = { text = "Proprietary - All Rights Reserved" }
 authors = [{ name = "Parth Dongre" }]
 dependencies = [
   "pydantic>=2.8,<3",
+  "jsonschema>=4.23,<5",
 ]
 
 [project.scripts]
+driftguard-credentials = "driftguard.credentials:main"
 driftguard-review-demo = "driftguard.review_demo:main"
+driftguard-gateway = "driftguard.gateway_cli:main"
+driftguard-desktop-bridge = "driftguard.desktop_bridge:main"
 
 [project.optional-dependencies]
 ml = [
@@ -30,6 +34,8 @@ api = [
 ]
 dev = [
   "pytest>=8.2",
+  "pytest-cov>=6",
+  "pytest-timeout>=2.3,<3",
   "ruff>=0.6",
 ]
 

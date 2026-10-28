@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "active": true,
+    "resources": {
+      "../build/engine/driftguard-engine/": "engine/",
+      "../build/engine/engine-manifest.json": "engine-manifest.json"
+    },
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "Parth Dongre",
+    "copyright": "Copyright © Parth Dongre. All rights reserved.",
+    "category": "DeveloperTool"
+  }
+}

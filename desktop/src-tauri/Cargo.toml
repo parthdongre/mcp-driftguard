@@ -1,0 +1,28 @@
+[package]
+name = "driftguard-desktop"
+version = "0.1.0"
+description = "Private MCP tool-definition review workspace"
+authors = ["Parth Dongre"]
+license = "LicenseRef-Proprietary"
+edition = "2021"
+publish = false
+
+[lib]
+name = "driftguard_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt", "sync", "time"] }
+
+[patch.crates-io]
+glib = { path = "third_party/glib" }
+glib-macros = { path = "third_party/glib-macros" }
+gtk3-macros = { path = "third_party/gtk3-macros" }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+glib = "=0.18.5"

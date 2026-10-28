@@ -1,0 +1,140 @@
+name: Cross-platform prototype validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["dev/**"]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "desktop/**"
+      - "requirements/**"
+      - "pyproject.toml"
+      - ".github/workflows/desktop-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-and-ui:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Python core and validation dependencies
+        run: python -m pip install -e ".[dev]" "scikit-learn>=1.5" -c requirements/core-constraints.txt
+      - name: Python correctness and security tests
+        run: python -m pytest -vv --durations=20 --timeout=60 --timeout-method=thread -o faulthandler_timeout=30
+      - name: Verify pinned Codex and official Filesystem MCP integration
+        if: runner.os == 'Linux'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/driftguard-live-mcp" --ignore-scripts --save-exact @openai/codex@0.165.0 @modelcontextprotocol/server-filesystem@2.0.1
+          DRIFTGUARD_TEST_CODEX="$RUNNER_TEMP/driftguard-live-mcp/node_modules/.bin/codex" DRIFTGUARD_TEST_FILESYSTEM="$RUNNER_TEMP/driftguard-live-mcp/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js" python -m pytest -q tests/test_harnesses.py tests/test_real_filesystem.py -k 'real_codex or official_filesystem'
+      - name: Lint source and tests
+        run: python -m ruff check src tests
+      - name: Test native process boundary without GUI dependencies
+        if: runner.os == 'Linux'
+        run: python desktop/scripts/check-native.py --headless
+      - name: Install pinned UI dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Generate guided evidence from current core
+        run: python desktop/scripts/generate-demo.py
+      - name: Validate UI logic and TypeScript production build
+        working-directory: desktop
+        run: npm test && npm run build
+      - name: Install browser for workflow verification
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npx playwright install --with-deps chromium
+      - name: Exercise browser workflows and sampled accessibility
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npm run test:browser
+
+  native-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
+      - name: Install locked UI dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Install Linux native prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf xvfb xdotool imagemagick openbox dbus-x11 x11-utils
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check
+      - name: Test native IPC with isolated Python engine
+        run: python desktop/scripts/check-native.py
+      - name: Test optimized GLib iterator backport
+        if: runner.os == 'Linux'
+        run: cargo test --locked --release --manifest-path desktop/src-tauri/Cargo.toml --test glib_backport
+      - name: Install pinned engine packager
+        run: python -m pip install -e . -c requirements/core-constraints.txt pyinstaller==6.22.3
+      - name: Build and verify the self-contained engine
+        run: python desktop/scripts/build-engine.py
+      - name: Build unsigned macOS application bundle
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        run: npm run desktop:package -- --bundles app
+      - name: Build unsigned Windows installer
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: npm run desktop:package -- --bundles nsis
+      - name: Build unsigned Linux package
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npm run desktop:package -- --bundles deb
+      - name: Verify bundled or installed engine and native window startup
+        run: python desktop/scripts/verify-package.py
+      - name: Prepare verified unsigned review package
+        run: python desktop/scripts/prepare-review-artifact.py
+      - name: Retain unsigned preview for owner review
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-desktop-preview-${{ matrix.os }}
+          path: desktop/build/review/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Retain runtime provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-provenance-${{ matrix.os }}
+          path: desktop/build/engine/engine-manifest.json
+          retention-days: 14

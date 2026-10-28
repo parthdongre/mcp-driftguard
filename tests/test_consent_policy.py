@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from driftguard.consent_policy import (
     ConsentPolicyThresholds,
     SequenceRiskTrace,
@@ -83,3 +85,34 @@ def test_pareto_frontier_contains_only_non_dominated_points() -> None:
     assert any(item.metrics.malicious_detection_rate == 1.0 for item in frontier)
     thresholds = {item.thresholds for item in frontier}
     assert len(thresholds) == len(frontier)
+
+
+def test_pre_onset_intervention_is_not_credited_as_attack_detection() -> None:
+    trace = SequenceRiskTrace(
+        trace_id="early-only",
+        final_label=ChangeClass.MALICIOUS_DRIFT,
+        malicious_scores=(0.9, 0.0, 0.0),
+        capability_scores=(0.0, 0.0, 0.0),
+        attack_onset=2,
+    )
+    metrics = evaluate_consent_policy([trace], ConsentPolicyThresholds(0.5, 0.5))
+    assert metrics.malicious_detection_rate == 0.0
+    assert metrics.malicious_block_rate == 0.0
+    assert metrics.mean_detection_delay is None
+    assert metrics.pre_onset_intervention_rate == 1.0
+
+
+def test_duplicate_trace_ids_cannot_overwrite_policy_outcomes() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        evaluate_consent_policy([_traces()[0], _traces()[0]], ConsentPolicyThresholds(0.5, 0.5))
+
+
+@pytest.mark.parametrize("score", [float("nan"), float("inf"), -0.1, 1.1])
+def test_policy_trace_rejects_invalid_scores(score: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        SequenceRiskTrace("bad", ChangeClass.BENIGN_MAINTENANCE, (score,), (0.0,))
+
+
+def test_policy_selection_rejects_empty_grid() -> None:
+    with pytest.raises(ValueError, match="grids"):
+        select_consent_policy(_traces(), block_grid=())

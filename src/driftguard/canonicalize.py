@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from copy import deepcopy
 from typing import Any
@@ -10,7 +11,22 @@ from .models import ToolSnapshot
 
 _WHITESPACE = re.compile(r"\s+")
 _TEXT_FIELDS = {"description", "title"}
-_SET_LIKE_ARRAY_FIELDS = {"required", "enum"}
+_SCHEMA_MAP_FIELDS = {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+_SCHEMA_FIELDS = {
+    "additionalProperties",
+    "additionalItems",
+    "items",
+    "contains",
+    "not",
+    "if",
+    "then",
+    "else",
+    "propertyNames",
+    "unevaluatedProperties",
+    "unevaluatedItems",
+    "contentSchema",
+}
+_SCHEMA_ARRAY_FIELDS = {"allOf", "anyOf", "oneOf", "prefixItems"}
 
 
 def _normalize_text(value: str) -> str:
@@ -23,38 +39,83 @@ def _stable_sort_key(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _canonicalize(value: Any, *, field_name: str | None = None) -> Any:
-    """Create a deterministic representation without changing schema semantics.
-
-    Only human-facing ``description`` and ``title`` strings receive whitespace
-    normalization. Literal-bearing values such as defaults, regex patterns, enum
-    members, examples, paths, and tool names are preserved byte-for-byte because
-    whitespace can be meaningful there.
-
-    JSON Schema ``required`` and ``enum`` arrays are set-like for validation, so their
-    ordering is normalized after recursively canonicalizing their members. Other arrays
-    preserve order because ordering can affect meaning or downstream presentation.
-    """
-
-    if isinstance(value, dict):
-        return {
-            key: _canonicalize(value[key], field_name=key)
-            for key in sorted(value)
-        }
+def _validate_json(value: Any) -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float) and math.isfinite(value):
+        return
     if isinstance(value, list):
-        items = [_canonicalize(item) for item in value]
-        if field_name in _SET_LIKE_ARRAY_FIELDS:
-            return sorted(items, key=_stable_sort_key)
-        return items
-    if isinstance(value, str) and field_name in _TEXT_FIELDS:
-        return _normalize_text(value)
-    return value
+        for item in value:
+            _validate_json(item)
+        return
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        for item in value.values():
+            _validate_json(item)
+        return
+    raise ValueError("Tool definitions must contain only finite JSON values and string keys")
+
+
+def exact_json(value: Any) -> str:
+    """Stable JSON without semantic normalization, suitable for exact consent binding."""
+
+    _validate_json(value)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+
+
+def exact_hash(value: Any) -> str:
+    return hashlib.sha256(exact_json(value).encode("utf-8")).hexdigest()
+
+
+def _canonical_schema(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return deepcopy(value)
+    result = {}
+    for key, child in sorted(value.items()):
+        if key in _TEXT_FIELDS and isinstance(child, str):
+            result[key] = _normalize_text(child)
+        elif key in _SCHEMA_MAP_FIELDS and isinstance(child, dict):
+            result[key] = {
+                name: _canonical_schema(schema) for name, schema in sorted(child.items())
+            }
+        elif key in _SCHEMA_FIELDS:
+            result[key] = (
+                [_canonical_schema(item) for item in child]
+                if isinstance(child, list)
+                else _canonical_schema(child)
+            )
+        elif key in _SCHEMA_ARRAY_FIELDS and isinstance(child, list):
+            result[key] = [_canonical_schema(item) for item in child]
+        elif key == "dependencies" and isinstance(child, dict):
+            result[key] = {
+                name: (_canonical_schema(item) if isinstance(item, dict) else deepcopy(item))
+                for name, item in sorted(child.items())
+            }
+        elif key in {"required", "enum"} and isinstance(child, list):
+            # Members are data, including objects with keys named description/enum.
+            result[key] = sorted(deepcopy(child), key=_stable_sort_key)
+        else:
+            # Defaults, consts, examples and unknown extension keywords contain data.
+            result[key] = deepcopy(child)
+    return result
 
 
 def canonicalize_tool(tool: dict[str, Any]) -> dict[str, Any]:
     """Return a canonical copy while retaining security-relevant literal values."""
 
-    return _canonicalize(deepcopy(tool))
+    if not isinstance(tool, dict):
+        raise TypeError("A tool definition must be a JSON object")
+    _validate_json(tool)
+    result = {}
+    for key, value in sorted(tool.items()):
+        if key in _TEXT_FIELDS and isinstance(value, str):
+            result[key] = _normalize_text(value)
+        elif key in {"inputSchema", "input_schema", "outputSchema", "output_schema"}:
+            result[key] = _canonical_schema(value)
+        else:
+            result[key] = deepcopy(value)
+    return result
 
 
 def canonical_json(tool: dict[str, Any]) -> str:
@@ -66,6 +127,17 @@ def schema_hash(tool: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(tool).encode("utf-8")).hexdigest()
 
 
+def validate_snapshot_integrity(snapshot: ToolSnapshot) -> None:
+    """Reject externally constructed or subsequently mutated snapshot identities."""
+
+    if (
+        snapshot.sha256 != schema_hash(snapshot.canonical_tool)
+        or exact_json(snapshot.canonical_tool) != exact_json(canonicalize_tool(snapshot.raw_tool))
+        or snapshot.tool_name != str(snapshot.canonical_tool.get("name", "unknown-tool"))
+    ):
+        raise ValueError("Tool snapshot content does not match its recorded identity")
+
+
 def make_snapshot(
     *,
     server_id: str,
@@ -74,7 +146,11 @@ def make_snapshot(
     approval_state: str = "unreviewed",
     parent_snapshot_id: str | None = None,
 ) -> ToolSnapshot:
-    """Convert an observed MCP tool definition into an immutable logical snapshot."""
+    """Detach an observed definition and record its canonical integrity identity.
+
+    Nested JSON containers remain ordinary dictionaries/lists; consumers verify the
+    recorded identity before comparing snapshots rather than trusting mutable contents.
+    """
 
     canonical = canonicalize_tool(tool)
     tool_name = str(canonical.get("name", "unknown-tool"))
