@@ -12,6 +12,27 @@ const bridge = await sourceModule('src/bridge.ts');
 const definition = { name: 'search', inputSchema: { type: 'object' } };
 const candidate = { candidate_id: 'candidate-1', repository_id: 'example/server', server_id: 'local', tool_name: 'search', old_version_id: 'v0', new_version_id: 'v1', old_tool: definition, new_tool: { ...definition, description: 'Updated' }, provenance: 'real_history', suggested_label: 'C3', model_probability: 0.99, suggested_evidence: ['model_hint'] };
 
+test('native string errors survive the invoke boundary as readable Error objects', async () => {
+  const previous = globalThis.window;
+  const diagnostic = 'The local engine must be an existing absolute executable';
+  globalThis.window = { __TAURI_INTERNALS__: { invoke: async () => { throw diagnostic; } } };
+  try {
+    await assert.rejects(bridge.request({ action: 'harness_scan' }), error =>
+      error instanceof Error && error.message === diagnostic);
+  } finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
+});
+
+test('bridge keeps structured Python failures and never serializes unknown rejection objects', async () => {
+  const previous = globalThis.window;
+  try {
+    globalThis.window = { __TAURI_INTERNALS__: { invoke: async () => ({ ok: false, error: { code: 'invalid_request', message: 'Invalid desktop request; check the fields and reload.' } }) } };
+    await assert.rejects(bridge.request({ action: 'harness_scan' }), /Invalid desktop request/);
+    globalThis.window.__TAURI_INTERNALS__.invoke = async () => { throw { private_detail: 'do-not-display' }; };
+    await assert.rejects(bridge.request({ action: 'harness_scan' }), error =>
+      error instanceof Error && error.message.includes('without a diagnostic') && !error.message.includes('do-not-display'));
+  } finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
+});
+
 test('imports tools/list responses and rejects duplicate or invalid definitions', () => {
   assert.deepEqual(utils.parseDefinitions(JSON.stringify({ tools: [definition] })), [definition]);
   assert.throws(() => utils.parseDefinitions(JSON.stringify([definition, definition])), /Duplicate/);

@@ -11,10 +11,18 @@ export const emptyOverview: Overview = {
 
 export async function request<T>(payload: BridgeRequest): Promise<T> {
   if (!hasNativeBridge()) throw new Error('The local bridge is available inside the native desktop app. Browser preview does not protect MCP connections.');
-  const { invoke } = await import('@tauri-apps/api/core');
-  const response = await invoke<{ ok: boolean; data?: T; error?: { code: string; message: string } }>('driftguard_request', { request: payload });
-  if (!response.ok || response.data === undefined) throw new Error(response.error?.message ?? 'The gateway could not complete this request.');
-  return response.data;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const response = await invoke<{ ok: boolean; data?: T; error?: { code: string; message: string } }>('driftguard_request', { request: payload });
+    if (!response.ok || response.data === undefined) throw new Error(response.error?.message ?? 'The gateway could not complete this request.');
+    return response.data;
+  } catch (failure) {
+    // Rust Result<_, String> rejections arrive as strings, not Error instances.
+    // Preserve the native diagnostic so the UI can explain missing/stale engines.
+    if (failure instanceof Error) throw failure;
+    if (typeof failure === 'string' && failure.trim()) throw new Error(failure);
+    throw new Error('The native bridge failed without a diagnostic. Restart the desktop app and check its terminal output.');
+  }
 }
 
 /** Deliberately isolated from the native bridge and browser storage. */

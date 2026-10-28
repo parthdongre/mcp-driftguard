@@ -57,6 +57,12 @@ The native app must inherit the CLI's PATH. If a runtime source is absent, start
 DriftGuard from the terminal where `codex` or `claude` works. Browser preview
 cannot read local harness configuration or launch processes.
 
+If scanning fails, the interface now preserves native bridge error messages
+(including Rust string rejections). Run `npm run desktop:check` from `desktop/`
+to verify that the source development engine is installed and imports correctly.
+The development launcher selects the repository `.venv` automatically. A stale
+`DRIFTGUARD_PYTHON` override must be corrected or unset before restarting.
+
 ## Failure behavior and limits
 
 Fetch binds a freshly rescanned selection to the configuration digest shown by
