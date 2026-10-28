@@ -134,11 +134,11 @@ export default function App() {
     <a href="#main-content" className="skip-link">Skip to content</a>
     <aside className="sidebar"><div className="brand"><span className="brand-mark"><Icon name="shield" size={23} /></span><div><strong>DriftGuard</strong><span>MCP SECURITY WORKSPACE</span></div></div>
       <div className="workspace-label">WORKSPACE <span>LOCAL</span></div>
-      <nav aria-label="Main navigation">{navigation.map(item => <button key={item.page} aria-current={page === item.page ? 'page' : undefined} className={`nav-item ${page === item.page ? 'active' : ''}`} onClick={() => { setPage(item.page); setQuery(''); }}>
+      <nav aria-label="Main navigation">{navigation.map(item => <button key={item.page} aria-label={item.label} aria-current={page === item.page ? 'page' : undefined} className={`nav-item ${page === item.page ? 'active' : ''}`} onClick={() => { setPage(item.page); setQuery(''); }}>
         <Icon name={item.icon} /><span>{item.label}</span>{item.page === 'review' && workspace.overview.pending > 0 ? <span className="nav-count">{workspace.overview.pending}</span> : null}
       </button>)}</nav>
       <div className="sidebar-bottom"><div className="local-note"><Icon name="lock" size={15} /><span>Private by default<small>Analysis stays on this device</small></span></div>
-        <button className={`nav-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')} aria-current={page === 'settings' ? 'page' : undefined}><Icon name="settings" /><span>Settings</span><kbd>⌘ ,</kbd></button>
+        <button className={`nav-item ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" onClick={() => setPage('settings')} aria-current={page === 'settings' ? 'page' : undefined}><Icon name="settings" /><span>Settings</span><kbd>⌘ ,</kbd></button>
         <div className="sidebar-version"><span>RESEARCH PREVIEW</span><span>0.1</span></div></div>
     </aside>
     <div className="main-shell"><header className="topbar"><div className="breadcrumb">Workspace <Icon name="chevron" size={12} /><strong>{heading}</strong></div>
