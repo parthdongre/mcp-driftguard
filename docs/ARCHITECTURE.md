@@ -25,7 +25,8 @@ flowchart TD
 | `gateway_transport.py` / `gateway_http.py` | Fixed-argv stdio or configured HTTPS upstream; identity binding, JSON/SSE, routing headers, complete relisting and independent text egress checks | Explicit legacy/modern tools subset; no OAuth, sandbox, general server callbacks or complete output protection |
 | `gateway_cli.py` | Opt-in client-facing stdio facade and safe identity diagnostic | Stdout is protocol only; no approval method is exposed through MCP |
 | `desktop_bridge.py` | One JSON request per process; fixed review action allowlist | Native host selects DB; imported sources use a namespace distinct from live gateway identities |
-| `desktop/src-tauri` | Native shell, capability/CSP, fixed packaged engine or debug-only isolated Python and bounded response | No shell/filesystem/network plugins, renderer path/executable override or HTTP listener |
+| `harnesses.py` | Known Codex/Claude configuration discovery and explicit MCP/App Server definition collection | Scan does not execute; fetch revalidates selection, never calls tools and stores review-only `harness:` identities |
+| `desktop/src-tauri` | Native shell, capability/CSP, fixed packaged engine or debug-only isolated Python and bounded response | No shell/filesystem/network plugins, engine/state/raw-command overrides or HTTP listener; harness requests accept a project directory and discovered selection |
 | `desktop/src` | Overview, imported/observed sources, review, history, activity, annotation, appearance | Browser fixture mode is isolated and explicit; UI does not establish live gateway health |
 | `sequential_experiments.py` | Isolated EWMA and standardized multivariate CUSUM | Experimental; not plugged into authorization |
 | `capability_graph.py` | Typed evidence-bearing reachability witnesses and graph updates | Explicit graph inputs; not inferred runtime authority, not deployed enforcement |
@@ -47,7 +48,10 @@ not proven safe: see [SECURITY_MODEL.md](SECURITY_MODEL.md).
 Manual imports are an inspection feature. Their `import:` identities and
 `manual-import` principal cannot grant approval to a live stdio connection.
 The desktop reads a shared state file; it does not launch a server simply because
-the user imported a definition. Credentials are not managed by this prototype.
+the user imported a definition. The separate harness collection action starts a
+selected configured server only when requested and closes it after discovery;
+see [harness connections](HARNESS_CONNECTIONS.md). HTTP credential-store support
+is described below.
 
 ## Research versus product
 

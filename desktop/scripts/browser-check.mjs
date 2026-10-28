@@ -111,6 +111,8 @@ try {
   await page.getByRole('button', { name: 'Exit demo', exact: true }).click();
   await page.getByRole('button', { name: 'MCP connections', exact: true }).click();
   await page.getByLabel('Source identifier', { exact: true }).fill('qa-configured-source');
+  check('Harness discovery explains native-only local access', await page.getByRole('heading', { name: 'Connect your coding harness', exact: true }).isVisible());
+  check('Browser cannot scan or execute local harness connections', await page.getByRole('button', { name: 'Find harness connections', exact: true }).isDisabled());
   await page.getByLabel('Working directory', { exact: true }).fill('/tmp/driftguard-source');
   await page.getByLabel('Server command as JSON', { exact: false }).fill('["/usr/bin/python3","/tmp/server.py"]');
   await page.getByRole('button', { name: 'Prepare source profile', exact: true }).click();
@@ -129,7 +131,8 @@ try {
   check('Browser preview cannot store native credentials', await page.getByRole('button', { name: 'Save to OS credential store', exact: true }).isDisabled());
   await auditAccessibility('connection-setup');
   // Test-only IPC stand-in: renderer -> actual Python module -> temporary SQLite.
-  // This does not exercise native Rust IPC or establish a real MCP connection.
+  // This does not exercise native Rust IPC. A disposable MCP child below verifies
+  // definition collection without installed user harnesses or tool invocations.
   const temporary = await mkdtemp(resolve(tmpdir(), 'driftguard-ui-'));
   const statePath = resolve(temporary, 'guard.sqlite3');
   let queue = Promise.resolve();
@@ -176,13 +179,47 @@ try {
     check('A changed definition invalidates prior exact-version approval', changed.data.approved === 0 && changed.data.pending === 1);
     const stored = await runPython({ action: 'list_tools' });
     check('Imported approvals remain isolated from live gateway identities', stored.data[0].server_id === 'import:qa-source');
+    const fixturePath = resolve(temporary, 'mcp-fixture.py');
+    const tracePath = resolve(temporary, 'mcp-methods.jsonl');
+    await writeFile(fixturePath, `import json, os, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    with open(os.environ['QA_METHOD_TRACE'], 'a') as trace:
+        trace.write(json.dumps(request) + '\\n')
+    if 'id' not in request:
+        continue
+    if request['method'] == 'initialize':
+        result = {'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}}}
+    elif request['method'] == 'tools/list':
+        result = {'tools': [{'name': 'qa_harness_read', 'description': 'Read selected local records', 'inputSchema': {'type': 'object'}}]}
+    else:
+        raise RuntimeError('Unexpected operation in definition-only collection')
+    print(json.dumps({'jsonrpc': '2.0', 'id': request['id'], 'result': result}), flush=True)
+`);
+    await writeFile(resolve(temporary, '.mcp.json'), JSON.stringify({ mcpServers: {
+      'qa-harness-source': { command: process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', args: [fixturePath], env: { QA_METHOD_TRACE: tracePath } },
+    } }));
+    await connected.getByRole('button', { name: 'MCP connections', exact: true }).click();
+    await connected.getByRole('textbox', { name: 'Project directory', exact: true }).fill(temporary);
+    await connected.getByRole('button', { name: 'Find harness connections', exact: true }).click();
+    const harnessSource = connected.getByRole('article').filter({ has: connected.getByRole('heading', { name: 'qa-harness-source', exact: true }) });
+    await harnessSource.getByRole('button', { name: 'Fetch definitions', exact: true }).click();
+    await harnessSource.getByText('1 definition collected from 1 source.', { exact: true }).waitFor();
+    await connected.getByRole('button', { name: 'Security review', exact: true }).click();
+    await connected.getByRole('button', { name: /qa_harness_read/ }).click();
+    await connected.getByRole('heading', { name: 'qa_harness_read', exact: true }).waitFor();
+    const harvested = await runPython({ action: 'list_tools' });
+    check('Harness scan and fetch render actual discovered definitions', harvested.data.some(tool => tool.tool_name === 'qa_harness_read' && tool.server_id.startsWith('harness:') && tool.status === 'pending'));
+    const methods = (await readFile(tracePath, 'utf8')).trim().split('\n').map(line => JSON.parse(line).method);
+    check('Harness collection never calls tools', methods.every(method => ['initialize', 'notifications/initialized', 'tools/list'].includes(method)));
+    await connected.screenshot({ path: new URL('harness-collected-review.png', output).pathname, fullPage: true });
     check('Real-data review has no runtime errors', errors.length === 0);
   } finally { await connected.close(); await rm(temporary, { recursive: true, force: true }); }
   check('No browser runtime errors', errors.length === 0);
   check('No remote requests made', external.length === 0);
   const sampledAccessibilityPassed = accessibility.every(screen => screen.violations.length === 0);
   if (sampledAccessibilityPassed) checks.push('No automated WCAG A/AA violations in sampled screens');
-  const result = { passed: sampledAccessibilityPassed, checks, errors, accessibility, external_requests: external, native_app_tested: false, python_bridge_via_test_ipc: true, browser_version: browser.version(), viewport_sizes: ['1380x900', '900x740'], fixture_mode: true };
+  const result = { passed: sampledAccessibilityPassed, checks, errors, accessibility, external_requests: external, native_app_tested: false, installed_harnesses_tested: false, python_bridge_via_test_ipc: true, browser_version: browser.version(), viewport_sizes: ['1380x900', '900x740'], fixture_mode: true };
   await writeFile(new URL('browser-check.json', output), JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify(result, null, 2));
   assert.ok(sampledAccessibilityPassed, 'No automated WCAG A/AA violations in sampled screens');

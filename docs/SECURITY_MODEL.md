@@ -182,6 +182,19 @@ retain the explicitly configured virtual-environment workflow. The renderer cann
 choose an executable, module, state path or command-line arguments for review IPC.
 The packaged engine dispatches only the fixed bridge/gateway/credential entry points.
 
+Harness discovery extends the fixed review bridge with `harness_scan` and
+`harness_fetch`. The renderer may select an absolute project directory and a
+discovered source/digest, but cannot submit a raw executable, argv, arbitrary
+configuration filename or database path. The Python collector reads known Codex
+and Claude configuration locations, revalidates the selection, and can launch
+that configured server or the installed harness's fixed discovery command.
+Selecting **Fetch definitions** authorizes startup with user permissions; this is
+not sandboxing or a defense against a compromised authorized renderer. Collection
+never invokes tools or starts model turns. Its `harness:` observations are
+review-only and cannot authorize a live gateway identity. See
+[harness connections](HARNESS_CONNECTIONS.md) for protocol, authentication and
+collection limits.
+
 The HTTP upstream validates TLS, disables redirects/ambient proxies, serializes
 bounded JSON/SSE exchanges and never automatically replays failed calls.
 Modern routing mirrors body metadata into required method/name/parameter headers;

@@ -28,6 +28,8 @@ const ACTIONS: &[&str] = &[
     "approve",
     "deny",
     "quarantine",
+    "harness_scan",
+    "harness_fetch",
 ];
 
 #[derive(Clone)]
@@ -55,6 +57,8 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
         "import_definitions" => &["action", "server_id", "identity", "tools"],
         "store_http_credential" => &["action", "server_id", "url", "secret"],
         "remove_http_credential" => &["action", "server_id", "url"],
+        "harness_scan" => &["action", "project_dir"],
+        "harness_fetch" => &["action", "project_dir", "source_id", "config_digest"],
         _ => &[
             "action",
             "server_id",
@@ -443,6 +447,16 @@ mod tests {
         assert!(validate_request(&json!({"action": "approve", "command": "whoami"})).is_err());
         assert!(validate_request(&json!({"action": "overview", "args": []})).is_err());
         assert!(validate_request(&json!({"action": "overview"})).is_ok());
+        let scan = json!({"action": "harness_scan", "project_dir": "/tmp/project"});
+        assert!(validate_request(&scan).is_ok());
+        let fetch = json!({
+            "action": "harness_fetch", "source_id": "id", "config_digest": "digest",
+        });
+        assert!(validate_request(&fetch).is_ok());
+        let command = json!({"action": "harness_fetch", "command": "whoami"});
+        assert!(validate_request(&command).is_err());
+        let file = json!({"action": "harness_scan", "config_path": "/etc/passwd"});
+        assert!(validate_request(&file).is_err());
     }
 
     #[test]

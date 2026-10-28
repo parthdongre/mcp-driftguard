@@ -10,6 +10,7 @@ import { Timeline } from './Timeline';
 import { AnnotationLab } from './AnnotationLab';
 import { ConnectionSetup } from './ConnectionSetup';
 import { ConnectionHealth } from './ConnectionHealth';
+import { HarnessConnections } from './HarnessConnections';
 import { downloadText, formatTime, matchesActivityFilter, MAX_IMPORT_BYTES, parseDefinitions, safeAuditExport } from './review-utils';
 
 const navigation: { page: Page; label: string; icon: IconName; shortcut?: string }[] = [
@@ -176,7 +177,7 @@ export default function App() {
 
         {page === 'connections' ? <>
           <div className="scope-note"><Icon name="connections" size={22} /><div><h3>Connect through the gateway to enforce decisions</h3><p>Definition imports support inspection. They do not establish a live connection or intercept client calls. Configure your MCP client to use the DriftGuard gateway for enforcement.</p></div></div>
-          {!demo ? <><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : null}
+          {!demo ? <><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : null}
           <section className="panel"><div className="section-heading"><div><h2>Definition sources</h2><p>{sources.length} recorded sources · process heartbeats shown separately</p></div></div>
             {sources.length ? sources.map(source => <div className="source-row" key={source}><span className="source-icon"><Icon name="connections" size={23} /></span><div><h3>{source}</h3><p>{workspace.tools.filter(tool => tool.server_id === source).length} observed tools</p></div><span className="badge">{demo ? 'Fixture source' : 'Recorded definitions'}</span><button className="button subtle" disabled={!workspace.tools.some(item => item.server_id === source)} onClick={() => { const tool = workspace.tools.find(item => item.server_id === source); if (tool) openReview(tool); }}>Review tools <Icon name="arrow" size={15} /></button></div>) : <Empty icon="connections" title="Add your first definition source" action="Import tool definitions" onAction={() => setDialog('import')}>Choose an exported MCP tools/list result. The import is local and does not execute server code.</Empty>}
           </section><section className="setup-guide"><div className="section-heading"><h2>From observation to protection</h2><span className="badge">Explicit configuration</span></div><ol><li><strong>Inspect the server</strong><p>Review its executable, origin, permissions, and declared tools before running it.</p></li><li><strong>Route your MCP client</strong><p>Use the gateway CLI and bind the server identity to the same local database.</p></li><li><strong>Review exact versions</strong><p>New or changed definitions require a decision. Calls outside the gateway bypass this protection.</p></li></ol></section>

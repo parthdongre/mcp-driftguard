@@ -1,8 +1,9 @@
 """One-request JSON bridge for the native desktop shell.
 
 The trusted native host chooses the database path. The renderer can send only
-allowlisted operations; it cannot select executables, read local files, forward
-tool calls, or change policy through this bridge. No HTTP listener is opened.
+allowlisted operations. Harness collection reads known configuration files and
+starts only a freshly discovered selection. No arbitrary executable/file request,
+tool call, policy change or HTTP listener is exposed.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ ACTIONS = frozenset({
     "overview", "list_tools", "review", "history", "activity",
     "import_definitions", "approve", "deny", "quarantine",
     "store_http_credential", "remove_http_credential",
+    "harness_scan", "harness_fetch",
 })
 
 
@@ -49,6 +51,20 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
     if not isinstance(request, dict) or request.get("action") not in ACTIONS:
         raise ValueError("Unknown desktop action")
     action = request["action"]
+    if action in {"harness_scan", "harness_fetch"}:
+        from .harnesses import fetch, scan
+        allowed = {"action", "project_dir"}
+        if action == "harness_fetch":
+            allowed |= {"source_id", "config_digest"}
+        if set(request) - allowed:
+            raise ValueError("Unexpected harness request fields")
+        project = request.get("project_dir")
+        if project is not None and not isinstance(project, str):
+            raise ValueError("Invalid project directory")
+        if action == "harness_scan":
+            return scan(project)
+        return fetch(store, _text(request, "source_id", maximum=64),
+                     _text(request, "config_digest", maximum=64), project)
     if action == "overview":
         servers = store.list_servers()
         tools = store.list_tools()
@@ -125,6 +141,7 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
 
 def execute(db_path: str | Path, raw: bytes) -> dict[str, Any]:
     """Bound input, reject ambiguous JSON, and return safe structured errors."""
+    from .harnesses import HarnessError
     try:
         if not raw or len(raw) > MAX_REQUEST_BYTES:
             raise ValueError("Desktop request is empty or exceeds the size limit")
@@ -133,6 +150,8 @@ def execute(db_path: str | Path, raw: bytes) -> dict[str, Any]:
         with GuardStore(db_path) as store:
             data = handle_request(store, request)
         return {"ok": True, "data": data}
+    except HarnessError as error:
+        return {"ok": False, "error": {"code": "harness_unavailable", "message": str(error)}}
     except GateError as error:
         return {"ok": False, "error": {"code": "review_rejected", "message": str(error)}}
     except (ValueError, TypeError, UnicodeDecodeError, RecursionError):

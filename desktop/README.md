@@ -32,6 +32,12 @@ closing the browser. Never treat automated QA fixture labels as research evidenc
 
 ## Native development
 
+The native **MCP connections** page can find Codex and Claude Code configuration
+and fetch definitions directly, including Codex App Server and Claude's own MCP
+tool catalog. See [harness connections](../docs/HARNESS_CONNECTIONS.md) for setup,
+supported configuration scopes and limits. This capability requires the native
+app; browser preview cannot read local configuration or start harness processes.
+
 Install [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/)
 and Rust. Set a trusted absolute Python executable from the virtual environment.
 Do not use a system/user-site installation: native invocation uses Python `-I`.
