@@ -10,6 +10,7 @@ import { Timeline } from './Timeline';
 import { AnnotationLab } from './AnnotationLab';
 import { ConnectionSetup } from './ConnectionSetup';
 import { ConnectionHealth } from './ConnectionHealth';
+import { Disclosure } from './Disclosure';
 import { HarnessConnections } from './HarnessConnections';
 import { downloadText, formatTime, matchesActivityFilter, MAX_IMPORT_BYTES, parseDefinitions, safeAuditExport } from './review-utils';
 
@@ -21,15 +22,6 @@ const navigation: { page: Page; label: string; icon: IconName; shortcut?: string
   { page: 'activity', label: 'Security activity', icon: 'activity', shortcut: '5' },
   { page: 'research', label: 'Research laboratory', icon: 'research', shortcut: '6' },
 ];
-const descriptions: Record<Page, string> = {
-  overview: 'A clear view of what has changed and what needs your attention.',
-  connections: 'Review tool definitions from explicitly configured MCP sources.',
-  review: 'Understand the change. Decide what this exact version can be trusted to do.',
-  timeline: 'Follow changes across time, relative to the approved baseline.',
-  activity: 'An inspectable record of local security decisions.',
-  research: 'Independent annotation and reproducible research, separate from protection.',
-  settings: 'Your workspace, your device, your preferences.',
-};
 const initialWorkspace: Workspace = { overview: emptyOverview, tools: [], activity: [] };
 type Theme = 'system' | 'dark' | 'light';
 
@@ -39,11 +31,8 @@ function Empty({ icon, title, children, action, onAction }: { icon: IconName; ti
 }
 
 function ToolRow({ tool, selected, onClick }: { tool: ToolRecord; selected?: boolean; onClick: () => void }) {
-  const warning = tool.classification === 'C3' || tool.status === 'quarantined';
-  return <button className={`tool-row ${selected ? 'selected' : ''}`} onClick={onClick} aria-pressed={selected} title={`${tool.tool_name} · ${tool.server_id}`}>
-    <span className={`tool-symbol ${warning ? 'danger' : isPending(tool) ? 'warning' : ''}`}><Icon name={warning ? 'alert' : 'file'} /></span>
-    <span className="tool-text"><strong>{tool.tool_name}</strong><small>{tool.server_id}</small></span>
-    <span className={`badge ${warning ? 'danger' : isPending(tool) ? 'warning' : ''}`}>{statusLabel(tool.status)}</span><Icon name="chevron" size={14} />
+  return <button className={`tool-row compact-tool ${selected ? 'selected' : ''}`} onClick={onClick} aria-pressed={selected} aria-label={`${tool.tool_name} · ${tool.server_id}`} title={`${tool.tool_name} · ${tool.server_id}`}>
+    <span className="tool-text"><strong>{tool.tool_name}</strong></span><Icon name="chevron" size={15} />
   </button>;
 }
 
@@ -157,7 +146,7 @@ export default function App() {
       <div className={`mode-banner ${demo ? 'demo' : ''}`}><Icon name={demo ? 'research' : 'lock'} size={15} /><span>{demo ? 'Isolated research fixture · No connected clients · Decisions are discarded when you exit' : native ? 'Protection covers only MCP calls explicitly routed through the configured gateway.' : 'Browser preview · Native gateway unavailable · No MCP connections are protected'}</span>
         {demo ? <button onClick={exitDemo}>Exit demo</button> : <button onClick={startDemo}>Explore guided demo <Icon name="arrow" size={13} /></button>}</div>
       <main id="main-content" tabIndex={-1}>
-        <div className="page-heading"><div><div className="eyebrow">{page === 'research' ? 'EVIDENCE BEFORE CLAIMS' : 'YOUR LOCAL WORKSPACE'}</div><h1>{heading}</h1><p>{descriptions[page]}</p></div>
+        <div className="page-heading"><div><h1>{heading}</h1></div>
           {page === 'overview' || page === 'connections' ? <button className="button primary" onClick={() => setDialog('import')} disabled={!!demo}><Icon name="plus" size={16} />Import definitions</button> : null}
           {page === 'activity' ? <button className="button subtle" disabled={!events.length} onClick={() => setDialog('export')}><Icon name="download" size={16} />Export summary</button> : null}
         </div>
@@ -166,32 +155,64 @@ export default function App() {
         {loading ? <div className="loading-line" role="status">Reading local workspace…</div> : null}
 
         {page === 'overview' ? <>
-          <section className="protection-summary"><div className="protection-symbol"><Icon name="shield" size={38} /></div><div><span className="eyebrow">{demo ? 'DEMONSTRATION WORKSPACE' : 'PROTECTION SCOPE'}</span><h2>{demo ? 'See how trust changes over time.' : workspace.overview.tools > 0 ? 'Local review state is available.' : 'Ready for your first security review.'}</h2><p>{demo ? 'A real deterministic detector trace, presented as an isolated learning scenario.' : workspace.overview.scope}</p></div><span className="status-pill"><span className="dot amber" />{demo ? 'Fixture mode' : 'Review workspace'}</span></section>
-          <div className="stats-grid">{[['Definition sources', workspace.overview.servers, 'Imported or gateway observed'], ['Observed tools', workspace.overview.tools, 'Definitions in this workspace'], ['Needs review', workspace.overview.pending, 'Awaiting an explicit decision'], ['Quarantined', workspace.overview.quarantined, 'Versions held from approval']].map(([label, value, hint]) => <div className="stat" key={label}><span>{label}</span><strong>{value}</strong><small>{hint}</small></div>)}</div>
-          <div className="overview-split"><section className="panel"><div className="section-heading"><div><h2>Review queue <span className="number-label">{pending.length}</span></h2><p>New definitions and changes that need a decision.</p></div><button className="text-button" onClick={() => setPage('review')}>View all <Icon name="arrow" size={15} /></button></div>
-            {pending.length ? <div className="tool-list">{pending.slice(0, 5).map(tool => <ToolRow key={toolKey(tool)} tool={tool} onClick={() => openReview(tool)} />)}</div> : <div className="inline-empty"><Icon name="review" size={25} /><h3>{workspace.tools.length ? 'Your review queue is clear' : 'Trust starts with a review'}</h3><p>{workspace.tools.length ? 'No recorded definitions are awaiting a decision.' : 'Import a tools/list JSON response to inspect a server’s declared capabilities.'}</p><button className="text-button" disabled={!!demo} onClick={() => setDialog('import')}>Import definitions <Icon name="arrow" size={14} /></button></div>}
-          </section><section className="panel activity-panel"><div className="section-heading"><div><h2>Recent activity</h2><p>A record you can inspect.</p></div></div>{workspace.activity.length ? <div className="event-list">{workspace.activity.slice(0, 4).map((event, index) => <div className="event-item" key={String(event.id ?? index)}><span className="event-node" /><div><strong>{event.event.replaceAll('_', ' ')}</strong><small>{event.tool_name ?? 'Workspace'} · {formatTime(event.timestamp)}</small></div></div>)}</div> : <div className="inline-empty"><Icon name="activity" size={25} /><h3>No recorded events</h3><p>Your first observation and every review decision will appear here.</p></div>}
-            <div className="panel-footer"><Icon name="lock" size={14} /><span>{workspace.overview.last_verification ? `Last catalog observation ${formatTime(workspace.overview.last_verification)}` : 'No gateway catalog observation recorded'}</span></div></section></div>
-          <div className="principles-strip"><div><Icon name="file" /><strong>Definitions are evidence</strong><span>They describe claims, not verified behavior.</span></div><div><Icon name="lock" /><strong>Trust is version bound</strong><span>Approvals apply to an exact definition.</span></div><div><Icon name="timeline" /><strong>History matters</strong><span>Small changes can accumulate over time.</span></div></div>
+          <section className="panel compact-panel"><Disclosure title={demo ? 'Demonstration workspace' : 'Protection scope'} level={2}><p>{demo ? 'A real deterministic detector trace, presented as an isolated learning scenario.' : workspace.overview.scope}</p><p>{demo ? 'Fixture mode' : 'Review workspace'}</p></Disclosure></section>
+          <div className="stats-grid">{[['Definition sources', workspace.overview.servers], ['Observed tools', workspace.overview.tools], ['Needs review', workspace.overview.pending], ['Quarantined', workspace.overview.quarantined]].map(([label, value]) => <div className="stat" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+          <div className="overview-split">
+            <section className="panel"><div className="section-heading"><h2>Review queue <span className="number-label">{pending.length}</span></h2><button className="text-button" onClick={() => setPage('review')}>View all <Icon name="arrow" size={15} /></button></div>
+              {pending.length ? <div className="tool-list">{pending.slice(0, 5).map(tool => <ToolRow key={toolKey(tool)} tool={tool} onClick={() => openReview(tool)} />)}</div> : <div className="inline-empty"><h3>{workspace.tools.length ? 'Your review queue is clear' : 'Trust starts with a review'}</h3><button className="text-button" disabled={!!demo} onClick={() => setDialog('import')}>Import definitions <Icon name="arrow" size={14} /></button></div>}
+            </section>
+            <section className="panel activity-panel"><div className="section-heading"><h2>Recent activity</h2></div>
+              {workspace.activity.length ? <div className="event-list">{workspace.activity.slice(0, 4).map((event, index) => <Disclosure title={event.event.replaceAll('_', ' ')} key={String(event.id ?? index)}><p>{event.tool_name ?? 'Workspace'} · {formatTime(event.timestamp)}</p></Disclosure>)}</div> : <div className="inline-empty"><h3>No recorded events</h3></div>}
+            </section>
+          </div>
+          <section className="panel compact-panel"><Disclosure title="About tool review" level={2}>
+            <Disclosure title="Definitions are evidence"><p>They describe claims, not verified behavior.</p></Disclosure>
+            <Disclosure title="Trust is version bound"><p>Approvals apply to an exact definition.</p></Disclosure>
+            <Disclosure title="History matters"><p>Small changes can accumulate over time.</p></Disclosure>
+          </Disclosure></section>
         </> : null}
 
         {page === 'connections' ? <>
-          <div className="scope-note"><Icon name="connections" size={22} /><div><h3>Connect through the gateway to enforce decisions</h3><p>Definition imports support inspection. They do not establish a live connection or intercept client calls. Configure your MCP client to use the DriftGuard gateway for enforcement.</p></div></div>
-          {!demo ? <><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : null}
-          <section className="panel"><div className="section-heading"><div><h2>Definition sources</h2><p>{sources.length} recorded sources · process heartbeats shown separately</p></div></div>
-            {sources.length ? sources.map(source => <div className="source-row" key={source}><span className="source-icon"><Icon name="connections" size={23} /></span><div><h3>{source}</h3><p>{workspace.tools.filter(tool => tool.server_id === source).length} observed tools</p></div><span className="badge">{demo ? 'Fixture source' : 'Recorded definitions'}</span><button className="button subtle" disabled={!workspace.tools.some(item => item.server_id === source)} onClick={() => { const tool = workspace.tools.find(item => item.server_id === source); if (tool) openReview(tool); }}>Review tools <Icon name="arrow" size={15} /></button></div>) : <Empty icon="connections" title="Add your first definition source" action="Import tool definitions" onAction={() => setDialog('import')}>Choose an exported MCP tools/list result. The import is local and does not execute server code.</Empty>}
-          </section><section className="setup-guide"><div className="section-heading"><h2>From observation to protection</h2><span className="badge">Explicit configuration</span></div><ol><li><strong>Inspect the server</strong><p>Review its executable, origin, permissions, and declared tools before running it.</p></li><li><strong>Route your MCP client</strong><p>Use the gateway CLI and bind the server identity to the same local database.</p></li><li><strong>Review exact versions</strong><p>New or changed definitions require a decision. Calls outside the gateway bypass this protection.</p></li></ol></section>
+          {!demo ? <><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : <section className="panel compact-panel"><Disclosure title="Connect your coding harness" level={2}><p>Exit the guided demo to connect your local harness.</p><button className="button primary" onClick={exitDemo}>Exit demo and connect</button></Disclosure></section>}
+          <section className="panel compact-panel"><Disclosure title="Definition sources" level={2}>
+            {sources.length ? sources.map(source => <Disclosure title={workspace.overview.server_list?.find(item => item.server_id === source)?.display_name || source} key={source}>
+              <p>{workspace.tools.filter(tool => tool.server_id === source).length} observed tools · {demo ? 'Fixture source' : 'Recorded definitions'}</p>
+              <button className="button subtle" disabled={!workspace.tools.some(item => item.server_id === source)} onClick={() => { const tool = workspace.tools.find(item => item.server_id === source); if (tool) openReview(tool); }}>Review tools <Icon name="arrow" size={15} /></button>
+            </Disclosure>) : <Empty icon="connections" title="Add your first definition source" action="Import tool definitions" onAction={() => setDialog('import')}>Choose an exported MCP tools/list result. The import is local and does not execute server code.</Empty>}
+          </Disclosure></section>
+          <section className="panel compact-panel"><Disclosure title="From observation to protection" level={2}>
+            <Disclosure title="Inspect the server"><p>Review its executable, origin, permissions, and declared tools before running it.</p></Disclosure>
+            <Disclosure title="Route your MCP client"><p>Use the gateway CLI and bind the server identity to the same local database. Definition collection alone does not intercept client calls.</p></Disclosure>
+            <Disclosure title="Review exact versions"><p>New or changed definitions require a decision. Calls outside the gateway bypass this protection.</p></Disclosure>
+          </Disclosure></section>
         </> : null}
 
         {page === 'review' || page === 'timeline' ? workspace.tools.length ? <div className="review-layout"><aside className="review-sidebar"><label className="search-field"><Icon name="search" size={16} /><input ref={searchRef} placeholder="Find a tool…" aria-label="Search tools" value={query} onChange={event => setQuery(event.target.value)} /><kbd>⌘ K</kbd></label><div className="list-label">OBSERVED TOOLS <span>{filteredTools.length}</span></div>{filteredTools.map(tool => <ToolRow key={toolKey(tool)} tool={tool} selected={toolKey(tool) === toolKey(selectedTool)} onClick={() => setSelectedKey(toolKey(tool))} />)}{!filteredTools.length ? <p className="no-results">No matching tools.</p> : null}</aside><section className="review-workspace">{page === 'timeline' ? <Timeline key={selectedKey || selectedTool?.tool_name} history={history} onReview={() => setPage('review')} /> : review ? <ReviewPanel review={review} busy={busy} onDecision={action => void decide(action)} onTimeline={() => setPage('timeline')} /> : <div className="loading-evidence" role="status">Reading review evidence…</div>}</section></div> : <section className="panel"><Empty icon={page === 'review' ? 'review' : 'timeline'} title={page === 'review' ? 'No definitions to review yet' : 'Every tool has a history'} action="Explore guided demo" onAction={startDemo}>Import tool definitions in MCP connections, or explore an isolated detector trace to see the workflow.</Empty></section> : null}
 
-        {page === 'activity' ? <section className="panel"><div className="activity-toolbar"><label className="search-field"><Icon name="search" size={16} /><input ref={searchRef} aria-label="Search security activity" placeholder="Search activity…" value={query} onChange={event => setQuery(event.target.value)} /></label><label className="filter-label">Event <select value={activityFilter} onChange={event => setActivityFilter(event.target.value)}><option value="all">All events</option><option value="approve">Approvals</option><option value="quarantine">Quarantines</option><option value="deny">Denials</option><option value="observ">Observations</option></select></label><span className="small muted">{events.length} events</span></div>{events.length ? <div className="table-scroll"><table><thead><tr><th>Event</th><th>Tool / source</th><th>Recorded at</th><th>Evidence</th></tr></thead><tbody>{events.map((event, index) => <tr key={String(event.id ?? index)}><td><span className="audit-event"><Icon name={event.event.includes('quarantine') ? 'alert' : 'activity'} size={15} />{event.event.replaceAll('_', ' ')}</span></td><td><strong>{event.tool_name ?? 'Workspace'}</strong><small>{event.server_id ?? 'Local'}</small></td><td className="mono small">{formatTime(event.timestamp)}</td><td>{event.detail ? <details><summary>Inspect</summary><pre>{typeof event.detail === 'string' ? event.detail : JSON.stringify(event.detail, null, 2)}</pre></details> : <span className="muted">—</span>}</td></tr>)}</tbody></table></div> : <Empty icon="activity" title={query || activityFilter !== 'all' ? 'No matching events' : 'No security events recorded'}>Observations and decisions will appear here as you use the local workspace.</Empty>}</section> : null}
+        {page === 'activity' ? <section className="panel compact-panel">
+          <div className="activity-toolbar"><label className="search-field"><Icon name="search" size={16} /><input ref={searchRef} aria-label="Search security activity" placeholder="Search activity…" value={query} onChange={event => setQuery(event.target.value)} /></label><label className="filter-label">Event <select value={activityFilter} onChange={event => setActivityFilter(event.target.value)}><option value="all">All events</option><option value="approve">Approvals</option><option value="quarantine">Quarantines</option><option value="deny">Denials</option><option value="observ">Observations</option></select></label><span className="small muted">{events.length} events</span></div>
+          {events.length ? events.map((event, index) => <Disclosure title={event.event.replaceAll('_', ' ')} key={String(event.id ?? index)} level={2}>
+            <p>{event.tool_name ?? 'Workspace'} · {event.server_id ?? 'Local'}</p><p>{formatTime(event.timestamp)}</p>
+            {event.detail ? <pre>{typeof event.detail === 'string' ? event.detail : JSON.stringify(event.detail, null, 2)}</pre> : null}
+          </Disclosure>) : <Empty icon="activity" title={query || activityFilter !== 'all' ? 'No matching events' : 'No security events recorded'}>Observations and decisions will appear here as you use the local workspace.</Empty>}
+        </section> : null}
 
         <div hidden={page !== 'research'}><AnnotationLab /></div>
 
-        {page === 'settings' ? <div className="settings-layout"><section className="panel"><div className="section-heading"><div><h2>Appearance</h2><p>Use system typography and accessible native controls.</p></div></div><div className="setting-row"><div><strong>Color theme</strong><p>Follows your device when System is selected.</p></div><div className="segmented">{(['system', 'light', 'dark'] as Theme[]).map(value => <button key={value} aria-pressed={theme === value} onClick={() => setTheme(value)}>{value === 'system' ? 'System' : value === 'light' ? <><Icon name="sun" size={14} />Light</> : <><Icon name="moon" size={14} />Dark</>}</button>)}</div></div><div className="setting-row"><div><strong>Reduced motion</strong><p>Respects your operating system’s accessibility preference.</p></div><span className="badge">System controlled</span></div></section>
-          <section className="panel"><div className="section-heading"><div><h2>Privacy & protection</h2><p>Clear boundaries for this application.</p></div></div><div className="setting-row"><div><strong>Local analysis</strong><p>The frontend sends requests only to the native local bridge.</p></div><span className="badge positive"><Icon name="lock" size={13} />On-device</span></div><div className="setting-row"><div><strong>Cloud analysis</strong><p>No cloud provider or telemetry is configured in this prototype.</p></div><span className="badge">Disabled</span></div><div className="setting-row"><div><strong>Credentials</strong><p>HTTPS bearer credentials can use the operating system store or a named environment variable. Set them up in MCP connections.</p></div><span className="badge">OS credential store</span></div><div className="setting-row"><div><strong>Protection scope</strong><p>Only explicitly routed gateway clients. Importing a definition does not protect a client.</p></div><span className="badge">Opt-in gateway</span></div></section>
-          <section className="panel"><div className="section-heading"><h2>Keyboard shortcuts</h2></div><div className="shortcut-grid">{navigation.map(item => <div key={item.page}><span>{item.label}</span><kbd>⌘ / Ctrl {item.shortcut}</kbd></div>)}<div><span>Search current list</span><kbd>⌘ / Ctrl K</kbd></div><div><span>Settings</span><kbd>⌘ / Ctrl ,</kbd></div></div></section></div> : null}
+        {page === 'settings' ? <div className="settings-layout">
+          <section className="panel compact-panel"><Disclosure title="Appearance" level={2}>
+            <Disclosure title="Color theme"><p>Follows your device when System is selected.</p><div className="segmented">{(['system', 'light', 'dark'] as Theme[]).map(value => <button key={value} aria-pressed={theme === value} onClick={() => setTheme(value)}>{value === 'system' ? 'System' : value === 'light' ? <><Icon name="sun" size={14} />Light</> : <><Icon name="moon" size={14} />Dark</>}</button>)}</div></Disclosure>
+            <Disclosure title="Typography"><p>Uses your device’s native interface font, including San Francisco on macOS. Text scales with your browser or system zoom.</p></Disclosure>
+            <Disclosure title="Reduced motion"><p>Respects your operating system’s accessibility preference.</p><span className="badge">System controlled</span></Disclosure>
+          </Disclosure></section>
+          <section className="panel compact-panel"><Disclosure title="Privacy & protection" level={2}>
+            <Disclosure title="Local analysis"><p>The frontend sends requests only to the native local bridge.</p><span className="badge positive">On-device</span></Disclosure>
+            <Disclosure title="Cloud analysis"><p>No cloud provider or telemetry is configured in this prototype.</p><span className="badge">Disabled</span></Disclosure>
+            <Disclosure title="Credentials"><p>HTTPS bearer credentials can use the operating system store or a named environment variable. Set them up in MCP connections.</p></Disclosure>
+            <Disclosure title="Protection scope"><p>Only explicitly routed gateway clients are mediated. Importing or collecting definitions does not protect a client.</p></Disclosure>
+          </Disclosure></section>
+          <section className="panel compact-panel"><Disclosure title="Keyboard shortcuts" level={2}><div className="shortcut-grid">{navigation.map(item => <div key={item.page}><span>{item.label}</span><kbd>⌘ / Ctrl {item.shortcut}</kbd></div>)}<div><span>Search current list</span><kbd>⌘ / Ctrl K</kbd></div><div><span>Settings</span><kbd>⌘ / Ctrl ,</kbd></div></div></Disclosure></section>
+        </div> : null}
         <footer className="page-footer"><span><Icon name="lock" size={12} />Local workspace · No telemetry</span><span>Definitions describe claims. Runtime behavior requires separate verification.</span></footer>
       </main>
     </div>

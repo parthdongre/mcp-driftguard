@@ -70,11 +70,13 @@ try {
   check('Quarantined exact version cannot be approved', await page.getByRole('button', { name: 'Approve version', exact: true }).isDisabled());
   await page.getByRole('button', { name: 'Tool evolution', exact: true }).click();
   await page.getByRole('button', { name: /search_repository/ }).click();
+  await page.getByRole('heading', { name: 'Cumulative change signal', exact: true }).click();
   await page.getByRole('img', { name: /CUSUM over/ }).waitFor();
   check('Temporal evidence chart renders actual recorded metrics', await page.getByRole('img', { name: /CUSUM over/ }).isVisible());
   await page.screenshot({ path: new URL('tool-evolution.png', output).pathname, fullPage: true });
   await auditAccessibility('tool-evolution-light');
   await page.getByRole('button', { name: 'Research laboratory', exact: true }).click();
+  await page.getByRole('heading', { name: 'Independent annotation workspace', exact: true }).click();
   await page.getByRole('textbox', { name: 'Annotator ID', exact: true }).fill('qa-fixture-rater');
   const definition = { name: 'qa_fixture', description: 'Read local files', inputSchema: { type: 'object' } };
   const candidate = { candidate_id: 'qa-fixture-1', repository_id: 'qa/fixture', server_id: 'qa', tool_name: 'qa_fixture', old_version_id: 'v0', new_version_id: 'v1', old_tool: definition, new_tool: { ...definition, description: 'Read selected local files' }, provenance: 'real_history', suggested_evidence: ['HIDDEN_MODEL_HINT'] };
@@ -98,6 +100,8 @@ try {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+,');
   await page.getByRole('heading', { name: 'Settings', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Appearance', exact: true }).click();
+  await page.getByRole('heading', { name: 'Color theme', exact: true }).click();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await page.screenshot({ path: new URL('settings-dark.png', output).pathname, fullPage: true });
   await auditAccessibility('settings-dark');
@@ -110,6 +114,8 @@ try {
   // Exercise source setup without starting a server or fabricating a connection.
   await page.getByRole('button', { name: 'Exit demo', exact: true }).click();
   await page.getByRole('button', { name: 'MCP connections', exact: true }).click();
+  await page.getByRole('heading', { name: 'Connect your coding harness', exact: true }).click();
+  await page.getByRole('heading', { name: 'Set up a protected connection', exact: true }).click();
   await page.getByLabel('Source identifier', { exact: true }).fill('qa-configured-source');
   check('Harness discovery explains native-only local access', await page.getByRole('heading', { name: 'Connect your coding harness', exact: true }).isVisible());
   check('Browser cannot scan or execute local harness connections', await page.getByRole('button', { name: 'Find harness connections', exact: true }).isDisabled());
@@ -200,9 +206,11 @@ for line in sys.stdin:
       'qa-harness-source': { command: process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', args: [fixturePath], env: { QA_METHOD_TRACE: tracePath } },
     } }));
     await connected.getByRole('button', { name: 'MCP connections', exact: true }).click();
+    await connected.getByRole('heading', { name: 'Connect your coding harness', exact: true }).click();
     await connected.getByRole('textbox', { name: 'Project directory', exact: true }).fill(temporary);
     await connected.getByRole('button', { name: 'Find harness connections', exact: true }).click();
     const harnessSource = connected.getByRole('article').filter({ has: connected.getByRole('heading', { name: 'qa-harness-source', exact: true }) });
+    await harnessSource.getByRole('heading', { name: 'qa-harness-source', exact: true }).click();
     await harnessSource.getByRole('button', { name: 'Fetch definitions', exact: true }).click();
     await harnessSource.getByText('1 definition collected from 1 source.', { exact: true }).waitFor();
     await connected.getByRole('button', { name: 'Security review', exact: true }).click();

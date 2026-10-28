@@ -52,3 +52,62 @@ main:focus{outline:none}
 .harness-source code { display: block; margin-top: 8px; overflow-wrap: anywhere; }
 .harness-source > button { flex-shrink: 0; }
 @media (max-width: 940px) { .harness-source { flex-direction: column; } }
+
+/* Native typography and compact progressive disclosure. No remote font files. */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: -.012em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  --border: #303136;
+}
+:root[data-theme=light] { --border: #dddde2; }
+h1 { font-size: 28px; font-weight: 650; letter-spacing: -.035em; }
+h2 { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
+h3, h4, strong { font-weight: 600; }
+p { line-height: 1.5; }
+.page-heading { margin-bottom: 24px; }
+.nav-item { font-size: 13px; min-height: 40px; }
+.breadcrumb, .connection-state, .mode-banner, .mode-banner button { font-size: 12px; }
+.button, .text-button, .form-label, .form-label input, .form-label textarea { font-size: 13px; }
+.button { min-height: 36px; border-radius: 8px; padding: 8px 14px; }
+.form-label small, .small, .form-error, .harness-notice { font-size: 12px; }
+.eyebrow { font-size: 10px; letter-spacing: .04em; }
+.compact-panel { padding: 0 18px; margin-bottom: 14px; }
+.connection-setup { padding: 0 18px; margin-bottom: 14px; }
+.disclosure { width: 100%; border-bottom: 1px solid var(--border-soft); }
+.disclosure:last-child { border-bottom: 0; }
+.disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; padding: 15px 0; cursor: pointer; list-style: none; }
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::marker { content: ''; }
+.disclosure > summary h2, .disclosure > summary h3, .disclosure > summary h4 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; letter-spacing: -.015em; overflow-wrap: anywhere; }
+.disclosure > summary > svg { color: var(--muted); transform: rotate(90deg); }
+.disclosure[open] > summary > svg { transform: rotate(-90deg); }
+.disclosure > summary:hover { color: var(--accent); }
+.disclosure-body { padding: 0 0 18px; font-size: 13px; }
+.disclosure-body > p { margin: 0 0 14px; }
+.disclosure-body > .button { margin-top: 4px; }
+.disclosure-body > .disclosure { padding-left: 14px; }
+.harness-list { margin-top: 0; border-top: 0; }
+.harness-source { display: block; padding: 0; border-bottom: 0; }
+.harness-source + .harness-source { border-top: 1px solid var(--border-soft); }
+.harness-source p { font-size: 13px; }
+.harness-source details { margin-top: 0; font-size: 13px; }
+.harness-source .disclosure > summary h3 { margin: 0; font-size: 14px; }
+.harness-source code { padding: 10px 12px; background: var(--bg); border-radius: 6px; font-size: 12px; }
+.review-disclosure { padding: 0 22px; }
+.review-disclosure .review-meta { border: 0; padding: 0; font-size: 12px; flex-wrap: wrap; }
+.review-disclosure ul { color: var(--muted); padding-left: 18px; line-height: 1.6; }
+.definition-field.disclosure { padding: 0 16px; min-height: 0; }
+.definition-field.disclosure > summary { min-height: 48px; }
+.definition-field .change-tag { display: inline-block; margin-bottom: 10px; }
+.compact-tool, .review-sidebar .tool-row.compact-tool { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 12px; min-height: 48px; }
+.compact-tool .tool-text strong, .review-sidebar .compact-tool .tool-text strong { font-size: 13px; }
+.review-sidebar .tool-row.compact-tool > svg:last-child { display: block; }
+.version { justify-content: space-between; }
+.chart-panel { padding: 0 20px; }
+.settings-layout > .panel { padding: 0 18px; }
+.shortcut-grid { padding: 8px 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

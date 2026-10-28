@@ -4,6 +4,7 @@ import { request } from './bridge';
 import { buildClientConfig, buildHttpProfile, buildProfile } from './connection-utils';
 import type { RuntimeInfo } from './connection-utils';
 import { downloadText } from './review-utils';
+import { Disclosure } from './Disclosure';
 
 export function ConnectionSetup({ native }: { native: boolean }) {
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
@@ -38,7 +39,8 @@ export function ConnectionSetup({ native }: { native: boolean }) {
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Check the source fields.'); }
   };
   return <section className="panel connection-setup">
-    <div className="section-heading"><div><h2>Set up a protected connection</h2><p>Create a source profile, then route your MCP client through the local gateway.</p></div><span className="badge">{runtime?.packaged ? 'Bundled engine' : 'Explicit setup'}</span></div>
+    <Disclosure title="Set up a protected connection" level={2}>
+    <p>Create a source profile, then route your MCP client through the local gateway.</p>
     <form onSubmit={prepare}>
       <div className="connection-fields">
         <label className="form-label">Connection transport<select aria-label="Connection transport" value={transport} onChange={event => { setTransport(event.target.value); setProfile(null); setClient(''); setSecret(''); }}><option value="stdio">Local process · stdio</option><option value="http">Remote endpoint · Streamable HTTP</option></select></label>
@@ -68,5 +70,6 @@ export function ConnectionSetup({ native }: { native: boolean }) {
       {client ? <><pre aria-label="MCP client configuration">{client}</pre><button className="button subtle" onClick={() => downloadText('driftguard-client-config.json', client)}>Download client configuration</button><h3>3. Review new tools</h3><p>Merge this entry into your MCP client configuration and restart that client. Return here and refresh the workspace to review its new session. Each changed definition requires approval.</p></> : null}
     </div> : null}
     {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </Disclosure>
   </section>;
 }

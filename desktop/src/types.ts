@@ -31,7 +31,7 @@ export interface AuditEvent {
 export interface Overview {
   protection_status: 'review_only' | 'gateway_ready'; servers: number; tools: number;
   pending: number; approved: number; quarantined: number; last_verification: string | null; scope: string;
-  server_list?: { server_id: string }[];
+  server_list?: { server_id: string; display_name?: string }[];
   gateway_health?: { server_id: string; heartbeat_at: string; active: number }[];
 }
 export interface Workspace {
