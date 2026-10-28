@@ -1,10 +1,15 @@
 """Behavioral regressions for recovery, argument enforcement and negotiation."""
 import pytest
-from test_gateway import configured, approve, tool
-from test_gateway_transport import server, approve as approve_wire
-from test_gateway_http import server as http_server, config as http_config
+from test_gateway import approve, configured, tool
+from test_gateway_http import config as http_config
+from test_gateway_http import server as http_server
+from test_gateway_transport import approve as approve_wire
+from test_gateway_transport import server as stdio_server
+
 from driftguard.gateway import GateError, GuardStore
-from driftguard.gateway_transport import ProtectedGateway, LEGACY, TransportError, DownstreamSession
+from driftguard.gateway_transport import LEGACY, DownstreamSession, ProtectedGateway, TransportError
+
+server = stdio_server
 
 @pytest.mark.parametrize('args',[{}, {'query':42}, {'query':'ok','extra':True}, {'query':None}])
 def test_invalid_arguments_do_not_execute(args):
@@ -30,14 +35,14 @@ def test_valid_contract_dispatch_and_nested_validation(dialect):
     with configured() as store:
         definition=tool();definition['inputSchema']={'$schema':dialect,'type':'object','properties':{'rows':{'type':'array','maxItems':2,'items':{'type':'integer','minimum':1}}},'required':['rows']}
         row=approve(store,definition)
-        kwargs=dict(expected_hash=row['sha256'],expected_revision=row['revision'])
+        kwargs={'expected_hash':row['sha256'],'expected_revision':row['revision']}
         assert store.dispatch('local','search',{'rows':[1,2]},lambda n,a:a,**kwargs)=={'rows':[1,2]}
         for value in ([0],[1,2,3],['1']):
             with pytest.raises(GateError):store.dispatch('local','search',{'rows':value},lambda *a:pytest.fail('invalid data executed'),**kwargs)
 
 @pytest.mark.parametrize('selected',['2025-06-18','2025-03-26'])
 def test_actual_stdio_negotiated_identity_and_calls(server,selected):
-    config,update,root=server; update(negotiatedVersion=selected)
+    config,update,_root=server; update(negotiatedVersion=selected)
     with GuardStore() as store:
         gateway=ProtectedGateway(config(LEGACY),store)
         try:
@@ -52,8 +57,8 @@ def test_actual_stdio_negotiated_identity_and_calls(server,selected):
 
 def test_unknown_protocol_is_rejected(server):
     config,update,_=server;update(negotiatedVersion='2099-01-01')
-    with GuardStore() as store:
-        with pytest.raises(TransportError,match='negotiation'):ProtectedGateway(config(LEGACY),store)
+    with GuardStore() as store, pytest.raises(TransportError,match='negotiation'):
+        ProtectedGateway(config(LEGACY),store)
 
 def test_http_negotiated_version_used_on_subsequent_requests(tmp_path):
     with http_server() as (url,state),GuardStore(tmp_path/'state.sqlite3') as store:

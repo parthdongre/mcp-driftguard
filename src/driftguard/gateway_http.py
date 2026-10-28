@@ -25,8 +25,8 @@ from urllib.parse import urlsplit
 
 from .gateway import ServerIdentity
 from .gateway_transport import (
-    LEGACY,
     HANDSHAKE_VERSIONS,
+    LEGACY,
     META_PREFIX,
     MODERN,
     RpcError,

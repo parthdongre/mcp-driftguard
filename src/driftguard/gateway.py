@@ -19,13 +19,14 @@ from typing import Any, Self, TypeVar
 from jsonschema import Draft7Validator, Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
-from .input_contracts import supported_input_schema, valid_arguments
 from .baselines import rule_baseline
 from .canonicalize import exact_hash, exact_json, make_snapshot
 from .diff import build_delta
 from .features import extract_pair_features
+from .input_contracts import supported_input_schema, valid_arguments
 from .models import ChangeClass
 from .temporal import SequentialDriftMonitor
+
 
 @lru_cache(maxsize=128)
 def _check_contract_metaschema(encoded_schema: str, draft7: bool) -> None:

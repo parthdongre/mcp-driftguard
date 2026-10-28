@@ -9,8 +9,8 @@ import pytest
 
 from driftguard.gateway import GateError, GuardStore
 from driftguard.gateway_transport import (
-    LEGACY,
     HANDSHAKE_VERSIONS,
+    LEGACY,
     MODERN,
     DownstreamSession,
     ProtectedGateway,

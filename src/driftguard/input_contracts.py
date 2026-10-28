@@ -4,6 +4,7 @@ Never evaluate regexes, formats, references, or branching applicators. Unsupport
 contracts fail closed instead of becoming unvalidated executable tools.
 """
 from typing import Any
+
 from jsonschema import Draft7Validator, Draft202012Validator
 
 ANNOTATIONS = {'$schema','title','description','default','examples','deprecated','readOnly','writeOnly','$comment','x-mcp-header'}
