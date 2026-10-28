@@ -10,7 +10,7 @@ This report separates engineering validation from detection accuracy. The measur
 
 Check | Measured result | Outcome
 
-Full Python regression | See raw log | One native credential-store gate remains unavailable
+Full Python regression | 269 passed, 1 skipped (JUnit XML verified) | One native credential-store gate remains unavailable
 
 Store dispatch P95 (1,000 samples) | 9.083 ms | PASS
 
