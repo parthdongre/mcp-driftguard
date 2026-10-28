@@ -25,6 +25,7 @@ from .gateway_transport import (
     LEGACY,
     NAME,
     SAFE_ENV,
+    RpcError,
     StdioConfig,
     StdioPeer,
     TransportError,
@@ -77,6 +78,11 @@ class _LocalConfig(StdioConfig):
 
 
 @dataclass(frozen=True)
+class _CodexConfig(_LocalConfig):
+    target_server: str | None = None
+
+
+@dataclass(frozen=True)
 class _BearerConfig(HttpConfig):
     bearer: str | None = field(default=None, repr=False)
 
@@ -117,15 +123,26 @@ class _DiscoveryHttpPeer(_Budget, HttpPeer):
 class _CodexPeer(_DiscoveryStdioPeer):
     """App Server JSONL has no jsonrpc header; it is not the MCP protocol."""
 
-    def _decode_line(self, line: bytes) -> dict[str, Any]:
-        stripped = line.lstrip()
-        if not stripped.startswith(b"{"):
-            raise TransportError("Invalid Codex response")
-        value = decode_message(b'{"jsonrpc":"2.0",' + stripped[1:],
-                               max_bytes=self.config.max_message_bytes + 16)
-        # Ignore bounded runtime notifications, but never accept server requests.
+    def _decode_line(self, line: bytes) -> dict[str, Any] | None:
+        try:
+            raw = json.loads(line, object_pairs_hook=_pairs_unique,
+                             parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+            if not isinstance(raw, dict):
+                raise TypeError()
+            raw.setdefault("jsonrpc", "2.0")
+            value = decode_message(encode_message(raw), max_bytes=self.config.max_message_bytes + 32)
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            raise TransportError("Invalid Codex response") from None
+        # Discovery doesn't consume runtime notifications. Bound and discard them
+        # so a large installation cannot overflow the request-response queue.
         if "method" in value and "id" not in value:
-            value["method"] = "notifications/message"
+            self._notification_count = getattr(self, "_notification_count", 0) + 1
+            if self._notification_count > 1024:
+                raise TransportError("Codex notification limit exceeded")
+            return None
+        if isinstance(value.get("error"), dict):
+            code = value["error"].get("code")
+            self._last_error_code = code if type(code) is int else None
         return value
 
     def _encode_wire(self, message: dict[str, Any]) -> bytes:
@@ -137,7 +154,17 @@ class _CodexPeer(_DiscoveryStdioPeer):
     def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if method not in {"initialize", "mcpServerStatus/list"}:
             raise HarnessError("Only Codex tool discovery is available.")
-        return super().request(method, params)
+        try:
+            return super().request(method, params)
+        except RpcError:
+            code = getattr(self, "_last_error_code", None)
+            if code == -32601:
+                raise HarnessError(f"Installed Codex does not support {method}. Update the Codex CLI, then retry.") from None
+            if code == -32602:
+                raise HarnessError(f"Installed Codex rejected the parameters for {method}. Update the Codex CLI, then retry.") from None
+            raise HarnessError(f"Codex rejected {method}. Open Codex and check /mcp authentication and server status.") from None
+        except TransportError as error:
+            raise HarnessError(f"Codex {method} failed: {error}. Try fetching an individual configured server below.") from None
 
     def initialize(self) -> None:
         self.request("initialize", {"clientInfo": {
@@ -179,6 +206,24 @@ def _read(path: Path) -> tuple[dict[str, Any], str] | None:
     return data, hashlib.sha256(raw).hexdigest()
 
 
+def _environment_references(settings: dict[str, Any]) -> list[str]:
+    """Forward only names explicitly referenced in the harness configuration."""
+    names = []
+    configured = settings.get("env_vars", [])
+    if isinstance(configured, list):
+        for item in configured:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict) and item.get("source", "local") == "local":
+                names.append(item.get("name"))
+    names.append(settings.get("bearer_token_env_var"))
+    headers = settings.get("env_http_headers", {})
+    if isinstance(headers, dict):
+        names.extend(headers.values())
+    return sorted({name for name in names if isinstance(name, str)
+                   and _ENV_NAME.fullmatch(name) and name in os.environ})
+
+
 def _sources(project: Path) -> tuple[list[_Source], list[str]]:
     sources: dict[tuple[str, str], _Source] = {}
     warnings: list[str] = []
@@ -204,6 +249,8 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
              ("claude-code", "project", project / ".mcp.json")]
     local: tuple[Path, Any, str] | None = None
     for harness, scope, path in paths:
+        if scope == "project" and harness == "codex" and path == codex_home / "config.toml":
+            continue
         try:
             result = _read(path)
             if result is None:
@@ -238,13 +285,21 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
         if resolved := shutil.which(executable):
             path = Path(resolved).absolute()
             info = path.stat()
+            references = set()
+            digests = []
+            for configured in sources.values():
+                if configured.harness == harness:
+                    digests.append(configured.digest)
+                    if isinstance(configured.settings, dict):
+                        references.update(_environment_references(configured.settings))
+            references.update(name for name in (
+                "CODEX_HOME" if harness == "codex" else "CLAUDE_CONFIG_DIR",
+            ) if name in os.environ)
             sources[harness, "\x00runtime"] = _Source(
                 harness, "Codex MCP catalog" if harness == "codex" else "Claude Code tools",
                 "runtime", path, project, {"command": str(path), "args": args,
-                                           "env_vars": [name for name in (
-                                               "CODEX_HOME" if harness == "codex" else "CLAUDE_CONFIG_DIR",
-                                           ) if name in os.environ]},
-                f"{info.st_size}:{info.st_mtime_ns}", kind="runtime",
+                                           "env_vars": sorted(references)},
+                hashlib.sha256(exact_json([info.st_size, info.st_mtime_ns, sorted(digests)]).encode()).hexdigest(), kind="runtime",
             )
     if len(sources) > MAX_SOURCES:
         raise HarnessError("Too many configured servers; narrow the selected project.")
@@ -268,6 +323,14 @@ def _config(source: _Source) -> StdioConfig | HttpConfig:
         raise HarnessError("This server configuration is malformed.")
     if raw.get("enabled", True) is not True or raw.get("disabled", False) is not False:
         raise HarnessError("This server is disabled in the harness configuration.")
+    if source.harness == "codex" and source.kind == "configured" and (cli := shutil.which("codex")):
+        return _CodexConfig(
+            "harness." + source.source_id[:32], (str(Path(cli).absolute()), "app-server"),
+            cwd=str(source.cwd), protocol_version=LEGACY, target_server=source.name,
+            pass_env=tuple(_environment_references(raw) + (["CODEX_HOME"] if "CODEX_HOME" in os.environ else [])),
+            timeout_seconds=FETCH_SECONDS, max_message_bytes=2 * 1024 * 1024,
+            max_catalog_bytes=8 * 1024 * 1024,
+        )
     if raw.get("experimental_environment") == "remote":
         raise HarnessError("Remote-executor servers require the Codex runtime connection.")
     expand = _expand if source.harness == "claude-code" else lambda value: value
@@ -339,11 +402,15 @@ def _config(source: _Source) -> StdioConfig | HttpConfig:
     directory = Path(expand(cwd)).expanduser()
     if not directory.is_absolute():
         directory = source.cwd / directory
-    config = _LocalConfig(server_id, (expand(command), *(expand(arg) for arg in args)),
+    config_class = _CodexConfig if source.kind == "runtime" and source.harness == "codex" else _LocalConfig
+    config = config_class(server_id, (expand(command), *(expand(arg) for arg in args)),
                           cwd=str(directory.resolve()), protocol_version=LEGACY,
                           pass_env=tuple(forwarded), literal_env=overrides,
-                          timeout_seconds=FETCH_SECONDS, max_pages=20, max_tools=500,
-                          max_catalog_bytes=2 * 1024 * 1024)
+                          timeout_seconds=FETCH_SECONDS,
+                          max_pages=MAX_SOURCES if config_class is _CodexConfig else 20,
+                          max_tools=5000 if config_class is _CodexConfig else 500,
+                          max_message_bytes=(2 if config_class is _CodexConfig else 1) * 1024 * 1024,
+                          max_catalog_bytes=(8 if config_class is _CodexConfig else 2) * 1024 * 1024)
     config.resolved_argv()
     return config
 
@@ -356,7 +423,7 @@ def scan(project_dir: str | None = None) -> dict[str, Any]:
         issue = None
         try:
             config = _config(source)
-            transport = "codex-app-server" if source.kind == "runtime" and source.harness == "codex" else (
+            transport = "codex-app-server" if isinstance(config, _CodexConfig) else (
                 "stdio" if isinstance(config, StdioConfig) else "http")
         except (HarnessError, ValueError, TypeError, OSError, TransportError) as error:
             issue = str(error) if isinstance(error, HarnessError) else "Configuration unsupported or unavailable."
@@ -400,36 +467,52 @@ def _catalog(peer: StdioPeer | HttpPeer, deadline: float) -> list[dict[str, Any]
     raise HarnessError("The tool catalog exceeds the page limit.")
 
 
-def _codex_catalogs(peer: _CodexPeer, deadline: float) -> list[tuple[str, list[dict[str, Any]]]]:
+def _codex_catalogs(peer: _CodexPeer, deadline: float) -> tuple[list[tuple[str, list[dict[str, Any]]]], list[str]]:
     catalogs = []
+    warnings = []
     seen: set[str] = set()
     names: set[str] = set()
     cursor = None
     total = 0
-    for _ in range(20):
-        params: dict[str, Any] = {"limit": 50, "detail": "toolsAndAuthOnly"}
+    for _ in range(MAX_SOURCES):
+        params: dict[str, Any] = {"limit": 1, "detail": "toolsAndAuthOnly"}
+        if target := getattr(peer.config, "target_server", None):
+            params["serverName"] = target
         if cursor:
             params["cursor"] = cursor
-        page = _request(peer, "mcpServerStatus/list", params, deadline)
+        try:
+            page = _request(peer, "mcpServerStatus/list", params, deadline)
+        except HarnessError as error:
+            if catalogs and (time.monotonic() >= deadline or "timed out" in str(error)):
+                warnings.append("Discovery timed out before all servers were checked. Complete catalogs already received were collected; fetch remaining servers individually.")
+                return catalogs, warnings
+            raise
         total += len(encode_message(page))
         rows = page.get("data")
-        if not isinstance(rows, list) or total > 2 * 1024 * 1024:
+        if not isinstance(rows, list) or total > 8 * 1024 * 1024:
             raise HarnessError("Codex returned an invalid or oversized server catalog.")
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not NAME.fullmatch(row["name"]) or row["name"] in names:
                 raise HarnessError("Codex returned invalid or duplicate server names.")
             names.add(row["name"])
+            if target and row["name"] != target:
+                continue
+            if row.get("toolsError") or row.get("authStatus") == "notLoggedIn":
+                warnings.append(f"{row['name']}: Codex could not discover this server. Check its /mcp status and authentication. Previous observations were kept.")
+                continue
             tools = row.get("tools")
             if not isinstance(tools, dict) or any(not isinstance(tool, dict) or tool.get("name") != key for key, tool in tools.items()):
                 raise HarnessError("Codex returned an invalid tool definition map.")
-            if not tools and row.get("authStatus") == "notLoggedIn":
-                raise HarnessError("A Codex MCP server needs authentication. Sign in through Codex, then retry.")
             catalogs.append((row["name"], list(tools.values())))
-            if len(catalogs) > MAX_SOURCES or sum(len(tools) for _, tools in catalogs) > 500:
+            if len(catalogs) > MAX_SOURCES or sum(len(tools) for _, tools in catalogs) > 5000:
                 raise HarnessError("Codex tool discovery exceeds the collection limits.")
         cursor = page.get("nextCursor")
         if cursor is None:
-            return catalogs
+            if not catalogs and warnings:
+                raise HarnessError("No Codex MCP catalogs were available. " + " ".join(warnings[:3]))
+            if not catalogs and getattr(peer.config, "target_server", None):
+                raise HarnessError("Codex did not expose the selected server in this project. Check its /mcp status and workspace trust.")
+            return catalogs, warnings
         if not isinstance(cursor, str) or not cursor or cursor in seen:
             raise HarnessError("Codex returned invalid server pagination.")
         seen.add(cursor)
@@ -452,14 +535,14 @@ def fetch(store: GuardStore, source_id: str, config_digest: str,
     peer: StdioPeer | HttpPeer | None = None
     deadline = time.monotonic() + FETCH_SECONDS
     try:
-        if source.kind == "runtime" and source.harness == "codex":
+        if isinstance(config, _CodexConfig):
             peer = _CodexPeer(config)
         else:
             peer = _DiscoveryStdioPeer(config) if isinstance(config, StdioConfig) else _DiscoveryHttpPeer(config)
         peer.collection_deadline = deadline
         peer.initialize()
-        catalogs = (_codex_catalogs(peer, deadline) if isinstance(peer, _CodexPeer) else
-                    [(source.name, _catalog(peer, deadline))])
+        catalogs, warnings = (_codex_catalogs(peer, deadline) if isinstance(peer, _CodexPeer) else
+                              ([(source.name, _catalog(peer, deadline))], []))
         # Treat configured secret values as non-exportable; do not put them in
         # definitions, audit records, or renderer responses if a server echoes one.
         secrets = []
@@ -491,6 +574,7 @@ def fetch(store: GuardStore, source_id: str, config_digest: str,
             records.extend(store.ingest_catalog(server_id, tools, identity=identity))
         return {"servers": len(catalogs), "tools": len(records), "source_id": source_id,
                 "server_ids": sorted({record["server_id"] for record in records}),
+                "warnings": warnings,
                 "scope": "Definitions collected for review. Harness execution is not mediated."}
     except (TransportError, OSError):
         raise HarnessError("Could not collect definitions. Check the harness version, executable, server availability and authentication.") from None

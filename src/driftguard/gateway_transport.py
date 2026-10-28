@@ -200,7 +200,7 @@ class StdioConfig:
 
 class StdioPeer:
     """One fixed-argv subprocess, serialized bounded exchanges, no shell or retries."""
-    def _decode_line(self, line: bytes) -> dict[str, Any]:
+    def _decode_line(self, line: bytes) -> dict[str, Any] | None:
         return decode_message(line, max_bytes=self.config.max_message_bytes)
 
     def _encode_wire(self, message: dict[str, Any]) -> bytes:
@@ -236,7 +236,8 @@ class StdioPeer:
                 if not line.endswith(b"\n"):
                     raise TransportError("Upstream line is incomplete or oversized")
                 item = self._decode_line(line)
-                self._messages.put_nowait(item)
+                if item is not None:
+                    self._messages.put_nowait(item)
         except queue.Full:
             self._overflow.set()
         except (TransportError, OSError, ValueError) as exc:

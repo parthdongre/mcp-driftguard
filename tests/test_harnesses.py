@@ -26,7 +26,8 @@ for line in sys.stdin:
     method = msg['method']
     if method == 'initialize':
         result = {'userAgent': 'fixture'} if mode.startswith('codex') else {
-            'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}}}
+            'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}},
+            'serverInfo': {'name': 'fixture', 'version': '1.0'}}
     elif method == 'tools/list':
         if mode == 'hang': time.sleep(10)
         name = 'page_two' if msg.get('params', {}).get('cursor') else 'page_one'
@@ -43,14 +44,26 @@ for line in sys.stdin:
         assert 'jsonrpc' not in msg, 'Codex is not MCP'
         tool = {'name': 'read', 'description': 'Read through Codex', 'inputSchema': {'type': 'object'}}
         cursor = msg.get('params', {}).get('cursor')
+        if mode == 'codex-timeout' and cursor:
+            time.sleep(2)
         result = {'data': [{'name': 'second' if cursor else 'first', 'tools': {'read': tool},
                             'authStatus': 'notLoggedIn' if mode == 'codex-auth' else 'loggedIn'}],
                   'nextCursor': None if cursor else 'next'}
         if mode == 'codex-auth': result['data'][0]['tools'] = {}
+        if mode == 'codex-error':
+            print(json.dumps({'id': msg['id'], 'error': {'code': -32601, 'message': 'PRIVATE_ERROR_MUST_NOT_LEAK'}}), flush=True)
+            continue
+        if mode == 'codex-partial' and not cursor:
+            result['data'][0]['tools'] = {}
+            result['data'][0]['toolsError'] = 'PRIVATE_SERVER_ERROR'
+        if mode == 'codex-notifications':
+            for index in range(80):
+                print(json.dumps({'method': 'startup/updated', 'params': {'index': index}}), flush=True)
         if mode == 'codex-bad': result['data'][0]['tools'] = {'wrong_name': tool}
     else:
         raise RuntimeError('Discovery must never call tools or start a turn')
     output = {'id': msg['id'], 'result': result}
+    if mode == 'codex-header': output['jsonrpc'] = '2.0'
     if not mode.startswith('codex'): output['jsonrpc'] = '2.0'
     print(json.dumps(output), flush=True)
 '''
@@ -245,6 +258,45 @@ def test_codex_invalid_or_unauthenticated_catalog_not_saved(workspace, tmp_path,
         collect(store, source, project)
 
 
+@pytest.mark.parametrize('mode', ['codex-header', 'codex-notifications'])
+def test_codex_wire_compatibility_and_notification_bursts(workspace, tmp_path, monkeypatch, mode):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, mode)
+    with GuardStore(tmp_path / 'state.db') as store:
+        assert collect(store, source, project)['tools'] == 2
+
+
+def test_codex_failed_server_does_not_erase_healthy_catalog(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-partial')
+    with GuardStore(tmp_path / 'state.db') as store:
+        result = collect(store, source, project)
+        assert result['servers'] == result['tools'] == 1
+        assert len(result['warnings']) == 1
+        assert 'PRIVATE_SERVER_ERROR' not in json.dumps(result)
+        assert len(store.list_servers()) == 1
+
+
+def test_codex_keeps_complete_catalogs_when_a_later_server_times_out(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-timeout')
+    monkeypatch.setattr(harnesses, 'FETCH_SECONDS', 0.3)
+    with GuardStore(tmp_path / 'state.db') as store:
+        result = collect(store, source, project)
+        assert result['servers'] == result['tools'] == 1
+        assert len(store.list_servers()) == 1
+        assert any('timed out' in warning for warning in result['warnings'])
+
+
+def test_codex_unsupported_method_has_actionable_nonsecret_error(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-error')
+    with GuardStore(tmp_path / 'state.db') as store, pytest.raises(HarnessError) as caught:
+        collect(store, source, project)
+    assert 'does not support mcpServerStatus/list' in str(caught.value)
+    assert 'PRIVATE_ERROR_MUST_NOT_LEAK' not in str(caught.value)
+
+
 def test_bridge_discovery_rejects_arbitrary_commands_and_hides_secret_errors(workspace, tmp_path):
     _, project, _, _ = workspace
     source = configured(workspace, 'echo', {'PRIVATE_TOKEN': 'never-export-this-value'})
@@ -310,3 +362,57 @@ def test_special_config_file_is_rejected_without_blocking(workspace):
     result = scan(str(project))
     assert result['warnings'] and not result['sources']
     assert time.monotonic() - start < 1
+
+
+def test_real_codex_cli_catalog_and_targeted_discovery(workspace, tmp_path, monkeypatch):
+    """Opt-in vendor-binary test, isolated from the user's Codex configuration."""
+    executable = os.environ.get('DRIFTGUARD_TEST_CODEX')
+    if not executable or not Path(executable).is_file():
+        pytest.skip('Set DRIFTGUARD_TEST_CODEX to an installed Codex CLI for vendor integration')
+    _, project, script, trace = workspace
+    config_dir = tmp_path / 'codex-fixture'
+    config_dir.mkdir()
+    config = config_dir / 'config.toml'
+    config.write_text(
+        '[mcp_servers.fixture]\ncommand=' + json.dumps(sys.executable) +
+        '\nargs=' + json.dumps([str(script), 'pages']) +
+        '\n[mcp_servers.fixture.env]\nTEST_TRACE=' + json.dumps(str(trace)) +
+        '\n[mcp_servers.unavailable]\ncommand=' + json.dumps(sys.executable) +
+        '\nargs=["-c", "raise SystemExit(2)"]\n'
+    )
+    before = config.read_bytes()
+    monkeypatch.setenv('CODEX_HOME', str(config_dir))
+    underlying = harnesses.shutil.which
+    monkeypatch.setattr(harnesses.shutil, 'which', lambda name, **kwargs:
+                        executable if name == 'codex' else underlying(name, **kwargs))
+    sources = scan(str(project))['sources']
+    runtime = next(source for source in sources if source['kind'] == 'runtime')
+    selected = next(source for source in sources if source['name'] == 'fixture')
+    assert selected['transport'] == 'codex-app-server'
+    with GuardStore(tmp_path / 'real-codex.db') as store:
+        result = collect(store, runtime, project)
+        assert result['tools'] == 2 and result['servers'] == 1 and result['warnings']
+        targeted = collect(store, selected, project)
+        assert targeted['tools'] == 2 and targeted['servers'] == 1
+        assert not targeted['warnings']
+    assert config.read_bytes() == before
+    methods = {json.loads(line)['method'] for line in trace.read_text().splitlines()}
+    assert methods <= {'initialize', 'notifications/initialized', 'tools/list'}
+
+
+def test_codex_runtime_forwards_only_configured_credential_references(workspace, monkeypatch):
+    home, project, _, _ = workspace
+    config = home / '.codex/config.toml'
+    config.parent.mkdir()
+    config.write_text('[mcp_servers.remote]\nurl="https://fixture.invalid/mcp"\nbearer_token_env_var="FIXTURE_AUTH_TOKEN"\n')
+    monkeypatch.setenv('FIXTURE_AUTH_TOKEN', 'private-configured-token')
+    monkeypatch.setenv('UNRELATED_PRIVATE_TOKEN', 'must-not-forward')
+    underlying = harnesses.shutil.which
+    monkeypatch.setattr(harnesses.shutil, 'which', lambda name, **kwargs:
+                        sys.executable if name == 'codex' else underlying(name, **kwargs))
+    sources, _ = harnesses._sources(project)
+    runtime = next(source for source in sources if source.kind == 'runtime')
+    environment = harnesses._config(runtime).environment()
+    assert environment['FIXTURE_AUTH_TOKEN'] == 'private-configured-token'
+    assert 'UNRELATED_PRIVATE_TOKEN' not in environment
+    assert 'private-configured-token' not in json.dumps(scan(str(project)))
