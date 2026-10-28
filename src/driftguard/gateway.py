@@ -83,6 +83,11 @@ class GuardPolicy:
                 raise GateError("Policy limits must be positive integers")
 
 
+# Larger Codex aggregators can be inspected without widening live call policy.
+MAX_REVIEW_CATALOG_TOOLS = 5000
+MAX_REVIEW_CATALOG_BYTES = 8 * 1024 * 1024
+
+
 @dataclass(frozen=True)
 class CallPermit:
     server_id: str
@@ -393,8 +398,11 @@ class GuardStore:
                 max_depth=self.policy.max_depth,
             )
 
-    def _validate_catalog(self, tools: list[dict[str, Any]]) -> list[tuple[dict[str, Any], str]]:
-        if not isinstance(tools, list) or len(tools) > self.policy.max_catalog_tools:
+    def _validate_catalog(self, tools: list[dict[str, Any]], *,
+                          review_only: bool = False) -> list[tuple[dict[str, Any], str]]:
+        max_tools = MAX_REVIEW_CATALOG_TOOLS if review_only else self.policy.max_catalog_tools
+        max_bytes = MAX_REVIEW_CATALOG_BYTES if review_only else self.policy.max_catalog_bytes
+        if not isinstance(tools, list) or len(tools) > max_tools:
             raise GateError("Catalog must be a bounded complete list")
         checked = []
         names: set[str] = set()
@@ -417,7 +425,7 @@ class GuardStore:
             encoded = exact_json(tool)
             size = len(encoded.encode("utf-8"))
             total_bytes += size
-            if size > self.policy.max_tool_bytes or total_bytes > self.policy.max_catalog_bytes:
+            if size > self.policy.max_tool_bytes or total_bytes > max_bytes:
                 raise GateError("Tool catalog exceeds the size limit")
             for schema_name in ("inputSchema", "outputSchema"):
                 schema = tool.get(schema_name)
@@ -535,7 +543,9 @@ class GuardStore:
                     server["protocol_version"],
                 ):
                     raise IdentityMismatch("Catalog connection identity is no longer current")
-                checked = self._validate_catalog(tools)
+                checked = self._validate_catalog(
+                    tools, review_only=server["auth_context"] == "harness-review-only"
+                )
                 self._db.execute(
                     "UPDATE guard_servers SET revision=revision+1 WHERE server_id=?", (server_id,)
                 )
@@ -856,6 +866,8 @@ class GuardStore:
             server = self._server(server_id)
             if server["auth_context"] == "host-metadata-review-only":
                 raise GateError("Hosted metadata imports cannot authorize tool execution")
+            if server["auth_context"] == "harness-review-only":
+                raise GateError("Harness review catalogs cannot authorize tool execution")
             row = self._tool(server_id, tool_name)
             if type(expected_revision) is not int:
                 raise GateError("An exact current invocation revision is required")

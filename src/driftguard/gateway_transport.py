@@ -228,16 +228,30 @@ class StdioPeer:
 
     def _read(self) -> None:
         assert self.process.stdout is not None
+        pending = bytearray()
         try:
             while not self._closed:
-                line = self.process.stdout.readline(self.config.max_message_bytes + 1)
-                if not line:
+                # stdout is an unbuffered pipe. Raw readline performs a syscall
+                # per byte; read chunks and frame complete UTF-8 JSON lines here.
+                chunk = self.process.stdout.read(65536)
+                if not chunk:
+                    if pending:
+                        raise TransportError("Upstream disconnected before completing a JSON line")
                     raise TransportError("Upstream disconnected")
-                if not line.endswith(b"\n"):
-                    raise TransportError("Upstream line is incomplete or oversized")
-                item = self._decode_line(line)
-                if item is not None:
-                    self._messages.put_nowait(item)
+                search_from = len(pending)
+                pending.extend(chunk)
+                while (newline := pending.find(b"\n", search_from)) >= 0:
+                    length = newline + 1
+                    if length > self.config.max_message_bytes:
+                        raise TransportError("Upstream JSON line exceeds the configured response size limit")
+                    line = bytes(pending[:length])
+                    del pending[:length]
+                    search_from = 0
+                    item = self._decode_line(line)
+                    if item is not None:
+                        self._messages.put_nowait(item)
+                if len(pending) > self.config.max_message_bytes:
+                    raise TransportError("Upstream JSON line exceeds the configured response size limit")
         except queue.Full:
             self._overflow.set()
         except (TransportError, OSError, ValueError) as exc:

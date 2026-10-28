@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .canonicalize import exact_json
-from .gateway import GuardStore, ServerIdentity
+from .gateway import MAX_REVIEW_CATALOG_BYTES, MAX_REVIEW_CATALOG_TOOLS, GuardStore, ServerIdentity
 from .gateway_http import HttpConfig, HttpPeer
 from .gateway_transport import (
     LEGACY,
@@ -37,6 +37,7 @@ from .gateway_transport import (
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_SOURCES = 200
 FETCH_SECONDS = 90.0
+CODEX_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 _VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
@@ -408,9 +409,9 @@ def _config(source: _Source) -> StdioConfig | HttpConfig:
                           pass_env=tuple(forwarded), literal_env=overrides,
                           timeout_seconds=FETCH_SECONDS,
                           max_pages=MAX_SOURCES if config_class is _CodexConfig else 20,
-                          max_tools=5000 if config_class is _CodexConfig else 500,
-                          max_message_bytes=(2 if config_class is _CodexConfig else 1) * 1024 * 1024,
-                          max_catalog_bytes=(8 if config_class is _CodexConfig else 2) * 1024 * 1024)
+                          max_tools=MAX_REVIEW_CATALOG_TOOLS if config_class is _CodexConfig else 500,
+                          max_message_bytes=CODEX_MAX_MESSAGE_BYTES if config_class is _CodexConfig else 1024 * 1024,
+                          max_catalog_bytes=CODEX_MAX_MESSAGE_BYTES if config_class is _CodexConfig else 2 * 1024 * 1024)
     config.resolved_argv()
     return config
 
@@ -489,7 +490,7 @@ def _codex_catalogs(peer: _CodexPeer, deadline: float) -> tuple[list[tuple[str, 
             raise
         total += len(encode_message(page))
         rows = page.get("data")
-        if not isinstance(rows, list) or total > 8 * 1024 * 1024:
+        if not isinstance(rows, list) or total > MAX_REVIEW_CATALOG_BYTES:
             raise HarnessError("Codex returned an invalid or oversized server catalog.")
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not NAME.fullmatch(row["name"]) or row["name"] in names:
@@ -508,7 +509,7 @@ def _codex_catalogs(peer: _CodexPeer, deadline: float) -> tuple[list[tuple[str, 
                 warnings.append(f"{row['name']}: No tool catalog was exposed. This may be a hosted app, an unavailable server, or a connection without MCP tools.")
                 continue
             catalogs.append((row["name"], list(tools.values())))
-            if len(catalogs) > MAX_SOURCES or sum(len(tools) for _, tools in catalogs) > 5000:
+            if len(catalogs) > MAX_SOURCES or sum(len(tools) for _, tools in catalogs) > MAX_REVIEW_CATALOG_TOOLS:
                 raise HarnessError("Codex tool discovery exceeds the collection limits.")
         cursor = page.get("nextCursor")
         if cursor is None:
@@ -560,7 +561,7 @@ def fetch(store: GuardStore, source_id: str, config_digest: str,
         # Validate every catalog before saving any, so pagination/validation errors
         # never replace a previous complete observation with a partial catalog.
         for _, tools in catalogs:
-            store._validate_catalog(tools)
+            store._validate_catalog(tools, review_only=isinstance(config, _CodexConfig))
         # Re-read the selection after discovery; concurrent config edits invalidate it.
         current, _ = _sources(project)
         if not any(item.source_id == source_id and item.digest == config_digest for item in current):

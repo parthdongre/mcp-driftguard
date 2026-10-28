@@ -95,8 +95,17 @@ individually. No incomplete tool catalog is substituted for a failed server.
 
 Collection has a 90-second wire-operation budget. Direct collection allows 20
 pages, 500 tools and 2 MiB. Codex uses one server per page, at most 200 servers,
-5,000 tools and 8 MiB total; each stored server catalog retains the store's
-500-tool/2-MiB limits. OS process/filesystem scheduling is not a hard real-time
+5,000 tools and 8 MiB of decoded catalogs in total. Each Codex wire line may be
+up to 16 MiB, including its envelope. A server page contains its complete tool
+map: setting the page size to one does not split a large server's tools.
+Harness review storage accepts up to 5,000 tools / 8 MiB per server, while
+retaining the 64-KiB per-tool limit and schema validation. These catalogs cannot
+authorize tool execution; live gateway policy retains its 500-tool/2-MiB limits.
+The desktop requests metadata summaries for tool lists and loads full contracts
+only when selected, avoiding duplicate schemas in workspace refresh responses.
+Stdio JSONL is read in bounded chunks, preserving split UTF-8 sequences and
+distinguishing an incomplete EOF from a size-limit rejection.
+OS process/filesystem scheduling is not a hard real-time
 guarantee. A slow or large harness installation may exceed these preview limits.
 Discovery has a separate lock and 105-second native deadline; review requests
 retain their independent 20-second deadline. Existing documented
@@ -115,11 +124,12 @@ or tool calls. Run it by setting `DRIFTGUARD_TEST_CODEX` to an installed CLI pat
 Local validation on 2026-10-28: 310 Python tests passed, one native credential-store
 test skipped, including real Codex CLI 0.165.0 discovery against an isolated MCP
 fixture. Nineteen frontend logic/rendering tests passed; TypeScript production
-build and source/test lint passed. Browser execution was blocked by an invalid Chromium
-download, and the separate cloud browser could not reach workspace localhost.
-Rust/Cargo and an installed Claude CLI are unavailable on this validation host.
-Native compilation, macOS GUI behavior and the user's authenticated MCP endpoints
-remain unverified. The Codex vendor test does not validate real provider OAuth.
+build and source/test lint passed. Subsequent GitHub Actions validation passed
+the browser workflows and sampled accessibility checks, and native build/IPC
+jobs on macOS, Windows and Linux. Rust/Cargo and an installed Claude CLI are
+unavailable on this local validation host. Native interaction on the user's Mac
+and the user's authenticated MCP endpoints remain unverified. The Codex vendor
+test does not validate real provider OAuth.
 
 The browser QA script also includes a renderer → Python bridge → disposable MCP
 child → SQLite → review flow. Its IPC stand-in does not verify native Rust IPC.

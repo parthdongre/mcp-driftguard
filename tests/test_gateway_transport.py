@@ -16,6 +16,7 @@ from driftguard.gateway_transport import (
     ProtectedGateway,
     RpcError,
     StdioConfig,
+    StdioPeer,
     TransportError,
     decode_message,
     protocol_meta,
@@ -62,7 +63,22 @@ for line in sys.stdin:
     response = {"jsonrpc": "2.0", "id": request["id"], "result": result}
     if control.get("mode") == "wrong-id" and method == "tools/list":
         response["id"] += 100
-    print(json.dumps(response), flush=True)
+    payload = json.dumps(response, ensure_ascii=False).encode('utf-8') + b'\n'
+    if method == 'tools/list':
+        if control.get('wire_bytes'):
+            payload = payload[:-1] + b' ' * (control['wire_bytes'] - len(payload)) + b'\n'
+        if control.get('mode') == 'fragmented':
+            for offset in range(0, len(payload), 7):
+                sys.stdout.buffer.write(payload[offset:offset + 7])
+                sys.stdout.buffer.flush()
+                time.sleep(0.001)
+            continue
+        if control.get('mode') == 'truncated':
+            sys.stdout.buffer.write(payload[:-1])
+            sys.stdout.buffer.flush()
+            sys.exit(0)
+    sys.stdout.buffer.write(payload)
+    sys.stdout.buffer.flush()
 '''
 
 
@@ -91,6 +107,46 @@ def approve(store):
     record = store.get_tool("fixture", "weather")
     return store.approve("fixture", "weather", expected_hash=record["sha256"],
                          expected_revision=record["revision"])
+
+
+def test_chunked_stdio_preserves_fragmented_unicode_json_lines(server):
+    config, update, _ = server
+    description = 'Read résumé notes — 测试 🌙' * 20
+    update(mode='fragmented', tools=[tool(description)])
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(LEGACY), store)
+        try:
+            assert store.get_tool('fixture', 'weather')['description'] == description
+        finally:
+            gateway.close()
+
+
+@pytest.mark.parametrize('wire_bytes', [1024, 1025])
+def test_stdio_line_byte_limit_includes_delimiter(server, wire_bytes):
+    config, update, _ = server
+    update(wire_bytes=wire_bytes)
+    peer = StdioPeer(config(LEGACY, max_message_bytes=1024))
+    try:
+        peer.initialize()
+        if wire_bytes == 1024:
+            assert peer.request('tools/list')['tools'] == [tool()]
+        else:
+            with pytest.raises(TransportError, match='response size limit'):
+                peer.request('tools/list')
+    finally:
+        peer.close()
+
+
+def test_truncated_stdio_reports_disconnect_instead_of_size_limit(server):
+    config, update, _ = server
+    update(mode='truncated')
+    peer = StdioPeer(config(LEGACY))
+    try:
+        peer.initialize()
+        with pytest.raises(TransportError, match='disconnected before completing'):
+            peer.request('tools/list')
+    finally:
+        peer.close()
 
 
 @pytest.mark.parametrize("version", [MODERN, LEGACY])

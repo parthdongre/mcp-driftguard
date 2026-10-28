@@ -74,7 +74,7 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
     let allowed: &[&str] = match action {
         "overview" | "activity" | "runtime_info" | "host_catalog_list" => &["action"],
         "host_catalog_import" => &["action", "source"],
-        "list_tools" => &["action", "server_id"],
+        "list_tools" => &["action", "server_id", "summary"],
         "review" | "history" => &["action", "server_id", "tool_name"],
         "import_definitions" => &["action", "server_id", "identity", "tools"],
         "store_http_credential" => &["action", "server_id", "url", "secret"],
@@ -480,6 +480,7 @@ mod tests {
         assert!(validate_request(&json!({"action": "approve", "command": "whoami"})).is_err());
         assert!(validate_request(&json!({"action": "overview", "args": []})).is_err());
         assert!(validate_request(&json!({"action": "overview"})).is_ok());
+        assert!(validate_request(&json!({"action": "list_tools", "summary": true})).is_ok());
         let scan = json!({"action": "harness_scan", "project_dir": "/tmp/project"});
         assert!(validate_request(&scan).is_ok());
         let fetch = json!({

@@ -42,6 +42,10 @@ for line in sys.stdin:
         if mode == 'loop' or name == 'page_one': result['nextCursor'] = 'page2'
     elif method == 'mcpServerStatus/list':
         assert 'jsonrpc' not in msg, 'Codex is not MCP'
+        if mode == 'codex-oversized':
+            sys.stdout.write('PRIVATE_RESPONSE_' + 'x' * (16 * 1024 * 1024) + '\n')
+            sys.stdout.flush()
+            continue
         tool = {'name': 'read', 'description': 'Read through Codex', 'inputSchema': {'type': 'object'}}
         cursor = msg.get('params', {}).get('cursor')
         if mode == 'codex-timeout' and cursor:
@@ -60,6 +64,13 @@ for line in sys.stdin:
         if mode == 'codex-empty':
             result['data'][0]['tools'] = {}
             result['data'][0]['serverCapabilities'] = {'tools': {}}
+            result['nextCursor'] = None
+        if mode == 'codex-large':
+            result['data'][0]['tools'] = {
+                f'read_{index}': {**tool, 'name': f'read_{index}',
+                                 'description': 'Read catalog metadata. ' + 'x' * 5000}
+                for index in range(700)
+            }
             result['nextCursor'] = None
         if mode == 'codex-error':
             print(json.dumps({'id': msg['id'], 'error': {'code': -32601, 'message': 'PRIVATE_ERROR_MUST_NOT_LEAK'}}), flush=True)
@@ -259,6 +270,34 @@ def test_codex_app_server_real_jsonl_contract_and_separate_catalogs(workspace, t
     messages = [json.loads(line) for line in trace.read_text().splitlines()]
     assert all('jsonrpc' not in message for message in messages)
     assert {message['method'] for message in messages} == {'initialize', 'initialized', 'mcpServerStatus/list'}
+
+
+def test_large_codex_server_catalog_reaches_desktop_review(workspace, tmp_path, monkeypatch):
+    _, project, _, trace = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-large')
+    db = tmp_path / 'state.db'
+    with GuardStore(db) as store:
+        result = collect(store, source, project)
+        assert result['status'] == 'complete' and result['tools'] == 700
+    summary = execute(db, b'{"action":"list_tools","summary":true}')
+    assert summary['ok'] and len(summary['data']) == 700
+    row = summary['data'][0]
+    assert 'definition' not in row and 'new_tool' not in row
+    review = execute(db, json.dumps({'action': 'review', 'server_id': row['server_id'],
+                                    'tool_name': row['tool_name']}).encode())
+    assert review['ok'] and review['data']['new_tool']['description'].endswith('x' * 5000)
+    messages = [json.loads(line)['method'] for line in trace.read_text().splitlines()]
+    assert set(messages) == {'initialize', 'initialized', 'mcpServerStatus/list'}
+
+
+def test_codex_oversized_response_remains_bounded_and_is_not_saved(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-oversized')
+    with GuardStore(tmp_path / 'state.db') as store:
+        with pytest.raises(HarnessError, match='response size limit') as caught:
+            collect(store, source, project)
+        assert 'PRIVATE_RESPONSE' not in str(caught.value)
+        assert not store.list_servers()
 
 
 @pytest.mark.parametrize('mode', ['codex-auth', 'codex-bad'])

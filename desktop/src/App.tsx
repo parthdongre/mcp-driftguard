@@ -67,7 +67,7 @@ export default function App() {
     if (!demo && !native) { setWorkspace(initialWorkspace); setLoading(false); return; }
     try {
       const [overview, tools, activity] = await Promise.all([
-        send<Workspace['overview']>({ action: 'overview' }), send<ToolRecord[]>({ action: 'list_tools' }), send<AuditEvent[]>({ action: 'activity' }),
+        send<Workspace['overview']>({ action: 'overview' }), send<ToolRecord[]>({ action: 'list_tools', summary: true }), send<AuditEvent[]>({ action: 'activity' }),
       ]);
       if (sequence === requestSequence.current) { setWorkspace({ overview, tools, activity }); setRefreshCount(count => count + 1); }
     } catch (failure) { if (sequence === requestSequence.current) setError(failure instanceof Error ? failure.message : 'Unable to read the local workspace.'); }

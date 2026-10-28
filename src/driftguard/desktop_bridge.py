@@ -92,10 +92,19 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
                          "cloud_analysis_enabled": False},
         }
     if action == "list_tools":
+        summary = request.get("summary", False)
+        if type(summary) is not bool:
+            raise ValueError("summary must be a boolean")
         server_id = request.get("server_id")
         if server_id is not None:
             server_id = _text(request, "server_id")
-        return store.list_tools(server_id)
+        tools = store.list_tools(server_id)
+        if summary:
+            # The sidebar needs metadata. Full definitions are loaded on selection;
+            # _record otherwise serializes two copies of each full definition.
+            return [{key: value for key, value in tool.items()
+                     if key not in {"definition", "new_tool"}} for tool in tools]
+        return tools
     if action == "activity":
         return [{**event, "event": event["event_type"], "detail": event["details"]}
                 for event in store.events(limit=request.get("limit", 200))]

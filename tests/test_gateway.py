@@ -36,6 +36,29 @@ def authorize(store, observed):
     )
 
 
+def test_large_harness_review_does_not_widen_live_catalog_policy():
+    definitions = [{**tool('Read metadata. ' + 'x' * 5000), 'name': f'read_{i}'} for i in range(700)]
+    with configured() as store:
+        with pytest.raises(GateError, match='bounded complete list'):
+            store.ingest_catalog('local', definitions)
+        store.register_server(ServerIdentity('review', 'review-fingerprint', 'harness-review-only'))
+        records = store.ingest_catalog('review', definitions)
+        assert len(records) == 700
+        record = records[0]
+        approved = store.approve('review', record['tool_name'], expected_hash=record['sha256'],
+                                 expected_revision=record['revision'])
+        with pytest.raises(GateError, match='cannot authorize tool execution'):
+            store.authorize_call('review', record['tool_name'], expected_hash=approved['sha256'],
+                                 expected_revision=approved['revision'])
+        with pytest.raises(GateError, match='size limit'):
+            store._validate_catalog([{**tool(), 'description': 'x' * 65536}], review_only=True)
+        with pytest.raises(GateError, match='size limit'):
+            store._validate_catalog([{**tool('x' * 20000), 'name': f'large_{i}'}
+                                     for i in range(500)], review_only=True)
+        with pytest.raises(GateError, match='size limit'):
+            store._validate_catalog(definitions[:450])
+
+
 def test_exact_persistent_approval_and_protected_callback(tmp_path):
     path = tmp_path / "guard.sqlite"
     store = configured(path)

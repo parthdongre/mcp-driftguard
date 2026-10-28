@@ -43,6 +43,7 @@ export interface BridgeRequest {
   action: BridgeAction; server_id?: string; tool_name?: string; expected_sha256?: string; expected_revision?: number;
   identity?: string; tools?: ToolDefinition[]; url?: string; secret?: string;
   project_dir?: string; source_id?: string; config_digest?: string;
+  summary?: boolean;
   source?: import('./host-catalog-utils').HostSource;
 }
 export interface DemoFixture { overview: Overview; tools: ToolRecord[]; reviews: Review[]; history: HistoryVersion[]; activity: AuditEvent[]; }

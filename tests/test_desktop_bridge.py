@@ -59,6 +59,22 @@ def test_subprocess_protocol_returns_one_json_response_without_input_echo(tmp_pa
     assert not completed.stderr
 
 
+def test_tool_summary_preserves_metadata_and_loads_full_contract_on_selection(tmp_path):
+    db = tmp_path / 'review.db'
+    definition = {'name': 'search', 'description': 'Read selected records',
+                  'inputSchema': {'type': 'object', 'properties': {'id': {'type': 'string'}}}}
+    assert request(db, action='import_definitions', server_id='summary', identity='fixture',
+                   tools=[definition])['ok']
+    summary = request(db, action='list_tools', summary=True)['data'][0]
+    assert summary['description'] == definition['description']
+    assert 'definition' not in summary and 'new_tool' not in summary
+    full = request(db, action='list_tools')['data'][0]
+    assert full['definition'] == definition
+    review = request(db, action='review', server_id=summary['server_id'], tool_name='search')
+    assert review['data']['new_tool'] == definition
+    assert not request(db, action='list_tools', summary='yes')['ok']
+
+
 def test_subprocess_protocol_preserves_unicode_with_ascii_text_streams(tmp_path):
     description = "Read résumé notes — 测试 🌙"
     payload = {"action": "import_definitions", "server_id": "unicode",
