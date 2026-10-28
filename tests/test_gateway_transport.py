@@ -10,6 +10,7 @@ import pytest
 from driftguard.gateway import GateError, GuardStore
 from driftguard.gateway_transport import (
     LEGACY,
+    HANDSHAKE_VERSIONS,
     MODERN,
     DownstreamSession,
     ProtectedGateway,
@@ -40,7 +41,7 @@ for line in sys.stdin:
         print("x" * 2000000, flush=True)
         continue
     if method == "initialize":
-        result = {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}},
+        result = {"protocolVersion": control.get("negotiatedVersion", "2025-11-25"), "capabilities": {"tools": {}},
                   "serverInfo": {"name": "owned-fixture", "version": "1"}}
     elif method == "server/discover":
         result = {"resultType": "complete", "supportedVersions": ["2026-07-28"],
@@ -353,7 +354,7 @@ def test_downstream_modern_metadata_and_method_allowlist(server):
             assert malformed["error"]["code"] == -32600
             discover = session.handle({"jsonrpc": "2.0", "id": 2, "method": "server/discover",
                                        "params": {"_meta": protocol_meta()}})
-            assert discover["result"]["supportedVersions"] == [MODERN, LEGACY]
+            assert discover["result"]["supportedVersions"] == [MODERN, *HANDSHAKE_VERSIONS]
             blocked = session.handle({"jsonrpc": "2.0", "id": 3, "method": "roots/list",
                                       "params": {"_meta": protocol_meta()}})
             assert blocked["error"]["code"] == -32601

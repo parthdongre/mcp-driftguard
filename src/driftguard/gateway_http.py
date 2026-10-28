@@ -18,7 +18,7 @@ import secrets
 import socket
 import ssl
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -26,6 +26,7 @@ from urllib.parse import urlsplit
 from .gateway import ServerIdentity
 from .gateway_transport import (
     LEGACY,
+    HANDSHAKE_VERSIONS,
     META_PREFIX,
     MODERN,
     RpcError,
@@ -198,6 +199,7 @@ class HttpPeer:
             config.server_id, self._config_identity.fingerprint,
             "http-user:session:" + secrets.token_hex(16),
             protocol_version=config.protocol_version, display_name=config.server_id)
+        self._negotiated_version = config.protocol_version
         self._session_id: str | None = None
         self._routing: dict[str, list[tuple[tuple[str, ...], str, str]]] = {}
         self._sequence = 0
@@ -345,7 +347,7 @@ class HttpPeer:
                 raise TransportError("HTTP session is closed")
             headers = {"Content-Type": "application/json",
                        "Accept": "application/json, text/event-stream",
-                       "MCP-Protocol-Version": self.config.protocol_version}
+                       "MCP-Protocol-Version": self._negotiated_version}
             headers.update(self._routing_headers(method, payload))
             token = self.config.token()
             if token:
@@ -431,12 +433,15 @@ class HttpPeer:
             self._bounded_exchange(method, encode_message({"jsonrpc": "2.0", "method": method}), None)
 
     def initialize(self) -> None:
-        if self.config.protocol_version == LEGACY:
+        if self.config.protocol_version in HANDSHAKE_VERSIONS:
             result = self.request("initialize", {
-                "protocolVersion": LEGACY, "capabilities": {},
+                "protocolVersion": self.config.protocol_version, "capabilities": {},
                 "clientInfo": {"name": "driftguard", "version": "0.4.0"}})
-            if result.get("protocolVersion") != LEGACY:
+            negotiated = result.get("protocolVersion")
+            if negotiated not in HANDSHAKE_VERSIONS:
                 raise TransportError("HTTP protocol negotiation failed")
+            self._negotiated_version = negotiated
+            self.identity = replace(self.identity, protocol_version=negotiated)
             self.notify("notifications/initialized")
         else:
             result = self.request("server/discover")

@@ -27,6 +27,7 @@ from .gateway import GateError, GuardStore, IdentityMismatch, ServerIdentity
 
 MODERN = "2026-07-28"
 LEGACY = "2025-11-25"
+HANDSHAKE_VERSIONS = (LEGACY, "2025-06-18", "2025-03-26")
 META_PREFIX = "io.modelcontextprotocol/"
 SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT",
             "WINDIR", "TEMP", "TMP", "LANG", "LC_ALL")
@@ -113,7 +114,7 @@ class StdioConfig:
         if not isinstance(self.argv, tuple) or not self.argv or not all(isinstance(arg, str) and arg and "\x00" not in arg
                                     for arg in self.argv):
             raise ValueError("argv must be a nonempty array of nonempty strings")
-        if self.protocol_version not in (MODERN, LEGACY):
+        if self.protocol_version not in (MODERN, *HANDSHAKE_VERSIONS):
             raise ValueError("Unsupported protocol version")
         if (type(self.timeout_seconds) not in (int, float) or not math.isfinite(self.timeout_seconds)
                 or not 0.05 <= self.timeout_seconds <= 300):
@@ -338,11 +339,13 @@ class StdioPeer:
                 raise
 
     def initialize(self) -> None:
-        if self.config.protocol_version == LEGACY:
-            result = self.request("initialize", {"protocolVersion": LEGACY, "capabilities": {},
+        if self.config.protocol_version in HANDSHAKE_VERSIONS:
+            result = self.request("initialize", {"protocolVersion": self.config.protocol_version, "capabilities": {},
                                                  "clientInfo": {"name": "driftguard", "version": "0.4.0"}})
-            if result.get("protocolVersion") != LEGACY:
+            negotiated = result.get("protocolVersion")
+            if negotiated not in HANDSHAKE_VERSIONS:
                 raise TransportError("Upstream protocol negotiation failed")
+            self.identity = replace(self.identity, protocol_version=negotiated)
             self.notify("notifications/initialized")
         else:
             result = self.request("server/discover")
@@ -408,6 +411,8 @@ class ProtectedGateway:
         try:
             self.store.register_server(self.identity)
             self.peer.initialize()
+            self.identity = self.peer.identity
+            self.store.register_server(self.identity)
             self.refresh_catalog()
             self.store.mark_gateway(self.identity, active=True)
             self._heartbeat = threading.Thread(target=self._watch_heartbeat, daemon=True)
@@ -604,10 +609,10 @@ class DownstreamSession:
         version = LEGACY
         try:
             if method == "initialize":
-                if self.legacy_initialized or params.get("protocolVersion") != LEGACY:
-                    raise RpcError(-32602, "Only explicit 2025-11-25 initialization is supported")
+                if self.legacy_initialized or params.get("protocolVersion") not in HANDSHAKE_VERSIONS:
+                    raise RpcError(-32602, "Unsupported handshake protocol version")
                 self.legacy_initialized = True
-                result = {"protocolVersion": LEGACY, "capabilities": {"tools": {}},
+                result = {"protocolVersion": params["protocolVersion"], "capabilities": {"tools": {}},
                           "serverInfo": {"name": "driftguard", "version": "0.4.0"}}
             else:
                 meta = params.get("_meta", {})
@@ -617,14 +622,14 @@ class DownstreamSession:
                 if requested is not None:
                     if requested != MODERN:
                         raise RpcError(-32022, "Unsupported protocol version",
-                                       {"supported": [MODERN, LEGACY], "requested": requested})
+                                       {"supported": [MODERN, *HANDSHAKE_VERSIONS], "requested": requested})
                     if not isinstance(meta.get(META_PREFIX + "clientCapabilities"), dict):
                         raise RpcError(-32602, "Modern clientCapabilities metadata is required")
                     version = MODERN
                 elif not self.legacy_ready:
                     raise RpcError(-32600, "Initialize legacy MCP or supply modern request metadata")
                 if method == "server/discover" and version == MODERN:
-                    result = {"supportedVersions": [MODERN, LEGACY], "capabilities": {"tools": {}},
+                    result = {"supportedVersions": [MODERN, *HANDSHAKE_VERSIONS], "capabilities": {"tools": {}},
                               "ttlMs": 0, "cacheScope": "private",
                               "_meta": {META_PREFIX + "serverInfo": {"name": "driftguard", "version": "0.4.0"}}}
                 elif method == "ping":

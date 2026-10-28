@@ -285,7 +285,7 @@ def test_nested_snapshot_mutation_cannot_silently_reuse_hash():
         {"properties": {"x": {"type": ["string", "invalid"]}}},
         {"required": "x"},
         {"allOf": [{"properties": {"x": {"type": None}}}]},
-        {"$schema": "https://json-schema.org/draft-07/schema"},
+        {"$schema": "https://example.invalid/unknown-dialect"},
     ],
 )
 def test_schema_metaschema_validation_rejects_nested_invalid_contracts(schema):

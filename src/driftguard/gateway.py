@@ -15,9 +15,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Self, TypeVar
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft7Validator, Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
+from .input_contracts import supported_input_schema, valid_arguments
 from .baselines import rule_baseline
 from .canonicalize import exact_hash, exact_json, make_snapshot
 from .diff import build_delta
@@ -398,15 +399,21 @@ class GuardStore:
                 if schema is None:
                     continue
                 declared = schema.get("$schema", "https://json-schema.org/draft/2020-12/schema")
-                if declared not in {
+                validator = Draft202012Validator
+                if schema_name == "inputSchema" and declared in {
+                    "http://json-schema.org/draft-07/schema", "http://json-schema.org/draft-07/schema#",
+                    "https://json-schema.org/draft-07/schema", "https://json-schema.org/draft-07/schema#",
+                }:
+                    validator = Draft7Validator
+                elif declared not in {
                     "https://json-schema.org/draft/2020-12/schema",
                     "https://json-schema.org/draft/2020-12/schema#",
                 }:
-                    raise GateError("Only JSON Schema 2020-12 is supported by this gateway")
+                    raise GateError("Inputs support Draft 7 and 2020-12; outputs support 2020-12")
                 try:
                     # Check against the bundled metaschema, never against user arguments.
                     # Disable formats so attacker regex patterns are not evaluated/compiled.
-                    Draft202012Validator.check_schema(schema, format_checker=None)
+                    validator.check_schema(schema, format_checker=None)
                 except SchemaError as error:
                     raise GateError(
                         f"{schema_name} is not a valid JSON Schema 2020-12 object"
@@ -872,7 +879,14 @@ class GuardStore:
         """Check and dispatch under a local store lock; remote behavior remains unverified."""
         if not isinstance(arguments, dict):
             raise GateError("Tool arguments must be a JSON object")
-        safe_arguments = json.loads(exact_json(arguments))
+        _check_depth(arguments, self.policy.max_depth)
+        try:
+            encoded = exact_json(arguments)
+            if len(encoded.encode("utf-8")) > 1024 * 1024:
+                raise GateError("Tool arguments exceed the byte limit")
+            safe_arguments = json.loads(encoded)
+        except (ValueError, UnicodeError, RecursionError) as error:
+            raise GateError("Tool arguments must contain bounded finite JSON") from error
         error: Exception | None = None
         result: Any = None
         with self._transaction():
@@ -883,6 +897,11 @@ class GuardStore:
                 expected_revision=expected_revision,
                 identity=identity,
             )
+            schema = json.loads(self._tool(server_id, tool_name)["definition"])["inputSchema"]
+            if not supported_input_schema(schema):
+                raise GateError("Input schema uses unsupported validation keywords")
+            if not valid_arguments(schema, safe_arguments):
+                raise GateError("Tool arguments violate the approved input schema")
             self._event(
                 "call_authorized",
                 server_id,

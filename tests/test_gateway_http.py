@@ -25,7 +25,7 @@ TOOL = {"name": "read_notes", "description": "Read selected résumé notes",
 
 @contextmanager
 def server(*, sse=False, failure=None):
-    state = {"requests": [], "session": "fixture-session-one", "tools": [TOOL], "calls": 0}
+    state = {"version": LEGACY, "requests": [], "session": "fixture-session-one", "tools": [TOOL], "calls": 0}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -43,7 +43,7 @@ def server(*, sse=False, failure=None):
                 self.end_headers()
                 return
             if method == "initialize":
-                result = {"protocolVersion": LEGACY, "capabilities": {"tools": {}}}
+                result = {"protocolVersion": state["version"], "capabilities": {"tools": {}}}
             elif method == "server/discover":
                 result = {"resultType": "complete", "supportedVersions": [MODERN],
                           "capabilities": {"tools": {}}}
