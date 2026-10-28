@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import venv
 from pathlib import Path
 
 import pytest
@@ -107,6 +108,18 @@ def approve(store):
     record = store.get_tool("fixture", "weather")
     return store.approve("fixture", "weather", expected_hash=record["sha256"],
                          expected_revision=record["revision"])
+
+
+@pytest.mark.parametrize('relative', [False, True])
+def test_selected_python_virtual_environment_survives_executable_resolution(tmp_path, relative):
+    directory = tmp_path / 'server-environment'
+    venv.EnvBuilder(with_pip=False, symlinks=os.name == 'posix').create(directory)
+    python = directory / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    selected = str(python.relative_to(tmp_path)) if relative else str(python)
+    config = StdioConfig('venv', (selected, '-c', 'import sys; print(sys.prefix)'), cwd=str(tmp_path))
+    completed = subprocess.run(config.resolved_argv(), cwd=config.cwd, env=config.environment(),
+                               capture_output=True, text=True, check=True, timeout=10)
+    assert Path(completed.stdout.strip()).resolve() == directory.resolve()
 
 
 def test_chunked_stdio_preserves_fragmented_unicode_json_lines(server):
@@ -343,7 +356,8 @@ def test_credentials_in_catalog_are_blocked_before_storage(server, monkeypatch):
 
 def test_output_schema_contract_is_hidden_and_blocked_before_execution(server):
     config, update, root = server
-    definition = {**tool(), "outputSchema": {"type": "object"}}
+    definition = {**tool(), "outputSchema": {"type": "object", "properties": {
+        "value": {"type": "string", "pattern": "unsupported-regex"}}}}
     update(tools=[definition])
     with GuardStore() as store:
         gateway = ProtectedGateway(config(), store)
@@ -355,6 +369,58 @@ def test_output_schema_contract_is_hidden_and_blocked_before_execution(server):
             assert not (root / "calls.jsonl").exists()
             assert any(event.get("details", {}).get("reason") == "unsupported_output_contract"
                        for event in store.events())
+        finally:
+            gateway.close()
+
+
+@pytest.mark.parametrize('structured', [{'value': 'ok'}, {'value': 3}, {'extra': 'missing'}, None])
+def test_supported_output_contract_is_preserved_only_after_validation(server, structured):
+    config, update, _ = server
+    definition = {**tool(), 'outputSchema': {'type': 'object', 'properties': {
+        'value': {'type': 'string'}}, 'required': ['value'], 'additionalProperties': False}}
+    output = {'content': [{'type': 'text', 'text': 'Result'}], 'structuredContent': structured}
+    update(tools=[definition], output=output)
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(), store)
+        try:
+            approve(store)
+            assert gateway.list_approved() == [definition]
+            if structured == {'value': 'ok'}:
+                assert gateway.call('weather', {})['structuredContent'] == structured
+            else:
+                with pytest.raises(TransportError, match='outputSchema'):
+                    gateway.call('weather', {})
+        finally:
+            gateway.close()
+
+
+@pytest.mark.parametrize('protected', ['fixture-secret-12345', '-----BEGIN PRIVATE KEY-----'])
+def test_structured_output_cannot_bypass_credential_checks(server, monkeypatch, protected):
+    config, update, _ = server
+    monkeypatch.setenv('DRIFTGUARD_TEST_TOKEN', 'fixture-secret-12345')
+    update(tools=[{**tool(), 'outputSchema': {'type': 'object'}}],
+           output={'content': [{'type': 'text', 'text': 'Result'}],
+                   'structuredContent': {'value': protected}})
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(pass_env=('DRIFTGUARD_TEST_TOKEN',)), store)
+        try:
+            approve(store)
+            with pytest.raises(TransportError, match='credential material'):
+                gateway.call('weather', {})
+        finally:
+            gateway.close()
+
+
+def test_error_result_may_omit_structured_output_but_not_text_checks(server):
+    config, update, _ = server
+    update(tools=[{**tool(), 'outputSchema': {'type': 'object'}}],
+           output={'content': [{'type': 'text', 'text': 'File unavailable'}], 'isError': True})
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(), store)
+        try:
+            approve(store)
+            assert gateway.call('weather', {}) == {'content': [{'type': 'text', 'text': 'File unavailable'}],
+                                                   'isError': True}
         finally:
             gateway.close()
 

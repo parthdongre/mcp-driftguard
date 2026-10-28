@@ -330,6 +330,21 @@ class GuardStore:
                 for row in self._db.execute("SELECT * FROM guard_servers ORDER BY server_id")
             ]
 
+    def catalog_state_token(self, server_id: str) -> str:
+        """Cheap local change hint for client notifications, never an execution permit."""
+        with self._lock:
+            server = self._server(server_id)
+            policy = self._db.execute("SELECT value FROM guard_meta WHERE key='policy'").fetchone()
+            tools = [list(row) for row in self._db.execute(
+                "SELECT tool_name,sha256,status,present FROM guard_tools "
+                "WHERE server_id=? ORDER BY tool_name", (server_id,)
+            )]
+            return exact_hash({
+                "identity": [server["fingerprint"], server["auth_context"], server["protocol_version"]],
+                "valid": server["catalog_valid"], "policy": policy[0] if policy else None,
+                "tools": tools,
+            })
+
     def save_source_metadata(self, server_id: str, metadata: dict[str, Any]) -> None:
         encoded = exact_json(metadata)
         if len(encoded.encode()) > 32768:

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .gateway import GateError, GuardStore, IdentityMismatch, ServerIdentity
+from .input_contracts import supported_input_schema, valid_arguments
 
 MODERN = "2026-07-28"
 LEGACY = "2025-11-25"
@@ -158,11 +159,18 @@ class StdioConfig:
     def resolved_argv(self) -> tuple[str, ...]:
         executable = self.argv[0]
         if not os.path.isabs(executable) and ("/" in executable or "\\" in executable):
-            executable = str(Path(self.cwd, executable).resolve())
-        executable = shutil.which(executable, path=self.environment().get("PATH", os.defpath))
+            executable = os.path.abspath(os.path.join(self.cwd, executable))
+        search_path = os.pathsep.join(
+            entry if os.path.isabs(entry) else os.path.abspath(os.path.join(self.cwd, entry))
+            for entry in self.environment().get("PATH", os.defpath).split(os.pathsep)
+        )
+        executable = shutil.which(executable, path=search_path)
         if executable is None:
             raise TransportError("Configured executable is unavailable")
-        return (str(Path(executable).resolve()), *self.argv[1:])
+        # Resolving a venv's python symlink selects the base installation and
+        # loses its installed MCP packages. Hash target contents in identity(),
+        # but launch through the selected environment's executable path.
+        return (os.path.abspath(executable), *self.argv[1:])
 
     def identity(self) -> ServerIdentity:
         argv = self.resolved_argv()
@@ -514,7 +522,14 @@ class ProtectedGateway:
     def list_approved(self) -> list[dict[str, Any]]:
         records = self.refresh_catalog()
         return [record["definition"] for record in sorted(records, key=lambda x: x["tool_name"])
-                if record["status"] == "approved" and "outputSchema" not in record["definition"]]
+                if record["status"] == "approved" and self._supports_output(record["definition"])]
+
+    @staticmethod
+    def _supports_output(definition: dict[str, Any]) -> bool:
+        schema = definition.get("outputSchema")
+        return schema is None or (isinstance(schema, dict) and
+                                  schema.get("type", "object") == "object" and
+                                  supported_input_schema(schema))
 
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -522,14 +537,14 @@ class ProtectedGateway:
             def invoke(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
                 # request() performs the final identity check at the wire boundary.
                 result = self.peer.request("tools/call", {"name": tool_name, "arguments": args})
-                return self._check_result(result)
+                return self._check_result(result, record["definition"].get("outputSchema"))
 
             try:
                 record = self.store.get_tool(self.config.server_id, name)
-                if "outputSchema" in record["definition"]:
+                if not self._supports_output(record["definition"]):
                     self.store.record_event("gateway_call_blocked", self.config.server_id, name,
                                             reason="unsupported_output_contract")
-                    raise RpcError(-32602, "This gateway profile does not support outputSchema contracts")
+                    raise RpcError(-32602, "This outputSchema uses unsupported validation keywords")
                 return self.store.dispatch(self.config.server_id, name, arguments, invoke,
                                            expected_hash=record["sha256"],
                                            expected_revision=record["revision"], identity=self.identity)
@@ -542,8 +557,8 @@ class ProtectedGateway:
                 self.close()
                 raise
 
-    def _check_result(self, result: dict[str, Any]) -> dict[str, Any]:
-        """Independent conservative text-only egress checks; no safety guarantee."""
+    def _check_result(self, result: dict[str, Any], output_schema: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Bounded text and approved structured-contract egress checks."""
         content = result.get("content")
         if not isinstance(content, list) or len(content) > 256:
             raise TransportError("Tool result content is invalid or exceeds the item limit")
@@ -559,9 +574,19 @@ class ProtectedGateway:
             raise TransportError("Tool result contains a configured credential")
         if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", encoded):
             raise TransportError("Tool result contains private key material")
-        # Do not forward arbitrary metadata, embedded resources, URLs for fetching,
-        # or structuredContent that could bypass the independent text egress checks.
-        return {"content": clean, "isError": result.get("isError", False)}
+        forwarded = {"content": clean, "isError": result.get("isError", False)}
+        if output_schema is not None and (not forwarded["isError"] or "structuredContent" in result):
+            structured = result.get("structuredContent")
+            if not isinstance(structured, dict) or not valid_arguments(output_schema, structured):
+                raise TransportError("Structured result violates the approved outputSchema")
+            if self._contains_credential(structured) or re.search(
+                r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", json.dumps(structured)
+            ):
+                raise TransportError("Structured result contains protected credential material")
+            forwarded["structuredContent"] = structured
+        # Uncontracted structured data, arbitrary metadata and embedded resources
+        # are not forwarded. Text/structured data remain untrusted client input.
+        return forwarded
 
     def _contains_credential(self, value: Any) -> bool:
         stack = [value]
@@ -633,7 +658,7 @@ class DownstreamSession:
                 if self.legacy_initialized or params.get("protocolVersion") not in HANDSHAKE_VERSIONS:
                     raise RpcError(-32602, "Unsupported handshake protocol version")
                 self.legacy_initialized = True
-                result = {"protocolVersion": params["protocolVersion"], "capabilities": {"tools": {}},
+                result = {"protocolVersion": params["protocolVersion"], "capabilities": {"tools": {"listChanged": True}},
                           "serverInfo": {"name": "driftguard", "version": "0.4.0"}}
             else:
                 meta = params.get("_meta", {})

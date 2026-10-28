@@ -81,6 +81,23 @@ def test_exact_persistent_approval_and_protected_callback(tmp_path):
         assert any(event["event_type"] == "call_completed" for event in reopened.events())
 
 
+def test_catalog_notification_token_changes_only_for_review_or_catalog_state():
+    with configured() as store:
+        record = store.ingest_catalog('local', [tool()])[0]
+        before = store.catalog_state_token('local')
+        store.ingest_catalog('local', [tool()])
+        assert store.catalog_state_token('local') == before
+        approved = store.approve('local', 'search', expected_hash=record['sha256'],
+                                 expected_revision=record['revision'])
+        after = store.catalog_state_token('local')
+        assert after != before
+        store.ingest_catalog('local', [tool()])
+        assert store.catalog_state_token('local') == after
+        store.deny('local', 'search', expected_hash=approved['sha256'],
+                   expected_revision=approved['revision'])
+        assert store.catalog_state_token('local') != after
+
+
 def test_semantically_equivalent_change_still_requires_exact_reapproval():
     with configured() as store:
         approved = approve(store)

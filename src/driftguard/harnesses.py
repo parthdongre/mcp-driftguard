@@ -56,6 +56,7 @@ class _Source:
     settings: dict[str, Any] = field(repr=False)
     file_digest: str
     kind: str = "configured"
+    gateway_servers: tuple[str, ...] = ()
 
     @property
     def source_id(self) -> str:
@@ -66,7 +67,7 @@ class _Source:
     @property
     def digest(self) -> str:
         return hashlib.sha256(exact_json([
-            self.source_id, self.file_digest, self.settings,
+            self.source_id, self.file_digest, self.settings, list(self.gateway_servers),
         ]).encode()).hexdigest()
 
 
@@ -80,6 +81,9 @@ class _LocalConfig(StdioConfig):
 
 @dataclass(frozen=True)
 class _CodexConfig(_LocalConfig):
+    max_message_bytes: int = CODEX_MAX_MESSAGE_BYTES
+    max_catalog_bytes: int = CODEX_MAX_MESSAGE_BYTES
+    max_tools: int = MAX_REVIEW_CATALOG_TOOLS
     target_server: str | None = None
 
 
@@ -225,6 +229,26 @@ def _environment_references(settings: dict[str, Any]) -> list[str]:
                    and _ENV_NAME.fullmatch(name) and name in os.environ})
 
 
+def _is_gateway(settings: Any) -> bool:
+    if not isinstance(settings, dict):
+        return False
+    command, args = settings.get("command", ""), settings.get("args", [])
+    if not isinstance(command, str) or not isinstance(args, list):
+        return False
+    binary = command.replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
+    return "serve" in args and ("driftguard.gateway_cli" in args or
+                                binary in {"driftguard-gateway", "driftguard-engine"})
+
+
+def _codex_discovery_args(gateways: tuple[str, ...]) -> list[str]:
+    args = ["app-server"]
+    for name in gateways:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise HarnessError("A gateway name cannot be excluded safely by this Codex CLI. Review its live source or use a gateway name with letters, digits, underscores and hyphens.")
+        args.extend(["-c", "mcp_servers." + name + ".enabled=false"])
+    return args
+
+
 def _sources(project: Path) -> tuple[list[_Source], list[str]]:
     sources: dict[tuple[str, str], _Source] = {}
     warnings: list[str] = []
@@ -281,6 +305,11 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
     blocked = {item.removeprefix("blocked:") for item in warnings if item.startswith("blocked:")}
     sources = {key: value for key, value in sources.items() if key[0] not in blocked}
     warnings = [item for item in warnings if not item.startswith("blocked:")]
+    gateways = {harness: tuple(sorted(source.name for source in sources.values()
+                if source.harness == harness and _is_gateway(source.settings)))
+                for harness in ("codex", "claude-code")}
+    sources = {key: replace(source, gateway_servers=gateways[source.harness])
+               for key, source in sources.items()}
     for harness, executable, args in [("codex", "codex", ["app-server"]),
                                       ("claude-code", "claude", ["mcp", "serve"])]:
         if resolved := shutil.which(executable):
@@ -300,7 +329,7 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
                 harness, "Codex MCP catalog" if harness == "codex" else "Claude Code tools",
                 "runtime", path, project, {"command": str(path), "args": args,
                                            "env_vars": sorted(references)},
-                hashlib.sha256(exact_json([info.st_size, info.st_mtime_ns, sorted(digests)]).encode()).hexdigest(), kind="runtime",
+                hashlib.sha256(exact_json([info.st_size, info.st_mtime_ns, sorted(digests)]).encode()).hexdigest(), kind="runtime", gateway_servers=gateways[harness],
             )
     if len(sources) > MAX_SOURCES:
         raise HarnessError("Too many configured servers; narrow the selected project.")
@@ -324,13 +353,18 @@ def _config(source: _Source) -> StdioConfig | HttpConfig:
         raise HarnessError("This server configuration is malformed.")
     if raw.get("enabled", True) is not True or raw.get("disabled", False) is not False:
         raise HarnessError("This server is disabled in the harness configuration.")
+    if source.kind == "configured" and _is_gateway(raw):
+        raise HarnessError("This connection already uses DriftGuard. Review its running live source; discovery will not start a duplicate gateway.")
+    if source.kind == "runtime" and source.harness == "claude-code" and source.gateway_servers:
+        raise HarnessError("A DriftGuard gateway is configured. Review its live source or fetch individual original servers to avoid starting a duplicate gateway.")
+    if source.kind == "runtime" and source.harness == "codex" and source.gateway_servers:
+        raw = {**raw, "args": _codex_discovery_args(source.gateway_servers)}
     if source.harness == "codex" and source.kind == "configured" and (cli := shutil.which("codex")):
         return _CodexConfig(
-            "harness." + source.source_id[:32], (str(Path(cli).absolute()), "app-server"),
+            "harness." + source.source_id[:32], (str(Path(cli).absolute()), *_codex_discovery_args(source.gateway_servers)),
             cwd=str(source.cwd), protocol_version=LEGACY, target_server=source.name,
             pass_env=tuple(_environment_references(raw) + (["CODEX_HOME"] if "CODEX_HOME" in os.environ else [])),
-            timeout_seconds=FETCH_SECONDS, max_message_bytes=2 * 1024 * 1024,
-            max_catalog_bytes=8 * 1024 * 1024,
+            timeout_seconds=FETCH_SECONDS,
         )
     if raw.get("experimental_environment") == "remote":
         raise HarnessError("Remote-executor servers require the Codex runtime connection.")

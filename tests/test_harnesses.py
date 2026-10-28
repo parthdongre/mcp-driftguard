@@ -258,6 +258,29 @@ def codex_runtime(workspace, monkeypatch, mode):
     return scan(str(project))['sources'][0]
 
 
+@pytest.mark.parametrize('name', ['guarded-v1', 'guarded.v1'])
+def test_discovery_does_not_launch_a_configured_driftguard_gateway(workspace, monkeypatch, name):
+    home, project, _, trace = workspace
+    config = home / '.codex/config.toml'
+    config.parent.mkdir()
+    config.write_text('[mcp_servers.' + json.dumps(name) + ']\ncommand=' + json.dumps(sys.executable) +
+                      '\nargs=["-I","-m","driftguard.gateway_cli","serve","--config","/tmp/profile.json","--state","/tmp/live.db"]\n')
+    actual = harnesses.shutil.which
+    monkeypatch.setattr(harnesses.shutil, 'which', lambda name, **kwargs:
+                        sys.executable if name == 'codex' else actual(name, **kwargs))
+    result = scan(str(project))
+    gateway = next(s for s in result['sources'] if s['name'] == name)
+    assert not gateway['ready'] and 'duplicate gateway' in gateway['issue']
+    sources, _ = harnesses._sources(project)
+    runtime = next(s for s in sources if s.kind == 'runtime')
+    if '.' in name:
+        with pytest.raises(HarnessError, match='cannot be excluded safely'):
+            harnesses._config(runtime)
+    else:
+        assert f'mcp_servers.{name}.enabled=false' in harnesses._config(runtime).argv
+    assert not trace.exists()
+
+
 def test_codex_app_server_real_jsonl_contract_and_separate_catalogs(workspace, tmp_path, monkeypatch):
     _, project, _, trace = workspace
     source = codex_runtime(workspace, monkeypatch, 'codex')
@@ -473,6 +496,57 @@ def test_real_codex_cli_catalog_and_targeted_discovery(workspace, tmp_path, monk
     assert config.read_bytes() == before
     methods = {json.loads(line)['method'] for line in trace.read_text().splitlines()}
     assert methods <= {'initialize', 'notifications/initialized', 'tools/list'}
+
+
+def test_real_codex_can_start_gateway_and_discover_pending_tools(workspace, tmp_path, monkeypatch):
+    """Vendor discovery check; no model turn and no claim of a persistent chat session."""
+    executable = os.environ.get('DRIFTGUARD_TEST_CODEX')
+    if not executable or not Path(executable).is_file():
+        pytest.skip('Set DRIFTGUARD_TEST_CODEX for gateway/client discovery')
+    _, project, script, trace = workspace
+    config_dir = tmp_path / 'codex-gateway'
+    config_dir.mkdir()
+    db = tmp_path / 'live.db'
+    profile = tmp_path / 'gateway.json'
+    profile.write_text(json.dumps({'server_id': 'live', 'argv': [sys.executable, str(script), 'pages'],
+                                   'cwd': str(project), 'protocol_version': '2025-11-25',
+                                   'pass_env': ['TEST_TRACE']}))
+    config = config_dir / 'config.toml'
+    config.write_text('[mcp_servers."guarded-v1"]\ncommand=' + json.dumps(sys.executable) +
+                      '\nargs=' + json.dumps(['-m', 'driftguard.gateway_cli', 'serve', '--config',
+                                             str(profile), '--state', str(db)]) +
+                      '\n[mcp_servers."guarded-v1".env]\nTEST_TRACE=' + json.dumps(str(trace)) + '\n')
+    original = config.read_bytes()
+    monkeypatch.setenv('CODEX_HOME', str(config_dir))
+    peer = harnesses._CodexPeer(harnesses._CodexConfig(
+        'codex-live-client', (executable, 'app-server'), cwd=str(project),
+        protocol_version='2025-11-25', pass_env=('CODEX_HOME',), timeout_seconds=20))
+    peer.collection_deadline = time.monotonic() + 30
+    try:
+        peer.initialize()
+        rows = peer.request('mcpServerStatus/list', {'limit': 10, 'detail': 'toolsAndAuthOnly'})['data']
+        assert len(rows) == 1 and rows[0]['tools'] == {}
+        assert rows[0]['serverCapabilities']['tools']['listChanged']
+        with GuardStore(db) as store:
+            assert {t['tool_name'] for t in store.list_tools('live')} == {'page_one', 'page_two'}
+            assert not any(t['status'] == 'approved' for t in store.list_tools('live'))
+        assert config.read_bytes() == original
+    finally:
+        peer.close()
+    before = trace.read_bytes()
+    actual = harnesses.shutil.which
+    monkeypatch.setattr(harnesses.shutil, 'which', lambda name, **kwargs:
+                        executable if name == 'codex' else actual(name, **kwargs))
+    sources, _ = harnesses._sources(project)
+    runtime = next(s for s in sources if s.kind == 'runtime' and s.harness == 'codex')
+    discovery = harnesses._CodexPeer(harnesses._config(runtime))
+    discovery.collection_deadline = time.monotonic() + 20
+    try:
+        discovery.initialize()
+        discovery.request('mcpServerStatus/list', {'limit': 10, 'detail': 'toolsAndAuthOnly'})
+    finally:
+        discovery.close()
+    assert trace.read_bytes() == before, 'Catalog discovery must not start another live gateway'
 
 
 def test_codex_runtime_forwards_only_configured_credential_references(workspace, monkeypatch):

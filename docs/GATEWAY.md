@@ -1,5 +1,9 @@
 # Explicit MCP protection gateway
 
+For a reproducible first real connection, use the [live quickstart](LIVE_QUICKSTART.md).
+It prepares an official Filesystem MCP server profile and separate Codex/Claude
+configuration entries, without editing harness settings.
+
 `driftguard-gateway` is a working, opt-in, tools-only stdio mediator. It starts
 one explicitly configured subprocess or HTTP upstream, discovers its tool catalog,
 and exposes definitions only after exact local approval. The stdio subprocess path
@@ -59,6 +63,8 @@ contain credentials or private results.
    directory, protocol version and passed environment. Include content digests of
    the executable and directly named file arguments in the identity fingerprint.
    Recompute the binding before discovery and immediately before sending a call.
+   Preserve the selected executable path when launching (including venv Python
+   symlinks), while hashing resolved file contents for identity verification.
    Bind approval additionally to a fresh random live-connection identifier, so an
    unclean gateway crash/restart cannot inherit the previous child's approvals.
    The `identity` command prints a static configuration diagnostic, not an
@@ -76,13 +82,15 @@ contain credentials or private results.
 5. Reject unsupported protocol methods, callbacks, extensions and incomplete
    modern results. Requests cannot reach roots, prompts, resources, sampling,
    elicitation, tasks, or approval operations through an unguarded pass-through.
-6. Apply an independent text-only output policy. Non-text content, resource links,
+6. Apply an independent output policy. Non-text content, resource links,
    embedded resources, malformed output, known passed credentials and PEM private
    keys are blocked. Arbitrary metadata and structured content are not forwarded.
-   Tools declaring `outputSchema` are withheld and cannot be invoked by this
-   profile, even after definition review, because dropping structured output would
-   violate their advertised contract. Their blocked calls record
-   `unsupported_output_contract` for local inspection.
+   For an approved `outputSchema`, retain `structuredContent` only after bounded,
+   reference-free instance validation and the same credential/private-key checks.
+   Successful results must supply the contracted structured object. Error results
+   may omit it; if present, it is still checked. Unsupported schema keywords
+   (including references, regexes and branching applicators) withhold that tool
+   and record `unsupported_output_contract` before an upstream call is sent.
 7. Bound writes and responses by timeout and message size. Invalidate approvals
    on disconnect, malformed catalog, transport failure or explicit shutdown.
    Reconnection requires new local review. Failed calls are never automatically
@@ -115,18 +123,18 @@ Verified against official primary specifications on 2026-10-15:
 | Downstream compatibility | Separate explicit legacy initialization or required modern request metadata; no silent downgrade |
 | List caching | Modern facade returns deterministic names, `ttlMs: 0`, `cacheScope: private`; relists before calls |
 | Catalog pagination | Bounded complete upstream pagination; facade returns a single bounded approved catalog |
-| Subscriptions | Unsupported; no subscription/list-change capability advertised |
+| Subscriptions | Legacy clients receive tool-list change notifications after local review/catalog changes; modern subscriptions remain unsupported |
 | MRTR / input-required results | Rejected; no roots, sampling, elicitation or extension capability advertised |
 | Request cancellation | Calls are serialized and time-bounded; concurrent cancellation is not implemented |
 | Streamable HTTP | Explicit HTTPS endpoint; JSON and bounded request-scoped SSE; current method/name/parameter routing headers; legacy sessions only in the legacy profile |
-| JSON Schema | Core validates definition schemas against supported JSON Schema 2020-12 metaschema; argument/output instance validation and external `$ref` resolution are not implemented; outputSchema tools are withheld |
+| JSON Schema | Definition metaschema validation plus a bounded, reference-free subset for input and structured output instance validation; unsupported contracts fail closed |
 | Platform validation | Actual authored stdio and loopback HTTP tests run on Linux/macOS/Windows; see the current platform evidence for native packaging/startup results |
 
 This is a restricted interoperable tools subset, **not full MCP conformance**.
 The supported HTTP subset includes per-message POST, required protocol/method/name
 headers, schema-derived primitive parameter headers with sentinel encoding, and JSON
 or request-scoped SSE responses. Modern HTTP does not send legacy session headers.
-Subscriptions, MRTR, general cancellation, OAuth discovery/refresh and arbitrary
+Modern subscriptions, MRTR, general cancellation, OAuth discovery/refresh and arbitrary
 schema-instance evaluation remain unsupported. This is not full MCP conformance.
 
 Official references:
@@ -175,6 +183,11 @@ modern/legacy wire formats, withholding before approval, changed and revoked
 definitions, policy revisions, reconnect, malformed and duplicate catalogs,
 pagination loops, oversized frames, wrong response IDs, timeouts, executable-file
 identity changes, output-secret checks, method restrictions and JSON-only CLI output.
+
+An additional opt-in test uses the official Filesystem MCP server 2.0.1 to verify
+live desktop-bridge approval, list-change notifications, a real file read with a
+validated output contract, and revocation. See the live quickstart for its exact
+command and its separate authenticated-harness verification boundary.
 
 ## Configured Streamable HTTP upstream
 

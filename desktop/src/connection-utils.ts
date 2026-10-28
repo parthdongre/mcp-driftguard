@@ -24,10 +24,20 @@ export function buildProfile(server: string, argvText: string, cwd: string, prot
 }
 
 export function buildClientConfig(runtime: RuntimeInfo, profilePath: string, server: string) {
+  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(server)) throw new Error('Use a short source identifier.');
   if (!runtime.engine_available || !runtime.gateway_argv?.length) throw new Error('Install the packaged engine before creating a client connection.');
   if (!absolutePath(profilePath) || !absolutePath(runtime.state_path)) throw new Error('Enter the absolute path where you saved the source profile.');
   const [command, ...args] = runtime.gateway_argv;
   return { mcpServers: { [server]: { command, args: [...args, 'serve', '--config', profilePath, '--state', runtime.state_path] } } };
+}
+
+export function buildClientSetup(runtime: RuntimeInfo, profilePath: string, server: string, target: string) {
+  const config = buildClientConfig(runtime, profilePath, server);
+  if (target === 'claude') return { text: JSON.stringify(config, null, 2), filename: 'driftguard-claude-code.json', type: 'application/json' };
+  if (target !== 'codex') throw new Error('Choose Codex or Claude Code.');
+  const entry = config.mcpServers[server];
+  return { text: `[mcp_servers.${JSON.stringify(server)}]\ncommand = ${JSON.stringify(entry.command)}\nargs = ${JSON.stringify(entry.args)}\nstartup_timeout_sec = 90\n`,
+    filename: 'driftguard-codex.toml', type: 'text/plain' };
 }
 
 export function buildHttpProfile(server: string, endpoint: string, protocol: string, auth: string, envName: string) {

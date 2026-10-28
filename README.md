@@ -27,7 +27,8 @@ For the research framing and review material, see [`docs/RESEARCH_POSITIONING.md
 
 The research core now has a persistent exact-consent store, an opt-in tools-only
 stdio/HTTP gateway, and a React/TypeScript desktop review interface with a Tauri 2 shell.
-Start with [desktop setup](desktop/README.md), [gateway setup](docs/GATEWAY.md),
+Start with the [first live connection](docs/LIVE_QUICKSTART.md),
+[desktop setup](desktop/README.md), [gateway setup](docs/GATEWAY.md),
 [architecture](docs/ARCHITECTURE.md), and [verified progress](docs/IMPLEMENTATION_PROGRESS.md).
 
 The native connection screen also [discovers Codex and Claude Code sources](docs/HARNESS_CONNECTIONS.md)

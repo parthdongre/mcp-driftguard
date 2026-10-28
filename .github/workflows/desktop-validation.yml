@@ -43,6 +43,11 @@ jobs:
         run: python -m pip install -e ".[dev]" "scikit-learn>=1.5" -c requirements/core-constraints.txt
       - name: Python correctness and security tests
         run: python -m pytest -vv --durations=20 --timeout=60 --timeout-method=thread -o faulthandler_timeout=30
+      - name: Verify pinned Codex and official Filesystem MCP integration
+        if: runner.os == 'Linux'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/driftguard-live-mcp" --ignore-scripts --save-exact @openai/codex@0.165.0 @modelcontextprotocol/server-filesystem@2.0.1
+          DRIFTGUARD_TEST_CODEX="$RUNNER_TEMP/driftguard-live-mcp/node_modules/.bin/codex" DRIFTGUARD_TEST_FILESYSTEM="$RUNNER_TEMP/driftguard-live-mcp/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js" python -m pytest -q tests/test_harnesses.py tests/test_real_filesystem.py -k 'real_codex or official_filesystem'
       - name: Lint source and tests
         run: python -m ruff check src tests
       - name: Test native process boundary without GUI dependencies

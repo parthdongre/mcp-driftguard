@@ -37,9 +37,11 @@ The host registers a server identity, retrieves the entire tool catalog, and ing
 in one transaction. Pagination must be completed before ingestion. Duplicate names,
 non-object root schemas, malformed root fields, nonfinite/non-JSON values, excess nesting
 and byte/tool limits reject the catalog and invalidate invocation trust. Input/output
-schemas are checked against the bundled JSON Schema 2020-12 metaschema; declared other
-drafts are currently rejected. Format evaluation is disabled: this check does not run
-attacker regex patterns or validate call arguments. A failed assessment also invalidates
+schemas are checked against bundled metaschemas: inputs support Draft 7 and 2020-12,
+and outputs support 2020-12. Format evaluation is disabled: the metaschema check does
+not run attacker regex patterns. Separate bounded, reference-free validators check
+call arguments and contracted structured outputs; unsupported contracts fail closed.
+A failed assessment also invalidates
 trust. No user `$ref`, icon URL or other definition URL is fetched. A stale transport
 identity cannot ingest a catalog or invalidate a newer configured binding.
 
@@ -48,6 +50,13 @@ levels. Definitions larger than 8 KiB use exact-change manual review without lex
 temporal scoring, bounding the cost of `SequenceMatcher` on adversarial inputs. Changed
 definitions also share a 64 KiB comparison-input budget per catalog; later changes use
 the same manual-review fallback when that budget is exhausted.
+
+Harness review-only catalogs may contain up to 5,000 tools / 8 MiB, retaining
+the per-definition and nesting limits. Those identities cannot authorize calls.
+For live calls, text content remains restricted and credential checked. Approved
+structured output is forwarded only when it passes the supported output contract
+and credential checks. Embedded resources, media and arbitrary metadata are not
+forwarded. Returned text and structured data remain untrusted.
 
 | State | Invocation | How it arises |
 | --- | --- | --- |

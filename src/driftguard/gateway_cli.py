@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
-from .gateway import GuardStore
+from .gateway import GateError, GuardStore
 from .gateway_http import HttpConfig, load_config
 from .gateway_transport import (
     DownstreamSession,
@@ -22,7 +24,49 @@ from .gateway_transport import (
 def serve(config: StdioConfig | HttpConfig, store: GuardStore) -> int:
     """Only JSON-RPC goes to stdout. No upstream stderr or raw exception content."""
     gateway = ProtectedGateway(config, store)
+    try:
+        return _serve_connected(config, store, gateway)
+    finally:
+        gateway.close()
+
+
+def _serve_connected(config: StdioConfig | HttpConfig, store: GuardStore, gateway: ProtectedGateway) -> int:
     session = DownstreamSession(gateway)
+    output_lock = threading.Lock()
+    notification_stop = threading.Event()
+    initial_token = store.catalog_state_token(config.server_id)
+
+    def emit(message: dict) -> None:
+        payload = encode_message(message)
+        if len(payload) > config.max_message_bytes:
+            payload = encode_message(session.error(message.get("id"), -32603,
+                                                   "Gateway response byte limit exceeded"))
+        # One complete frame at a time. Raw writes avoid buffered-stream locks
+        # held by a daemon notifier if a client disconnects during shutdown.
+        with output_lock:
+            view = memoryview(payload)
+            while view:
+                written = os.write(sys.stdout.fileno(), view)
+                if not written:
+                    raise OSError("Gateway output closed")
+                view = view[written:]
+
+    def watch_reviews() -> None:
+        try:
+            previous = initial_token
+            while not notification_stop.wait(0.25):
+                current = store.catalog_state_token(config.server_id)
+                if current != previous:
+                    previous = current
+                    if session.legacy_ready:
+                        emit({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        except (GateError, OSError, sqlite3.Error):
+            # A hint cannot grant permission. Every list/call still verifies the
+            # complete catalog and identity independently in the request path.
+            notification_stop.set()
+
+    notifier = threading.Thread(target=watch_reviews, daemon=True)
+    notifier.start()
     print("DriftGuard stdio gateway active. New tools require local review. "
           "Only clients routed through this process are protected.", file=sys.stderr)
     try:
@@ -32,8 +76,7 @@ def serve(config: StdioConfig | HttpConfig, store: GuardStore) -> int:
                 return 0
             if len(line) > config.max_message_bytes or not line.endswith(b"\n"):
                 reply = session.error(None, -32700, "Inbound message limit or framing violation")
-                sys.stdout.buffer.write(encode_message(reply))
-                sys.stdout.buffer.flush()
+                emit(reply)
                 return 2
             try:
                 message = decode_message(line, max_bytes=config.max_message_bytes)
@@ -41,14 +84,10 @@ def serve(config: StdioConfig | HttpConfig, store: GuardStore) -> int:
             except TransportError:
                 reply = session.error(None, -32700, "Invalid JSON-RPC message")
             if reply is not None:
-                payload = encode_message(reply)
-                if len(payload) > config.max_message_bytes:
-                    payload = encode_message(session.error(reply.get("id"), -32603,
-                                                           "Gateway response byte limit exceeded"))
-                sys.stdout.buffer.write(payload)
-                sys.stdout.buffer.flush()
+                emit(reply)
     finally:
-        gateway.close()
+        notification_stop.set()
+        notifier.join(timeout=1)
 
 
 def main(argv: list[str] | None = None) -> int:

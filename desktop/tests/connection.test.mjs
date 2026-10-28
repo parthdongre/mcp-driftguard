@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 const built = await build({ entryPoints: ['src/connection-utils.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 const utils = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
@@ -20,6 +21,19 @@ test('client setup binds the installed runtime and shared store without shell qu
   assert.deepEqual(config.args, ['gateway', 'serve', '--config', 'C:\\Users\\Parth\\notes.json', '--state', runtime.state_path]);
   assert.throws(() => utils.buildClientConfig({ ...runtime, engine_available: false }, '/tmp/profile.json', 'notes'));
   assert.throws(() => utils.buildClientConfig(runtime, 'relative.json', 'notes'));
+});
+
+test('Codex setup round-trips through a TOML parser with literal paths and arguments', () => {
+  const runtime = { engine_available: true, packaged: false, gateway_argv: ['/opt/My App/python', '-I', '-m', 'driftguard.gateway_cli'], state_path: '/tmp/Parth "notes"/guard.sqlite3' };
+  const setup = utils.buildClientSetup(runtime, '/tmp/a b/profile.json', 'notes.v1', 'codex');
+  const parsed = JSON.parse(execFileSync(process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', ['-c', 'import json,sys,tomllib; print(json.dumps(tomllib.loads(sys.stdin.read())))'], { input: setup.text, encoding: 'utf8' }));
+  assert.equal(parsed.mcp_servers['notes.v1'].command, runtime.gateway_argv[0]);
+  assert.deepEqual(parsed.mcp_servers['notes.v1'].args, [...runtime.gateway_argv.slice(1), 'serve', '--config', '/tmp/a b/profile.json', '--state', runtime.state_path]);
+  assert.equal(setup.filename, 'driftguard-codex.toml');
+  const claude = utils.buildClientSetup(runtime, '/tmp/profile.json', 'notes', 'claude');
+  assert.equal(JSON.parse(claude.text).mcpServers.notes.command, runtime.gateway_argv[0]);
+  assert.throws(() => utils.buildClientSetup(runtime, '/tmp/profile.json', 'bad\nentry', 'codex'));
+  assert.throws(() => utils.buildClientSetup(runtime, '/tmp/profile.json', 'notes', 'unknown'));
 });
 
 test('HTTP setup exports only explicit authentication references', () => {

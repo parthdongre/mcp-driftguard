@@ -21,3 +21,5 @@ target/
 .corpus/
 artifacts/
 desktop/verification/
+live-validation/
+live-demo/
