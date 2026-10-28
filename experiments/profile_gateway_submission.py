@@ -46,5 +46,5 @@ def main():
    report['reconnect_cycles']=10;report['all_owned_children_reaped']=all(p.poll() is not None for p in children)
  report['checks']={'sequential_p95':report['sequential']['p95_ms']<=100,'lifecycle':report['all_owned_children_reaped'],'revocation':report['revoked_calls_blocked']==20,'concurrency':report['concurrent']['n']==400}
  report['status']='passed' if all(report['checks'].values()) else 'failed'
- (out/'gateway-profile.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
-if __name__=='__main__':main()
+ (out/'gateway-profile.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2));return 0 if report['status']=='passed' else 1
+if __name__=='__main__':raise SystemExit(main())

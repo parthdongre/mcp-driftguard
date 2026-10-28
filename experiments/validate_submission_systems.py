@@ -118,8 +118,9 @@ def concurrency(folder):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--seconds',type=int,default=300);parser.add_argument('--worker',nargs=2);args=parser.parse_args()
     if args.worker:return worker(*args.worker)
+    if not 1 <= args.seconds <= 86400: parser.error('--seconds must be between 1 and 86400')
     out=ROOT/'artifacts/submission-systems';out.mkdir(parents=True,exist_ok=True)
-    report={'scope':'Linux local store + authored STDIO fixture. No real remote MCP, browser, native installer, embedding/model or independent detection evaluation.','python':sys.version,'platform':platform.platform(),'source_revision':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'started_at':time.time(),'targets':{'single_store_dispatch_p95_ms_max':50,'concurrent_errors_max':0,'post_revoke_executions_max':0,'crash_checks_all_pass':True,'soak_seconds_min':args.seconds,'soak_errors_max':0,'rss_growth_mib_max':64},'results':{},'status':'running'}
+    report={'source_sha256':hashlib.sha256(b''.join(p.relative_to(ROOT).as_posix().encode()+p.read_bytes() for p in sorted((ROOT/'src/driftguard').glob('*.py')))).hexdigest(),'scope':'Linux local store + authored STDIO fixture. No real remote MCP, browser, native installer, embedding/model or independent detection evaluation.','python':sys.version,'platform':platform.platform(),'source_revision':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'started_at':time.time(),'targets':{'single_store_dispatch_p95_ms_max':50,'concurrent_errors_max':0,'post_revoke_executions_max':0,'crash_checks_all_pass':True,'soak_seconds_min':args.seconds,'soak_errors_max':0,'rss_growth_mib_max':64},'results':{},'status':'running'}
     def save():
         temp=out/'results.tmp';temp.write_text(json.dumps(report,indent=2));temp.replace(out/'results.json')
     save()
@@ -150,6 +151,6 @@ def main():
             report['checks']=checks;report['status']='passed' if all(checks.values()) else 'failed';save()
     except Exception as error:
         report.update(status='failed',error=f'{type(error).__name__}: {error}');save();raise
-    report['finished_at']=time.time();save();print(json.dumps(report,indent=2))
+    report['finished_at']=time.time();save();print(json.dumps(report,indent=2));return 0 if report['status']=='passed' else 1
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())

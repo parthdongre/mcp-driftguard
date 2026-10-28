@@ -445,7 +445,7 @@ class ProtectedGateway:
     def refresh_catalog(self) -> list[dict[str, Any]]:
         with self._lock:
             try:
-                self.peer.verify_identity()
+                # Every peer.request rechecks identity immediately before sending.
                 tools: list[dict[str, Any]] = []
                 names: set[str] = set()
                 cursors: set[str] = set()
@@ -499,7 +499,7 @@ class ProtectedGateway:
         with self._lock:
             self.refresh_catalog()
             def invoke(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-                self.peer.verify_identity()
+                # request() performs the final identity check at the wire boundary.
                 result = self.peer.request("tools/call", {"name": tool_name, "arguments": args})
                 return self._check_result(result)
 

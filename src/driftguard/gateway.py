@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Self, TypeVar
 
@@ -25,6 +26,13 @@ from .diff import build_delta
 from .features import extract_pair_features
 from .models import ChangeClass
 from .temporal import SequentialDriftMonitor
+
+@lru_cache(maxsize=128)
+def _check_contract_metaschema(encoded_schema: str, draft7: bool) -> None:
+    """Cache successful checks of immutable exact JSON, never invocation validity."""
+    validator = Draft7Validator if draft7 else Draft202012Validator
+    validator.check_schema(json.loads(encoded_schema), format_checker=None)
+
 
 T = TypeVar("T")
 _NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
@@ -413,7 +421,7 @@ class GuardStore:
                 try:
                     # Check against the bundled metaschema, never against user arguments.
                     # Disable formats so attacker regex patterns are not evaluated/compiled.
-                    validator.check_schema(schema, format_checker=None)
+                    _check_contract_metaschema(exact_json(schema), validator is Draft7Validator)
                 except SchemaError as error:
                     raise GateError(
                         f"{schema_name} is not a valid JSON Schema 2020-12 object"
