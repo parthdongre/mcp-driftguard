@@ -54,10 +54,10 @@ export function HarnessConnections({ native, onCollected }: { native: boolean; o
     <Disclosure title="Connect your coding harness" level={2}>
       <p>Find local Codex and Claude Code MCP servers. Apps installed in ChatGPT/Codex use the hosted catalog above.</p>
       <form onSubmit={event => { event.preventDefault(); void discover(); }}>
-        <label className="form-label">Project directory<input disabled={!!busy || !native} value={project}
+        <div className="form-label"><label htmlFor="harness-project">Project directory</label><input id="harness-project" aria-describedby="harness-project-help" disabled={!!busy || !native} value={project}
           onChange={event => { setProject(event.target.value); setScan(null); setOutcomes({}); setNotice(''); setError(''); }}
           placeholder="Optional absolute project path" />
-          <small>Leave blank for user configuration.</small></label>
+          <small id="harness-project-help">Leave blank for user configuration.</small></div>
         <button className="button primary" disabled={!native || !!busy} type="submit">{busy === 'scan' ? 'Scanning…' : 'Find harness connections'}</button>
       </form>
       {!native ? <p className="small muted">Local discovery requires the native desktop app.</p> : null}

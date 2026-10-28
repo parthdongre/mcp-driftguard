@@ -276,11 +276,9 @@ async fn run_bridge(runtime: BridgeRuntime, bytes: Vec<u8>) -> Result<Value, Str
         .is_some_and(|request| request["action"] == "harness_fetch");
     if discovery {
         let discovery_lock = runtime.discovery_lock.clone();
-        let _guard = discovery_lock
-            .try_lock()
-            .map_err(|_| {
-                "Another definition fetch is running. Wait for it to finish before retrying."
-            })?;
+        let _guard = discovery_lock.try_lock().map_err(|_| {
+            "Another definition fetch is running. Wait for it to finish before retrying."
+        })?;
         let mut independent = runtime;
         independent.lock = Arc::new(Mutex::new(()));
         return run_bridge_before(independent, bytes, Instant::now() + DISCOVERY_TIMEOUT).await;
@@ -368,7 +366,9 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{communicate, run_bridge, run_bridge_before, select_engine, validate_request, BridgeRuntime};
+    use super::{
+        communicate, run_bridge, run_bridge_before, select_engine, validate_request, BridgeRuntime,
+    };
     use super::{MAX_REQUEST, TIMEOUT_ERROR};
     use serde_json::{json, Value};
     use std::future::Future;
