@@ -13,6 +13,7 @@ const MAX_REQUEST: usize = 2_100_000;
 const MAX_RESPONSE: u64 = 16 * 1024 * 1024;
 const MAX_STDERR: u64 = 65_536;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(105);
 const TIMEOUT_ERROR: &str =
     "The local engine timed out. No decision was assumed; refresh the workspace before retrying.";
 const ACTIONS: &[&str] = &[
@@ -30,6 +31,8 @@ const ACTIONS: &[&str] = &[
     "quarantine",
     "harness_scan",
     "harness_fetch",
+    "host_catalog_import",
+    "host_catalog_list",
 ];
 
 #[derive(Clone)]
@@ -38,6 +41,24 @@ struct BridgeRuntime {
     frozen: bool,
     db: PathBuf,
     lock: Arc<Mutex<()>>,
+    discovery_lock: Arc<Mutex<()>>,
+}
+
+fn select_engine(
+    packaged: PathBuf,
+    development_python: Option<PathBuf>,
+    debug: bool,
+) -> (Option<PathBuf>, bool) {
+    if debug {
+        if let Some(python) = development_python {
+            return (Some(python), false);
+        }
+    }
+    if packaged.is_file() {
+        (Some(packaged), true)
+    } else {
+        (None, false)
+    }
 }
 
 fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
@@ -51,7 +72,8 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
     }
     // Deny unexpected arguments at the native boundary, including executable/DB/path overrides.
     let allowed: &[&str] = match action {
-        "overview" | "activity" | "runtime_info" => &["action"],
+        "overview" | "activity" | "runtime_info" | "host_catalog_list" => &["action"],
+        "host_catalog_import" => &["action", "source"],
         "list_tools" => &["action", "server_id"],
         "review" | "history" => &["action", "server_id", "tool_name"],
         "import_definitions" => &["action", "server_id", "identity", "tools"],
@@ -249,6 +271,20 @@ async fn run_bridge_before(
 }
 
 async fn run_bridge(runtime: BridgeRuntime, bytes: Vec<u8>) -> Result<Value, String> {
+    let discovery = serde_json::from_slice::<Value>(&bytes)
+        .ok()
+        .is_some_and(|request| request["action"] == "harness_fetch");
+    if discovery {
+        let discovery_lock = runtime.discovery_lock.clone();
+        let _guard = discovery_lock
+            .try_lock()
+            .map_err(|_| {
+                "Another definition fetch is running. Wait for it to finish before retrying."
+            })?;
+        let mut independent = runtime;
+        independent.lock = Arc::new(Mutex::new(()));
+        return run_bridge_before(independent, bytes, Instant::now() + DISCOVERY_TIMEOUT).await;
+    }
     run_bridge_before(runtime, bytes, Instant::now() + REQUEST_TIMEOUT).await
 }
 
@@ -311,21 +347,17 @@ pub fn run() {
                 "driftguard-engine"
             };
             let packaged = app.path().resource_dir()?.join("engine").join(engine_name);
-            let (python, frozen) = if packaged.is_file() {
-                (Some(packaged), true)
-            } else if cfg!(debug_assertions) {
-                (
-                    std::env::var_os("DRIFTGUARD_PYTHON").map(PathBuf::from),
-                    false,
-                )
-            } else {
-                (None, false)
-            };
+            let (python, frozen) = select_engine(
+                packaged,
+                std::env::var_os("DRIFTGUARD_PYTHON").map(PathBuf::from),
+                cfg!(debug_assertions),
+            );
             app.manage(BridgeRuntime {
                 python,
                 frozen,
                 db: directory.join("guard.sqlite3"),
                 lock: Arc::new(Mutex::new(())),
+                discovery_lock: Arc::new(Mutex::new(())),
             });
             Ok(())
         })
@@ -336,7 +368,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{communicate, run_bridge, run_bridge_before, validate_request, BridgeRuntime};
+    use super::{communicate, run_bridge, run_bridge_before, select_engine, validate_request, BridgeRuntime};
     use super::{MAX_REQUEST, TIMEOUT_ERROR};
     use serde_json::{json, Value};
     use std::future::Future;
@@ -398,6 +430,7 @@ mod tests {
                 frozen: false,
                 db: self.0.join("review store.sqlite3"),
                 lock: Arc::new(Mutex::new(())),
+                discovery_lock: Arc::new(Mutex::new(())),
             }
         }
     }
@@ -575,6 +608,7 @@ mod tests {
                 frozen: false,
                 db: PathBuf::new(),
                 lock: lock.clone(),
+                discovery_lock: Arc::new(Mutex::new(())),
             };
             let started = WallClock::now();
             let error = run_bridge_before(
@@ -585,6 +619,56 @@ mod tests {
             .await
             .unwrap_err();
             assert_eq!(error, TIMEOUT_ERROR);
+            assert!(started.elapsed() < Duration::from_secs(2));
+        });
+    }
+
+    #[test]
+    fn definition_fetch_is_independent_of_review_lock() {
+        on_runtime(async {
+            let store = TestStore::new();
+            let runtime = store.runtime(PathBuf::from("/missing-test-python"));
+            let _review = runtime.lock.lock().await;
+            let started = WallClock::now();
+            let error = run_bridge(runtime.clone(), br#"{"action":"harness_fetch"}"#.to_vec())
+                .await
+                .unwrap_err();
+            assert!(error.contains("existing absolute executable"));
+            assert!(started.elapsed() < Duration::from_secs(2));
+        });
+    }
+
+    #[test]
+    fn development_uses_explicit_source_engine_and_release_ignores_override() {
+        let store = TestStore::new();
+        let packaged = store.0.join("packaged-engine");
+        let development = store.0.join("source-python");
+        std::fs::write(&packaged, b"fixture").unwrap();
+        assert_eq!(
+            select_engine(packaged.clone(), Some(development.clone()), true),
+            (Some(development.clone()), false)
+        );
+        assert_eq!(
+            select_engine(packaged.clone(), Some(development), false),
+            (Some(packaged), true)
+        );
+    }
+
+    #[test]
+    fn concurrent_fetch_rejects_immediately_and_reviews_stay_available() {
+        on_runtime(async {
+            let store = TestStore::new();
+            let runtime = store.runtime(PathBuf::from("/missing-test-python"));
+            let _fetch = runtime.discovery_lock.lock().await;
+            let started = WallClock::now();
+            let error = run_bridge(runtime.clone(), br#"{"action":"harness_fetch"}"#.to_vec())
+                .await
+                .unwrap_err();
+            assert!(error.contains("Another definition fetch"));
+            let review = run_bridge(runtime.clone(), br#"{"action":"overview"}"#.to_vec())
+                .await
+                .unwrap_err();
+            assert!(review.contains("existing absolute executable"));
             assert!(started.elapsed() < Duration::from_secs(2));
         });
     }

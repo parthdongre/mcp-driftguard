@@ -38,6 +38,11 @@ tool catalog. See [harness connections](../docs/HARNESS_CONNECTIONS.md) for setu
 supported configuration scopes and limits. This capability requires the native
 app; browser preview cannot read local configuration or start harness processes.
 
+Apps installed in ChatGPT/Codex use a different catalog. Import their authorized
+names/descriptions snapshot through **ChatGPT / Codex installed apps**; see
+[hosted catalogs](../docs/HOSTED_APP_CATALOG.md). This import does not connect
+provider accounts or supply raw MCP schemas.
+
 Install [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/)
 and Rust. `npm run desktop:dev` selects the repository's `.venv` Python and checks
 that it can import the current checkout in isolated mode before opening Tauri.

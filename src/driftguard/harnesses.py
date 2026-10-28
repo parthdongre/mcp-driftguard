@@ -36,7 +36,7 @@ from .gateway_transport import (
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_SOURCES = 200
-FETCH_SECONDS = 12.0
+FETCH_SECONDS = 90.0
 _VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
@@ -503,6 +503,10 @@ def _codex_catalogs(peer: _CodexPeer, deadline: float) -> tuple[list[tuple[str, 
             tools = row.get("tools")
             if not isinstance(tools, dict) or any(not isinstance(tool, dict) or tool.get("name") != key for key, tool in tools.items()):
                 raise HarnessError("Codex returned an invalid tool definition map.")
+            capabilities = row.get("serverCapabilities")
+            if not tools and (not isinstance(capabilities, dict) or "tools" not in capabilities):
+                warnings.append(f"{row['name']}: No tool catalog was exposed. This may be a hosted app, an unavailable server, or a connection without MCP tools.")
+                continue
             catalogs.append((row["name"], list(tools.values())))
             if len(catalogs) > MAX_SOURCES or sum(len(tools) for _, tools in catalogs) > 5000:
                 raise HarnessError("Codex tool discovery exceeds the collection limits.")
@@ -573,6 +577,7 @@ def fetch(store: GuardStore, source_id: str, config_digest: str,
             store.register_server(identity)
             records.extend(store.ingest_catalog(server_id, tools, identity=identity))
         return {"servers": len(catalogs), "tools": len(records), "source_id": source_id,
+                "status": "empty" if not records else "partial" if warnings else "complete",
                 "server_ids": sorted({record["server_id"] for record in records}),
                 "warnings": warnings,
                 "scope": "Definitions collected for review. Harness execution is not mediated."}

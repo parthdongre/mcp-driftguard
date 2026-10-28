@@ -19,7 +19,7 @@ def exchange(engine: Path, db: Path, request: dict) -> dict:
     completed = subprocess.run(
         [str(engine), "bridge", "--db", str(db)],
         input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30,
+        capture_output=True, timeout=30, check=False,
         # Frozen execution must not depend on an inherited Python installation.
         env={key: value for key, value in os.environ.items()
              if key not in {"PYTHONPATH", "PYTHONHOME", "DRIFTGUARD_PYTHON"}},
@@ -66,10 +66,19 @@ def verify(engine: Path) -> None:
             "expected_revision": current["revision"],
         })["ok"] is False
         assert exchange(engine, db, {"action": "activity"})["data"]
+        host = exchange(engine, db, {"action": "host_catalog_import", "source": {
+            "source_id": "packaged-host", "name": "Hosted metadata fixture",
+            "description": "Names and descriptions only", "captured_at": "2026-10-28",
+            "visibility": "session_tools", "tools": [{
+                "name": "inspect", "description": "Read a selected design",
+            }],
+        }})
+        assert host["ok"] and host["data"]["tools_count"] == 1
+        assert exchange(engine, db, {"action": "host_catalog_list"})["data"][0]["name"] == "Hosted metadata fixture"
         rejected = exchange(engine, db, {"action": "shell", "command": "unused"})
         assert rejected["ok"] is False
     gateway = subprocess.run([str(engine), "gateway", "--help"],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+                             capture_output=True, timeout=30, check=False)
     assert gateway.returncode == 0 and b"--config" in gateway.stdout
 
 

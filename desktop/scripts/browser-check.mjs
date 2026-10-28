@@ -212,7 +212,7 @@ for line in sys.stdin:
     const harnessSource = connected.getByRole('article').filter({ has: connected.getByRole('heading', { name: 'qa-harness-source', exact: true }) });
     await harnessSource.getByRole('heading', { name: 'qa-harness-source', exact: true }).click();
     await harnessSource.getByRole('button', { name: 'Fetch definitions', exact: true }).click();
-    await harnessSource.getByText('1 definition collected from 1 source.', { exact: true }).waitFor();
+    await harnessSource.getByText('1 definition · 1 source', { exact: true }).waitFor();
     await connected.getByRole('button', { name: 'Security review', exact: true }).click();
     await connected.getByRole('button', { name: /qa_harness_read/ }).click();
     await connected.getByRole('heading', { name: 'qa_harness_read', exact: true }).waitFor();
@@ -220,6 +220,18 @@ for line in sys.stdin:
     check('Harness scan and fetch render actual discovered definitions', harvested.data.some(tool => tool.tool_name === 'qa_harness_read' && tool.server_id.startsWith('harness:') && tool.status === 'pending'));
     const methods = (await readFile(tracePath, 'utf8')).trim().split('\n').map(line => JSON.parse(line).method);
     check('Harness collection never calls tools', methods.every(method => ['initialize', 'notifications/initialized', 'tools/list'].includes(method)));
+    await connected.getByRole('button', { name: 'MCP connections', exact: true }).click();
+    await connected.getByRole('heading', { name: 'ChatGPT / Codex installed apps', exact: true }).click();
+    const hostSource = { source_id: 'qa-host', name: 'QA host app', description: 'Host metadata fixture', captured_at: '2026-10-28', visibility: 'session_tools', tools: [{ name: 'host_read', description: 'Read the selected design fixture.' }] };
+    await connected.getByLabel('Choose hosted app catalog').setInputFiles({ name: 'qa-host.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'driftguard-host-catalog-v1', sources: [hostSource] })) });
+    await connected.getByRole('button', { name: 'Save app catalogs to workspace', exact: true }).click();
+    await connected.getByText('1 app catalog saved for review.', { exact: true }).waitFor();
+    const hosted = await runPython({ action: 'host_catalog_list' });
+    check('Hosted app descriptions persist separately from local CLI discovery', hosted.ok && hosted.data[0].tools[0].description === hostSource.tools[0].description);
+    await connected.getByRole('heading', { name: 'QA host app', exact: true }).click();
+    await connected.getByRole('heading', { name: 'host_read', exact: true }).click();
+    check('Hosted descriptions render without claiming a complete input contract', await connected.getByText('Input schema not exported by host. Review metadata only.', { exact: true }).isVisible());
+
     await connected.screenshot({ path: new URL('harness-collected-review.png', output).pathname, fullPage: true });
     check('Real-data review has no runtime errors', errors.length === 0);
   } finally { await connected.close(); await rm(temporary, { recursive: true, force: true }); }

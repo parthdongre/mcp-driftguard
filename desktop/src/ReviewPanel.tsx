@@ -20,7 +20,7 @@ function DefinitionColumn({ tool, old, compare }: { tool: ToolDefinition | null;
       const changed = compare !== null && JSON.stringify(tool[field]) !== JSON.stringify(compare[field]);
       return <Disclosure title={({ description: 'Purpose', inputSchema: 'Input contract', outputSchema: 'Output contract', annotations: 'Safety annotations' })[field] ?? field} className={`definition-field ${changed ? (old ? 'removed' : 'added') : ''}`} key={field} level={4}>
         {changed ? <span className="change-tag">{old ? 'Previous' : 'Changed'}</span> : null}
-        {field === 'description' ? <p>{displayValue(tool[field])}</p> : <pre>{displayValue(tool[field])}</pre>}
+        {field === 'inputSchema' && tool['x-driftguard-input-schema'] === 'not-exported' ? <p>The host exported names and descriptions only. A complete input schema was not provided; this import cannot authorize live calls.</p> : field === 'description' ? <p>{displayValue(tool[field])}</p> : <pre>{displayValue(tool[field])}</pre>}
       </Disclosure>;
     }) : <div className="definition-empty"><Icon name="file" size={28} /><h3>No approved baseline</h3>
       <p>This is a first observation. Review the full definition before trusting this tool.</p></div>}

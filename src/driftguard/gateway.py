@@ -158,6 +158,8 @@ class GuardStore:
         self._db.executescript("""
             CREATE TABLE IF NOT EXISTS guard_runtime(
                 server_id TEXT PRIMARY KEY, heartbeat_at TEXT NOT NULL, active INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS guard_source_metadata(
+                server_id TEXT PRIMARY KEY REFERENCES guard_servers(server_id), metadata TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS guard_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS guard_servers(
                 server_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, auth_context TEXT NOT NULL,
@@ -322,6 +324,20 @@ class GuardStore:
                 dict(row)
                 for row in self._db.execute("SELECT * FROM guard_servers ORDER BY server_id")
             ]
+
+    def save_source_metadata(self, server_id: str, metadata: dict[str, Any]) -> None:
+        encoded = exact_json(metadata)
+        if len(encoded.encode()) > 32768:
+            raise GateError("Source metadata exceeds its size limit")
+        with self._transaction():
+            self._server(server_id)
+            self._db.execute("INSERT OR REPLACE INTO guard_source_metadata VALUES(?,?)",
+                             (server_id, encoded))
+
+    def source_metadata(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [json.loads(row[0]) for row in self._db.execute(
+                "SELECT metadata FROM guard_source_metadata ORDER BY server_id")]
 
     def _invalidate_server(self, server_id: str, reason: str) -> None:
         self._server(server_id)
@@ -838,6 +854,8 @@ class GuardStore:
         with self._transaction():
             self._require_policy()
             server = self._server(server_id)
+            if server["auth_context"] == "host-metadata-review-only":
+                raise GateError("Hosted metadata imports cannot authorize tool execution")
             row = self._tool(server_id, tool_name)
             if type(expected_revision) is not int:
                 raise GateError("An exact current invocation revision is required")

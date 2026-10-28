@@ -3,6 +3,10 @@
 The native app discovers harness connections and collects current tool definitions
 directly. You do not need to export `tools/list` JSON manually.
 
+For apps installed in the ChatGPT/Codex host, use the separate
+[hosted app catalog](HOSTED_APP_CATALOG.md) import. A local CLI inventory does not
+represent all installed hosted apps, their skills or their available tools.
+
 1. Update to the branch containing harness discovery and start the native app.
 2. Open **MCP connections → Connect your coding harness**.
 3. Enter an absolute project directory to include project settings. Leave it blank
@@ -89,12 +93,13 @@ observations. If the overall deadline expires after complete catalogs have been
 received, those can be saved with an explicit warning to fetch remaining servers
 individually. No incomplete tool catalog is substituted for a failed server.
 
-Collection has a 12-second wire-operation budget. Direct collection allows 20
+Collection has a 90-second wire-operation budget. Direct collection allows 20
 pages, 500 tools and 2 MiB. Codex uses one server per page, at most 200 servers,
 5,000 tools and 8 MiB total; each stored server catalog retains the store's
 500-tool/2-MiB limits. OS process/filesystem scheduling is not a hard real-time
 guarantee. A slow or large harness installation may exceed these preview limits.
-The native bridge retains its 20-second outer deadline. Existing documented
+Discovery has a separate lock and 105-second native deadline; review requests
+retain their independent 20-second deadline. Existing documented
 Windows descendant/worker cleanup limitations still apply.
 
 ## Verification
@@ -107,9 +112,9 @@ Most are protocol contract fixtures. An opt-in test also exercises an installed
 Codex CLI using a disposable configuration and MCP server, with no model turns
 or tool calls. Run it by setting `DRIFTGUARD_TEST_CODEX` to an installed CLI path.
 
-Local validation on 2026-10-28: 299 Python tests passed, one native credential-store
+Local validation on 2026-10-28: 310 Python tests passed, one native credential-store
 test skipped, including real Codex CLI 0.165.0 discovery against an isolated MCP
-fixture. Sixteen frontend logic/rendering tests passed; TypeScript production
+fixture. Nineteen frontend logic/rendering tests passed; TypeScript production
 build and source/test lint passed. Browser execution was blocked by an invalid Chromium
 download, and the separate cloud browser could not reach workspace localhost.
 Rust/Cargo and an installed Claude CLI are unavailable on this validation host.

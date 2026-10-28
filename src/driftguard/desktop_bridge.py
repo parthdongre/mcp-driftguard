@@ -24,6 +24,7 @@ ACTIONS = frozenset({
     "import_definitions", "approve", "deny", "quarantine",
     "store_http_credential", "remove_http_credential",
     "harness_scan", "harness_fetch",
+    "host_catalog_import", "host_catalog_list",
 })
 
 
@@ -51,6 +52,11 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
     if not isinstance(request, dict) or request.get("action") not in ACTIONS:
         raise ValueError("Unknown desktop action")
     action = request["action"]
+    if action in {"host_catalog_import", "host_catalog_list"}:
+        from .host_catalog import import_source, list_sources
+        if set(request) - ({"action", "source"} if action == "host_catalog_import" else {"action"}):
+            raise ValueError("Unexpected hosted catalog request fields")
+        return import_source(store, request.get("source")) if action == "host_catalog_import" else list_sources(store)
     if action in {"harness_scan", "harness_fetch"}:
         from .harnesses import fetch, scan
         allowed = {"action", "project_dir"}

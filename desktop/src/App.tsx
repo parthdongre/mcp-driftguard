@@ -12,6 +12,7 @@ import { ConnectionSetup } from './ConnectionSetup';
 import { ConnectionHealth } from './ConnectionHealth';
 import { Disclosure } from './Disclosure';
 import { HarnessConnections } from './HarnessConnections';
+import { HostedApps } from './HostedApps';
 import { downloadText, formatTime, matchesActivityFilter, MAX_IMPORT_BYTES, parseDefinitions, safeAuditExport } from './review-utils';
 
 const navigation: { page: Page; label: string; icon: IconName; shortcut?: string }[] = [
@@ -173,7 +174,7 @@ export default function App() {
         </> : null}
 
         {page === 'connections' ? <>
-          {!demo ? <><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : <section className="panel compact-panel"><Disclosure title="Connect your coding harness" level={2}><p>Exit the guided demo to connect your local harness.</p><button className="button primary" onClick={exitDemo}>Exit demo and connect</button></Disclosure></section>}
+          {!demo ? <><HostedApps native={native} onImported={() => { void reload(); }} /><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : <section className="panel compact-panel"><Disclosure title="Connect your coding harness" level={2}><p>Exit the guided demo to connect your local harness.</p><button className="button primary" onClick={exitDemo}>Exit demo and connect</button></Disclosure></section>}
           <section className="panel compact-panel"><Disclosure title="Definition sources" level={2}>
             {sources.length ? sources.map(source => <Disclosure title={workspace.overview.server_list?.find(item => item.server_id === source)?.display_name || source} key={source}>
               <p>{workspace.tools.filter(tool => tool.server_id === source).length} observed tools · {demo ? 'Fixture source' : 'Recorded definitions'}</p>

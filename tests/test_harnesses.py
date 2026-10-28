@@ -46,10 +46,21 @@ for line in sys.stdin:
         cursor = msg.get('params', {}).get('cursor')
         if mode == 'codex-timeout' and cursor:
             time.sleep(2)
+        if mode == 'codex-delayed' and not cursor:
+            time.sleep(13)
+        if mode == 'codex-placeholder-timeout' and cursor:
+            time.sleep(2)
         result = {'data': [{'name': 'second' if cursor else 'first', 'tools': {'read': tool},
                             'authStatus': 'notLoggedIn' if mode == 'codex-auth' else 'loggedIn'}],
                   'nextCursor': None if cursor else 'next'}
         if mode == 'codex-auth': result['data'][0]['tools'] = {}
+        if mode == 'codex-placeholder-timeout' and not cursor:
+            result['data'][0]['tools'] = {}
+            result['data'][0]['serverCapabilities'] = None
+        if mode == 'codex-empty':
+            result['data'][0]['tools'] = {}
+            result['data'][0]['serverCapabilities'] = {'tools': {}}
+            result['nextCursor'] = None
         if mode == 'codex-error':
             print(json.dumps({'id': msg['id'], 'error': {'code': -32601, 'message': 'PRIVATE_ERROR_MUST_NOT_LEAK'}}), flush=True)
             continue
@@ -286,6 +297,31 @@ def test_codex_keeps_complete_catalogs_when_a_later_server_times_out(workspace, 
         assert result['servers'] == result['tools'] == 1
         assert len(store.list_servers()) == 1
         assert any('timed out' in warning for warning in result['warnings'])
+
+
+def test_codex_placeholder_followed_by_timeout_is_not_a_success(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-placeholder-timeout')
+    monkeypatch.setattr(harnesses, 'FETCH_SECONDS', 0.3)
+    with GuardStore(tmp_path / 'state.db') as store:
+        with pytest.raises(HarnessError):
+            collect(store, source, project)
+        assert not store.list_servers() and not store.list_tools()
+
+
+def test_genuine_empty_codex_catalog_has_empty_status(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-empty')
+    with GuardStore(tmp_path / 'state.db') as store:
+        result = collect(store, source, project)
+        assert result['tools'] == 0 and result['status'] == 'empty'
+
+
+def test_codex_discovery_finishes_after_the_previous_twelve_second_cutoff(workspace, tmp_path, monkeypatch):
+    _, project, _, _ = workspace
+    source = codex_runtime(workspace, monkeypatch, 'codex-delayed')
+    with GuardStore(tmp_path / 'state.db') as store:
+        assert collect(store, source, project)['tools'] == 2
 
 
 def test_codex_unsupported_method_has_actionable_nonsecret_error(workspace, tmp_path, monkeypatch):

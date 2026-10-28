@@ -161,6 +161,12 @@ encoding. Strict envelope/exit checks reject malformed or success-looking output
 from an unsuccessful process; the module's intentional safe error envelope on
 exit 1 remains usable. Diagnostics are counted/discarded and never echoed.
 
+Definition collection uses a separate discovery lock and a 105-second native
+deadline around the collector's 90-second operation budget. It cannot hold the
+review-request lock; concurrent fetches fail promptly instead of queueing. Hosted
+catalog imports remain normal bounded review requests, do not launch providers,
+and cannot authorize tool execution. See [hosted catalogs](HOSTED_APP_CATALOG.md).
+
 Timeout cancellation releases the response awaits and requests direct-child
 termination; it does not promise hard real-time OS termination or descendant
 sandboxing. On Windows, Tokio can use internal blocking pipe workers which may
