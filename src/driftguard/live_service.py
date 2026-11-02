@@ -91,7 +91,7 @@ class Service(socketserver.ThreadingTCPServer):
         with self.state_lock:
             return {'running': not self.guard._closed, 'clients': len(self.clients),
                     'verified': row['status'] == 'approved' and self.verified_version == version,
-                    'tool': {key: row[key] for key in ('sha256', 'revision', 'status')}, 'job': dict(self.job)}
+                    'tool': {key: row[key] for key in ('sha256', 'revision', 'status', 'definition')}, 'job': dict(self.job)}
 
     def controller(self, request):
         action = request.get('action')

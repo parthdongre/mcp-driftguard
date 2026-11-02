@@ -37,9 +37,9 @@ page.on('request', request => { if (!request.url().startsWith(base) && !request.
 const checks = [];
 const accessibility = [];
 const check = (name, condition) => { assert.ok(condition, name); checks.push(name); };
-async function auditAccessibility(name) {
-  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-  const findings = await page.evaluate(async () => {
+async function auditAccessibility(name, target = page) {
+  await target.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  const findings = await target.evaluate(async () => {
     const result = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } });
     return result.violations.map(violation => ({ id: violation.id, impact: violation.impact, description: violation.description, nodes: violation.nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary })) }));
   });
@@ -245,6 +245,7 @@ for line in sys.stdin:
     const verified = await runPython({ action: 'live_status' });
     check('In-app approval completes an actual official Filesystem read', verified.ok && verified.data.verified);
     await connected.getByRole('heading', { name: 'Read approval details', exact: true }).click();
+    await auditAccessibility('in-app-codex-setup', connected);
     await connected.screenshot({ path: new URL('in-app-codex-setup.png', output).pathname, fullPage: true });
     await connected.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await connected.getByText('Disconnected. Previous Codex settings restored.', { exact: true }).waitFor();

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import venv
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -211,8 +212,12 @@ def test_changed_definition_and_revocation_block_dispatch(server):
 def test_bad_upstream_fails_closed_invalidates_and_never_invokes(server, mode):
     config, update, root = server
     with GuardStore() as store:
-        gateway = ProtectedGateway(config(timeout_seconds=0.2), store)
+        # Process startup can exceed 200 ms on Windows CI. The short deadline
+        # belongs to the injected timeout response, after a valid handshake.
+        gateway = ProtectedGateway(config(), store)
         approve(store)
+        if mode == "timeout":
+            gateway.peer.config = replace(gateway.peer.config, timeout_seconds=0.2)
         update(mode=mode)
         with pytest.raises((TransportError, GateError)):
             gateway.call("weather", {})

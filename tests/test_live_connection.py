@@ -133,6 +133,8 @@ def test_app_approves_current_version_and_downstream_reconnect_keeps_approval(ap
     assert send(app, 'live_connect')['ok']
     before = live.status(app)
     assert before['running'] and not before['verified'] and before['installed']
+    assert before['tool']['definition']['name'] == 'read_text_file'
+    assert before['tool']['definition']['inputSchema']['properties']['path']['type'] == 'string'
     assert not send(app, 'live_verify', expected_sha256='0' * 64, expected_revision=1)['ok']
     assert not send(app, 'live_run_codex')['ok']
     assert approve(app)['ok']

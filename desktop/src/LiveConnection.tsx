@@ -6,7 +6,7 @@ import type { BridgeAction, BridgeRequest } from './types';
 type LiveStatus = {
   running: boolean; installed?: boolean; clients: number; verified: boolean;
   codex_available?: boolean; config_path?: string; sample_path?: string;
-  tool: { sha256: string; revision: number; status: string } | null;
+  tool: { sha256: string; revision: number; status: string; definition?: Record<string, unknown> } | null;
   job: { stage: string; message?: string; sha256?: string; revision?: number };
   message?: string;
 };
@@ -64,12 +64,12 @@ export function LiveConnection({ native, onChanged }: { native: boolean; onChang
     <Disclosure title="Connect Codex" level={2}>
       <p>Set up and test a protected local Filesystem connection here.</p>
       <ol className="live-steps" aria-label="Codex connection progress">
-        <li className={data?.running && data.installed ? 'complete' : ''}>Connection prepared</li>
-        <li className={data?.verified ? 'complete' : ''}>Local read verified</li>
-        <li className={codexVerified ? 'complete' : ''}>Codex MCP read verified</li>
+        <li className={data?.running && data.installed ? 'complete' : ''}>{data?.running && data.installed ? 'Connection prepared' : 'Prepare connection'}</li>
+        <li className={data?.verified ? 'complete' : ''}>{data?.verified ? 'Local read verified' : 'Approve and test local read'}</li>
+        <li className={codexVerified ? 'complete' : ''}>{codexVerified ? 'Codex MCP read verified' : 'Run Codex MCP test'}</li>
       </ol>
       {!native ? <p className="small muted">Open the desktop app to connect your installed Codex CLI.</p> : null}
-      <div className="inline-actions">
+      <div className="live-actions">
         <button className="button primary" disabled={!native || !!busy || !!data?.running} onClick={() => { void act('live_connect', 'Preparing connection…'); }}>Connect</button>
         {data?.running ? <>
           <button className="button primary" disabled={!!busy || !data.tool || data.job.stage === 'running'} onClick={() => { void act('live_verify', 'Approving and testing…'); }}>Approve &amp; test local read</button>
@@ -86,6 +86,7 @@ export function LiveConnection({ native, onChanged }: { native: boolean; onChang
           <p>Approve <strong>read_text_file</strong> under <strong>driftguard-filesystem</strong>. The upstream server can access only its app-owned sample folder. This button approves the displayed definition and reads check.txt to verify it.</p>
           <p className="small live-hash">Definition: {data.tool?.sha256} · revision {data.tool?.revision}</p>
           <p className="small live-hash">Sample: {data.sample_path}</p>
+          <Disclosure title="Tool definition" level={4}><pre>{JSON.stringify(data.tool?.definition, null, 2)}</pre></Disclosure>
         </Disclosure>
       </> : null}
       {data?.job.stage === 'running' ? <p role="status">Codex is running a read-only sample task. You can cancel it here.</p> : data?.job.message ? <p role="status">{data.job.message}</p> : null}
