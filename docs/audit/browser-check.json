@@ -1,0 +1,57 @@
+{
+  "passed": true,
+  "checks": [
+    "Browser preview explicitly has no protected connections",
+    "Guided fixture is explicitly isolated",
+    "Reviewable benign fixture allows review",
+    "Approval requires an explicit exact-version confirmation",
+    "Escape closes modal",
+    "Quarantined exact version cannot be approved",
+    "Temporal evidence chart renders actual recorded metrics",
+    "Model hints are absent from annotation UI",
+    "Annotation session survives navigation",
+    "Annotation export preserves candidate and explicit label",
+    "Annotation download contains the reviewed session record",
+    "Minimum-width layout has no document overflow",
+    "Renderer approval persists in actual Python SQLite store",
+    "Actual Python history renders approved reference without missing-status errors",
+    "A changed definition invalidates prior exact-version approval",
+    "Imported approvals remain isolated from live gateway identities",
+    "Real-data review has no runtime errors",
+    "No browser runtime errors",
+    "No remote requests made",
+    "No automated WCAG A/AA violations in sampled screens"
+  ],
+  "errors": [],
+  "accessibility": [
+    {
+      "name": "security-review-light",
+      "violations": []
+    },
+    {
+      "name": "tool-evolution-light",
+      "violations": []
+    },
+    {
+      "name": "annotation-export-dialog",
+      "violations": []
+    },
+    {
+      "name": "settings-dark",
+      "violations": []
+    },
+    {
+      "name": "overview-narrow-light",
+      "violations": []
+    }
+  ],
+  "external_requests": [],
+  "native_app_tested": false,
+  "python_bridge_via_test_ipc": true,
+  "browser_version": "141.0.7390.37",
+  "viewport_sizes": [
+    "1380x900",
+    "900x740"
+  ],
+  "fixture_mode": true
+}

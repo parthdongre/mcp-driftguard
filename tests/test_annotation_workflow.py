@@ -1,3 +1,5 @@
+import pytest
+
 from driftguard.annotation_workflow import (
     AdjudicationRecord,
     HumanAnnotation,
@@ -101,3 +103,58 @@ def test_adjudication_builds_reviewed_real_history_pair():
     assert record.provenance == "real_history"
     assert record.annotators == ["alice", "bob", "reviewer"]
     assert record.repository_id == "owner/repo"
+
+
+
+def test_self_agreement_cannot_masquerade_as_independent_review():
+    item = annotation("a-1", "c1", "alice", ChangeClass.BENIGN_MAINTENANCE)
+    with pytest.raises(ValueError, match="independent"):
+        annotation_agreement([item], [item])
+
+
+def test_adjudication_requires_distinct_annotators_and_annotation_references():
+    with pytest.raises(ValueError, match="distinct"):
+        AdjudicationRecord(
+            candidate_id="c1", annotation_ids=["a-1", "a-1"],
+            annotator_ids=["alice", "alice"],
+            final_label=ChangeClass.BENIGN_MAINTENANCE,
+            adjudicator_id="reviewer", rationale="Reviewed.",
+        )
+
+
+def test_adjudication_can_validate_references_against_original_annotations():
+    item = candidate()
+    adjudication = AdjudicationRecord(
+        candidate_id=item.candidate_id, annotation_ids=["a-1", "b-1"],
+        annotator_ids=["alice", "bob"], final_label=ChangeClass.CAPABILITY_EXPANSION,
+        adjudicator_id="reviewer", rationale="Reviewed capability expansion.",
+    )
+    annotations = [
+        annotation("a-1", item.candidate_id, "alice", ChangeClass.CAPABILITY_EXPANSION),
+        annotation("b-1", "wrong-candidate", "bob", ChangeClass.CAPABILITY_EXPANSION),
+    ]
+    with pytest.raises(ValueError, match="does not match"):
+        adjudications_to_pair_records([item], [adjudication], annotations=annotations)
+
+
+def test_duplicate_candidates_are_not_silently_overwritten():
+    with pytest.raises(ValueError, match="Duplicate annotation candidate"):
+        adjudications_to_pair_records([candidate(), candidate()], [])
+
+
+def test_constant_label_agreement_does_not_claim_defined_kappa():
+    left = [annotation("a", "c", "alice", ChangeClass.BENIGN_MAINTENANCE)]
+    right = [annotation("b", "c", "bob", ChangeClass.BENIGN_MAINTENANCE)]
+    result = annotation_agreement(left, right)
+    assert result.raw_agreement == 1.0
+    assert result.cohen_kappa is None
+    assert result.confusion_matrix[1][1] == 1
+
+
+def test_agreement_exposes_unmatched_annotations_instead_of_hiding_attrition():
+    left = [annotation("a", "left", "alice", ChangeClass.BENIGN_MAINTENANCE)]
+    right = [annotation("b", "right", "bob", ChangeClass.BENIGN_MAINTENANCE)]
+    result = annotation_agreement(left, right)
+    assert result.matched_candidates == 0
+    assert result.unmatched_left == result.unmatched_right == 1
+    assert result.cohen_kappa is None

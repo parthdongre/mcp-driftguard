@@ -1,0 +1,72 @@
+{
+  "code_revision": "449bef11d20ae0e9a7a7321adbd2bea1c357b2cd",
+  "python": {
+    "passed": 218,
+    "skipped": 1,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 90.919,
+    "coverage": {
+      "covered_lines": 4340,
+      "num_statements": 5121,
+      "percent_covered": 84.74907244678774,
+      "percent_covered_display": "85",
+      "missing_lines": 781,
+      "excluded_lines": 19,
+      "percent_statements_covered": 84.74907244678774,
+      "percent_statements_covered_display": "85"
+    },
+    "command": "python -m pytest -q --timeout=60 --timeout-method=thread -o faulthandler_timeout=30 -W error::pytest.PytestUnhandledThreadExceptionWarning --cov=driftguard --cov-report=json:docs/audit/continuation-coverage.json --junitxml=docs/audit/continuation-python-tests.xml",
+    "scope": "Linux Python 3.12.14; optional XGBoost skipped; coverage run concurrent with Rust tool builds, not a performance comparison"
+  },
+  "rust_process_helpers": {
+    "passed": 11,
+    "failed": 0,
+    "ignored": 0,
+    "command": "python desktop/scripts/check-native.py --headless",
+    "python_environment_required": true,
+    "dependencies_match_production_lock": true,
+    "gui_tested": false
+  },
+  "rust_format": "passed",
+  "ruff": "passed",
+  "rust_audit": {
+    "tool": "cargo-audit 0.22.2",
+    "vulnerabilities": 0,
+    "warning_categories": {
+      "unsound": 1,
+      "unmaintained": 1
+    },
+    "not_clean": true,
+    "database_commit": "999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b",
+    "command": "cargo audit --file desktop/src-tauri/Cargo.lock --json",
+    "scope": "411 lockfile dependencies; not proof of runtime reachability or absence of issues"
+  },
+  "source_sha256": {
+    "src/driftguard/desktop_bridge.py": "ce761cc26b6b9b6865c3cd5f6fae7df3212abb73e0621fcf58998debb06ea4b3",
+    "src/driftguard/gateway_transport.py": "a13a9ad8eec12846c8fe2f0e366a0ef33fc253c331e2aa33b8834a313b5fec52",
+    "tests/test_desktop_bridge.py": "d88a1767d974571cfe2faffe36da9f301b4fd8c934a6acdae894a882a9b2fa24",
+    "desktop/src-tauri/src/lib.rs": "a616aa2d4045db37859074ac57a6ebbb0f60126c8a41f02cec663cf90a6c0aea",
+    "desktop/src-tauri/Cargo.toml": "5ef218a11239d7effc7ceefdcefbc453c1a6270985ee039144e55ae409b50b70",
+    "desktop/src-tauri/Cargo.lock": "8064cdc19f4852ae680b1a1bac236476ba61c36d8082b7dda7d68b4c8055ad47",
+    "desktop/scripts/check-native.py": "d7707d68922ac98c247c96fd7a93508ed0b9a56d0e5d51b34f67bba9e8a0bfa7",
+    ".github/workflows/desktop-validation.yml": "7b512a06dc1b0695a19bfdf42d3a7ecea6b3c54778f7621039bc7dd3d8aa1d62"
+  },
+  "full_native_local_build": "blocked at glib-sys; pkg-config/GTK-WebKit prerequisites unavailable",
+  "native_platform_followup": "https://github.com/parthdongre/mcp-driftguard/actions/runs/39051463275",
+  "human_labels": 0,
+  "paper_claim_eligible": false,
+  "native_ci": {
+    "run_id": 39051463275,
+    "code_revision": "449bef11d20ae0e9a7a7321adbd2bea1c357b2cd",
+    "all_five_jobs_passed": true,
+    "native_macos_tests": 11,
+    "native_windows_tests": 11,
+    "linux_headless_tests": 11,
+    "unsigned_no_bundle_builds": [
+      "macos",
+      "windows"
+    ],
+    "manual_gui_tested": false
+  }
+}

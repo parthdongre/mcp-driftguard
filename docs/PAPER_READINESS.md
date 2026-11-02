@@ -2,6 +2,15 @@
 
 This file distinguishes **implemented engineering**, **development evidence**, and **publication-grade evidence**. A high development-benchmark score does not make the paper complete.
 
+Current prototype results and boundaries are recorded in
+[IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md),
+[RELEASE_READINESS.md](RELEASE_READINESS.md) and
+[research/CORPUS_PILOT_SUMMARY.md](research/CORPUS_PILOT_SUMMARY.md).
+The expanded acquisition has 494 primary candidates from 11 contributing groups
+and **zero human labels**. Frozen acquisition hashes and cluster-bootstrap
+utilities exist, but unchecked items below concern final independent publication
+evaluation, not merely the presence of code or a development pilot.
+
 ## Current status
 
 ### Research framing
@@ -23,7 +32,7 @@ This file distinguishes **implemented engineering**, **development evidence**, a
 - [x] Structural security features
 - [x] Capability projection/deltas
 - [x] Hybrid ML poisoning detector
-- [x] High-confidence structural invariants
+- [x] Conservative structural risk rules
 - [x] Unicode/concealment signals
 - [x] Cross-tool/authority-override signals
 - [x] C0-C3 learned baseline

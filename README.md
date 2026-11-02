@@ -23,18 +23,47 @@ The current paper direction is:
 
 For the research framing and review material, see [`docs/RESEARCH_POSITIONING.md`](docs/RESEARCH_POSITIONING.md), [`docs/PAPER_PROTOCOL.md`](docs/PAPER_PROTOCOL.md), [`docs/PAPER_READINESS.md`](docs/PAPER_READINESS.md), and [`docs/MIDSEM_REVIEW.md`](docs/MIDSEM_REVIEW.md).
 
+## Unreleased implementation branch
+
+The research core now has a persistent exact-consent store, an opt-in tools-only
+stdio/HTTP gateway, and a React/TypeScript desktop review interface with a Tauri 2 shell.
+Start with the [first live connection](docs/LIVE_QUICKSTART.md),
+[desktop setup](desktop/README.md), [gateway setup](docs/GATEWAY.md),
+[architecture](docs/ARCHITECTURE.md), and [verified progress](docs/IMPLEMENTATION_PROGRESS.md).
+
+The native connection screen also [discovers Codex and Claude Code sources](docs/HARNESS_CONNECTIONS.md)
+and fetches their tool definitions directly for review, without manual JSON exports.
+
+The gateway supports restricted stdio and Streamable HTTP tools for MCP `2025-11-25`
+and `2026-07-28`, including modern routing headers and JSON/SSE responses. Native
+preview packaging includes the Python engine. Signing/notarization and secure
+updates remain release gates. Only clients
+explicitly routed through the gateway are mediated. Browser preview and imported
+definitions do not protect clients. See [security boundaries](docs/SECURITY_MODEL.md)
+and [release readiness](docs/RELEASE_READINESS.md).
+
+Static acquisition produced **494 unlabeled production-source transitions across
+11 repository groups**, with 227 SDK/reference transitions separate. They are
+private annotation inputs, not 494 human labels or a completed benchmark. The
+corpus is not committed here. No publication-grade accuracy is claimed.
+
 ## Core task
 
 Given a trusted schema `T_old` and a newly observed schema `T_new`, DriftGuard computes field-aware semantic, structural, and effective-capability deltas and predicts one of four operational classes:
 
-| Class | Meaning | Default action |
+| Class | Meaning | Research policy target |
 |---|---|---|
 | `C0` | No meaningful change | Allow |
 | `C1` | Benign maintenance | Allow + log |
 | `C2` | Legitimate capability expansion | Require re-consent |
 | `C3` | Malicious / suspicious semantic drift | Quarantine / block |
 
-A sequential detector then reasons over `T0 -> T1 -> ... -> Tn` so an attacker cannot evade review simply by spreading a dangerous change across many individually small updates.
+A sequential detector reasons over `T0 -> T1 -> ... -> Tn` to study attacks that spread capability changes across individually small updates. General detection performance requires independent evaluation.
+
+The implemented gateway conservatively requires exact reapproval after every
+definition change. C0/C1 research predictions do not silently bypass consent.
+Reducing unnecessary re-consent remains an experimental objective requiring
+independent validation.
 
 ## Research contributions under evaluation
 

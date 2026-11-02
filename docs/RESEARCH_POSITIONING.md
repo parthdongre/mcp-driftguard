@@ -1,6 +1,11 @@
 # MCP DriftGuard: Research Positioning
 
-**Literature status date:** 2026-09-06
+**Literature status date:** 2026-10-15
+
+The verified update, including Interlock and formation-consistent dispatch, is in
+[SYSTEMATIC_LITERATURE_REVIEW.md](research/SYSTEMATIC_LITERATURE_REVIEW.md).
+This document states research hypotheses; numerical superiority and publication
+eligibility require the independent evaluation in [PAPER_PROTOCOL.md](PAPER_PROTOCOL.md).
 
 This document defines the research contribution we intend to defend in a paper. It is deliberately narrower than a general MCP security scanner.
 
@@ -25,6 +30,7 @@ The initial FF180 proposal correctly identified a gap between hash-based change 
 - We are **not** the first learned semantic detector for MCP security. MCP-Guard uses a fine-tuned E5 detector and LLM arbitration.
 - We are **not** the first work to study rug pulls or post-approval mutation. Multiple works and the Cursor MCPoison disclosure already establish this threat.
 - We are **not** the first temporal MCP security system. MCPShield reasons over historical traces, FlowGuard uses history-guided refinement, and TrustShiftProbe (Aug. 2026) explicitly studies staged temporal attacks.
+- We are **not** the first post-approval surface-drift detector or quarantine gateway. Interlock already implements these controls; formation-consistent dispatch (arXiv:2609.35088) addresses descriptor/handler epoch mismatch and invocation authority.
 - We are **not** the first to identify gradual capability escalation as a threat. Formal MCP threat models already describe it.
 - We are **not** the first MCP tool-poisoning benchmark. MCPTox, MCP-AttackBench, MCP-SafetyBench, MCPSecBench and others already exist.
 - We should not claim that hashes/signatures are obsolete. They solve integrity and provenance; DriftGuard solves the meaning and security significance of an authorized or otherwise observed change.
@@ -41,6 +47,8 @@ The initial FF180 proposal correctly identified a gap between hash-based change 
 | TrustShiftProbe (Aug. 2026) | Temporally staged server **results/behavior** | Yes | Multi-tier runtime defense | Explicitly trusts tool schemas and studies output/result corruption; low-and-slow drift is left as a future direction |
 | MCPoison / Cursor fix | MCP configuration changes after approval | Yes at integrity level | No | Re-approval on every modification is safe but treats harmless and dangerous changes equally |
 | mcp-tester rug-pull pinning | Description/schema hash + textual diff | Yes | No | Detects change but explicitly cannot classify legitimate vs malicious change |
+| Interlock | Post-approval tool surface and observed permission drift | Yes | Product security controls | Overlaps with quarantine/gating; no quantitative superiority claim without equivalent evaluation |
+| Formation-consistent dispatch (Sep. 2026) | Descriptor/handler epoch and pending-call authority | Yes | Source-profile effect summaries | Stronger formation-to-effect identity contract; descriptor drift alone cannot prove unchanged backend behavior |
 | Official MCP 2026-07-28 | Dynamic tool discovery/list changes | Protocol support | No | Defines change notifications and cacheability, but no semantic trust or re-consent policy |
 
 ## Defensible research gap

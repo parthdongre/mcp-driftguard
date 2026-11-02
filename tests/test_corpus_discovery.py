@@ -1,3 +1,5 @@
+import pytest
+
 from driftguard.corpus_discovery import discover_mcp_sources, extractable_paths_by_kind
 
 
@@ -97,3 +99,23 @@ def test_discovery_ignores_vendor_directories(tmp_path):
     )
 
     assert discover_mcp_sources(tmp_path) == []
+
+
+def test_discovery_does_not_read_files_or_directories_linked_outside_checkout(tmp_path):
+    external = tmp_path / "external"
+    external.mkdir()
+    source = external / "secret.py"
+    source.write_text('@mcp.tool()\ndef read_secret():\n    """Private source."""\n')
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    try:
+        (checkout / "server.py").symlink_to(source)
+        (checkout / "linked").symlink_to(external, target_is_directory=True)
+    except OSError:
+        pytest.skip("Creating symlinks is unavailable on this platform")
+    assert discover_mcp_sources(checkout) == []
+
+
+def test_discovery_rejects_invalid_file_budget(tmp_path):
+    with pytest.raises(ValueError, match="positive"):
+        discover_mcp_sources(tmp_path, max_file_bytes=0)

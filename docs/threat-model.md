@@ -1,5 +1,9 @@
 # Threat Model
 
+This file describes the research detector's original scope. The current opt-in
+gateway, exact consent bindings, output-check limitations and local/native trust
+boundaries are documented in [SECURITY_MODEL.md](SECURITY_MODEL.md).
+
 ## System boundary
 
 MCP DriftGuard sits on the MCP client / host side between tool discovery and exposure of a tool definition to the LLM.

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-driftguard-request"
+description = "Allows bounded review requests to the fixed local Python module."
+commands.allow = ["driftguard_request"]

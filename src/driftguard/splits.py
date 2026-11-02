@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from random import Random
 
@@ -61,9 +61,12 @@ class TemporalCutoffManifest(BaseModel):
 def _parse_timestamp(value: str) -> datetime:
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
-        return datetime.fromisoformat(normalized)
+        timestamp = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise ValueError(f"Invalid ISO-8601 timestamp: {value}") from exc
+    if timestamp.tzinfo is None:
+        raise ValueError("ISO-8601 timestamps must include an explicit timezone")
+    return timestamp.astimezone(UTC)
 
 
 def build_split_manifest(

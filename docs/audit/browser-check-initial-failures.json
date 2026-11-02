@@ -1,0 +1,231 @@
+{
+  "passed": false,
+  "checks": [
+    "Browser preview explicitly has no protected connections",
+    "Guided fixture is explicitly isolated",
+    "Reviewable benign fixture allows review",
+    "Approval requires an explicit exact-version confirmation",
+    "Escape closes modal",
+    "Quarantined exact version cannot be approved",
+    "Temporal evidence chart renders actual recorded metrics",
+    "Model hints are absent from annotation UI",
+    "Annotation session survives navigation",
+    "Annotation export preserves candidate and explicit label",
+    "Annotation download contains the reviewed session record",
+    "Minimum-width layout has no document overflow",
+    "Renderer approval persists in actual Python SQLite store",
+    "Actual Python history renders approved reference without missing-status errors",
+    "A changed definition invalidates prior exact-version approval",
+    "Imported approvals remain isolated from live gateway identities",
+    "Real-data review has no runtime errors",
+    "No browser runtime errors",
+    "No remote requests made"
+  ],
+  "errors": [],
+  "accessibility": [
+    {
+      "name": "security-review-light",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "nodes": [
+            {
+              "target": [
+                ".brand > div > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.3pt (7px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".local-note > span > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".nav-item > kbd"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(1)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(2)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".selected > .tool-text > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.23 (foreground color: #6d7280, background color: #f0f0f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tool-evolution-light",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "nodes": [
+            {
+              "target": [
+                ".brand > div > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.3pt (7px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".local-note > span > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".nav-item > kbd"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(1)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(2)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".selected.tool-row > .tool-text > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.23 (foreground color: #6d7280, background color: #f0f0f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".selected.version > span:nth-child(2) > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.23 (foreground color: #6d7280, background color: #f0f0f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "annotation-export-dialog",
+      "violations": []
+    },
+    {
+      "name": "settings-dark",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "nodes": [
+            {
+              "target": [
+                ".active > kbd"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.22 (foreground color: #858995, background color: #26263b, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "overview-narrow-light",
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "nodes": [
+            {
+              "target": [
+                ".brand > div > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.0pt (6.7px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.0pt (8px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".workspace-label > span"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.3pt (7px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                "span > small"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                "kbd"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(1)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "target": [
+                ".sidebar-version > span:nth-child(2)"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.25 (foreground color: #6d7280, background color: #f0f1f5, font size: 5.6pt (7.5px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: No automated WCAG A/AA violations in sampled screens",
+  "native_app_tested": false
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 from statistics import mean
 
 from .models import ChangeClass
@@ -24,12 +25,22 @@ class SequenceRiskTrace:
     attack_onset: int | None = None
 
     def __post_init__(self) -> None:
+        if not self.trace_id.strip():
+            raise ValueError("trace_id must not be blank")
         if not self.malicious_scores:
             raise ValueError("A sequence trace must contain at least one score")
         if len(self.malicious_scores) != len(self.capability_scores):
             raise ValueError("malicious_scores and capability_scores must have equal length")
-        if self.attack_onset is not None and not 0 <= self.attack_onset < len(self.malicious_scores):
-            raise ValueError("attack_onset is outside the sequence")
+        if any(not isfinite(score) or not 0.0 <= score <= 1.0
+               for score in (*self.malicious_scores, *self.capability_scores)):
+            raise ValueError("Risk scores must be finite values in [0, 1]")
+        if self.attack_onset is not None and (
+            type(self.attack_onset) is not int
+            or not 0 <= self.attack_onset < len(self.malicious_scores)
+        ):
+            raise ValueError("attack_onset must be an integer index inside the sequence")
+        if self.attack_onset is not None and self.final_label is not ChangeClass.MALICIOUS_DRIFT:
+            raise ValueError("attack_onset is only valid for malicious trajectories")
 
 
 @dataclass(frozen=True)
@@ -54,6 +65,8 @@ class ConsentPolicyMetrics:
     mean_detection_delay: float | None
     interventions_per_trace: float
     traces: int
+    pre_onset_intervention_rate: float = 0.0
+    c2_false_malicious_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -83,6 +96,8 @@ def evaluate_consent_policy(
 ) -> ConsentPolicyMetrics:
     if not traces:
         raise ValueError("At least one trace is required")
+    if len({trace.trace_id for trace in traces}) != len(traces):
+        raise ValueError("Sequence trace IDs must be unique")
 
     malicious = [trace for trace in traces if trace.final_label is ChangeClass.MALICIOUS_DRIFT]
     c2 = [trace for trace in traces if trace.final_label is ChangeClass.CAPABILITY_EXPANSION]
@@ -96,17 +111,21 @@ def evaluate_consent_policy(
 
     malicious_detected = 0
     malicious_blocked = 0
+    pre_onset_interventions = 0
     delays: list[float] = []
     for trace in malicious:
         outcome = outcomes[trace.trace_id]
         if outcome is None:
             continue
         index, action = outcome
+        if trace.attack_onset is not None and index < trace.attack_onset:
+            pre_onset_interventions += 1
+            continue
         malicious_detected += 1
         if action is PolicyAction.BLOCK:
             malicious_blocked += 1
         if trace.attack_onset is not None:
-            delays.append(float(max(0, index - trace.attack_onset)))
+            delays.append(float(index - trace.attack_onset))
 
     def rate(group: list[SequenceRiskTrace], action: PolicyAction | None = None) -> float:
         if not group:
@@ -130,6 +149,10 @@ def evaluate_consent_policy(
         mean_detection_delay=(mean(delays) if delays else None),
         interventions_per_trace=interventions / len(traces),
         traces=len(traces),
+        pre_onset_intervention_rate=(
+            pre_onset_interventions / len(malicious) if malicious else 0.0
+        ),
+        c2_false_malicious_rate=rate(c2, PolicyAction.BLOCK),
     )
 
 
@@ -163,6 +186,15 @@ def select_consent_policy(
 
     if not validation_traces:
         raise ValueError("At least one validation trace is required")
+    if not reconsent_grid or not block_grid:
+        raise ValueError("Both threshold grids must contain at least one candidate")
+    for constraint in (
+        min_malicious_detection, max_benign_block_rate, max_benign_reconsent_rate,
+    ):
+        if not isfinite(constraint) or not 0.0 <= constraint <= 1.0:
+            raise ValueError("Policy rate constraints must be finite values in [0, 1]")
+    if not isfinite(delay_weight) or delay_weight < 0:
+        raise ValueError("delay_weight must be finite and non-negative")
 
     candidates: list[PolicySelection] = []
     for reconsent in reconsent_grid:
@@ -204,6 +236,9 @@ def consent_security_pareto_frontier(
 
     if not traces:
         raise ValueError("At least one trace is required")
+
+    if not reconsent_grid or not block_grid:
+        raise ValueError("Both threshold grids must contain at least one candidate")
 
     candidates: list[PolicySelection] = []
     for reconsent in reconsent_grid:

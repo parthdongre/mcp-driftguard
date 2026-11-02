@@ -40,8 +40,9 @@ class TrajectoryMetrics:
 def _positive_onset(
     trajectory: TrajectoryDatasetRecord,
     positive_labels: set[ChangeClass],
+    approved_index: int,
 ) -> int | None:
-    for step_index, step in enumerate(trajectory.steps[1:], start=1):
+    for step_index, step in enumerate(trajectory.steps[approved_index + 1 :], start=1):
         if step.transition_label in positive_labels:
             return step_index
     return None
@@ -67,16 +68,27 @@ def evaluate_trajectory(
         raise ValueError("A trajectory requires at least two versions")
 
     positive_set = set(positive_labels)
-    onset = _positive_onset(trajectory, positive_set)
+    approved_indices = [
+        index for index, step in enumerate(trajectory.steps)
+        if step.version_id == trajectory.approved_version_id
+    ]
+    if len(approved_indices) != 1:
+        raise ValueError("Trajectory requires exactly one matching approved version")
+    if len({step.version_id for step in trajectory.steps}) != len(trajectory.steps):
+        raise ValueError("Trajectory version IDs must be unique")
+    approved_index = approved_indices[0]
+    if approved_index == len(trajectory.steps) - 1:
+        raise ValueError("Trajectory has no observations after its approved version")
+    onset = _positive_onset(trajectory, positive_set, approved_index)
     approved = make_snapshot(
         server_id=trajectory.server_id,
-        tool=trajectory.steps[0].tool,
+        tool=trajectory.steps[approved_index].tool,
         approval_state="approved",
     )
     monitor = SequentialDriftMonitor(approved, config=config)
 
     alert_steps: list[int] = []
-    for step_index, step in enumerate(trajectory.steps[1:], start=1):
+    for step_index, step in enumerate(trajectory.steps[approved_index + 1 :], start=1):
         current = make_snapshot(server_id=trajectory.server_id, tool=step.tool)
         assessment = monitor.observe(current)
         if assessment.alerted:

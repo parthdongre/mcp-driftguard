@@ -1,5 +1,9 @@
 # Temporal MCP Corpus Construction Protocol
 
+Actual acquisition counts and limitations are recorded in
+[research/CORPUS_PILOT_SUMMARY.md](research/CORPUS_PILOT_SUMMARY.md).
+The corpus remains unlabeled; acquisition is not final benchmark evidence.
+
 This document defines how DriftGuard constructs the real-history side of the research benchmark. The goal is a reproducible corpus of **tool-definition transitions over time**, not a collection of current MCP servers.
 
 ## Research object
