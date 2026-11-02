@@ -267,3 +267,32 @@ def test_javascript_launchers_use_absolute_node_in_gui_environment(tmp_path, mon
     node = str(tmp_path / 'absolute-node')
     monkeypatch.setattr(live, '_program', lambda name: node if name == 'node' else str(script))
     assert live._node_command('codex') == [node, str(script.resolve())]
+
+
+
+def test_windows_cancel_targets_only_its_spawned_process_tree(monkeypatch):
+    class OwnedProcess:
+        pid = 12345
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            pytest.fail('The launcher was already stopped with its children')
+
+        def wait(self, **kwargs):
+            return self.returncode
+
+    process = OwnedProcess()
+    observed = []
+    def terminate(argv, **kwargs):
+        observed.append(argv)
+        assert kwargs.get('shell', False) is False
+        process.returncode = 1
+    with monkeypatch.context() as patch:
+        patch.setattr(live.sys, 'platform', 'win32')
+        patch.setattr(live.subprocess, 'run', terminate)
+        live._stop_task(process)
+    assert observed[0][0].endswith('taskkill.exe')
+    assert observed[0][1:] == ['/PID', '12345', '/T', '/F']

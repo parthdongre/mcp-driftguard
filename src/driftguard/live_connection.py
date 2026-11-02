@@ -341,12 +341,32 @@ def _run_codex_task(db: Path, cancelled: threading.Event) -> dict:
             return {'stage': 'complete', 'message': 'Codex completed an actual MCP sample read.', 'verified': True}
         finally:
             if process.poll() is None:
-                if os.name == 'nt':
-                    process.terminate()
-                else:
-                    os.killpg(process.pid, signal.SIGTERM)
-                try:
-                    process.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=3)
+                _stop_task(process)
+
+
+def _stop_task(process: subprocess.Popen) -> None:
+    if sys.platform == 'win32':
+        # Terminating the npm Node launcher alone leaves its native Codex child
+        # running. Target only the process tree created for this app-owned task.
+        taskkill = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'taskkill.exe')
+        try:
+            subprocess.run([taskkill, '/PID', str(process.pid), '/T', '/F'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False, timeout=5)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=3)

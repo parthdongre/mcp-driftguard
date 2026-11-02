@@ -8,6 +8,8 @@ import platform
 import subprocess
 import sys
 import tempfile
+import time
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,10 +21,11 @@ def exchange(engine: Path, db: Path, request: dict) -> dict:
     completed = subprocess.run(
         [str(engine), "bridge", "--db", str(db)],
         input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
-        capture_output=True, timeout=30, check=False,
+        capture_output=True, timeout=180 if request["action"] == "live_connect" else 45, check=False,
         # Frozen execution must not depend on an inherited Python installation.
-        env={key: value for key, value in os.environ.items()
-             if key not in {"PYTHONPATH", "PYTHONHOME", "DRIFTGUARD_PYTHON"}},
+        env={**{key: value for key, value in os.environ.items()
+                if key not in {"PYTHONPATH", "PYTHONHOME", "DRIFTGUARD_PYTHON"}},
+             "CODEX_HOME": str(db.parent / "codex-home")},
     )
     if len(completed.stdout) > 16 * 1024 * 1024:
         raise RuntimeError("Frozen response exceeds the protocol limit")
@@ -77,6 +80,46 @@ def verify(engine: Path) -> None:
         assert exchange(engine, db, {"action": "host_catalog_list"})["data"][0]["name"] == "Hosted metadata fixture"
         rejected = exchange(engine, db, {"action": "shell", "command": "unused"})
         assert rejected["ok"] is False
+        # Exercise the shipped executable's app-owned daemon and stdio adapter,
+        # not just source Python or static help. No provider/model account is used.
+        from driftguard.gateway_transport import LEGACY, StdioConfig, StdioPeer
+        config = db.parent / "codex-home" / "config.toml"
+        config.parent.mkdir(exist_ok=True)
+        original = b'# Packaged connection test\n'
+        config.write_bytes(original)
+        try:
+            connected = exchange(engine, db, {"action": "live_connect"})
+            assert connected["ok"], connected
+            row = connected["data"]["tool"]
+            verified = exchange(engine, db, {
+                "action": "live_verify", "expected_sha256": row["sha256"],
+                "expected_revision": row["revision"],
+            })
+            assert verified["ok"] and verified["data"]["verified"], verified
+            installed = tomllib.loads(config.read_text(encoding="utf-8"))["mcp_servers"]["driftguard-filesystem"]
+            assert Path(installed["command"]) == engine
+            assert installed["args"][0] == "live-client"
+            for _ in range(2):
+                peer = StdioPeer(StdioConfig("frozen-adapter", (installed["command"], *installed["args"]),
+                    cwd=str(db.parent), protocol_version=LEGACY, timeout_seconds=20))
+                try:
+                    peer.initialize()
+                    assert [tool["name"] for tool in peer.request("tools/list")["tools"]] == ["read_text_file"]
+                    result = peer.request("tools/call", {"name": "read_text_file", "arguments": {
+                        "path": connected["data"]["sample_path"],
+                    }})
+                    assert result["structuredContent"]["content"] == "DriftGuard live integration check\n"
+                finally:
+                    peer.close()
+                assert exchange(engine, db, {"action": "live_status"})["data"]["verified"]
+        finally:
+            disconnected = exchange(engine, db, {"action": "live_disconnect"})
+            assert disconnected["ok"], disconnected
+            deadline = time.monotonic() + 10
+            while exchange(engine, db, {"action": "live_status"})["data"]["service_alive"]:
+                assert time.monotonic() < deadline, "Packaged gateway did not stop"
+                time.sleep(0.1)
+        assert config.read_bytes() == original
     gateway = subprocess.run([str(engine), "gateway", "--help"],
                              capture_output=True, timeout=30, check=False)
     assert gateway.returncode == 0 and b"--config" in gateway.stdout
