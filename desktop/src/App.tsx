@@ -8,6 +8,7 @@ import { Dialog } from './Dialog';
 import { ReviewPanel, classLabels } from './ReviewPanel';
 import { Timeline } from './Timeline';
 import { AnnotationLab } from './AnnotationLab';
+import { LiveConnection } from './LiveConnection';
 import { ConnectionSetup } from './ConnectionSetup';
 import { ConnectionHealth } from './ConnectionHealth';
 import { Disclosure } from './Disclosure';
@@ -174,7 +175,7 @@ export default function App() {
         </> : null}
 
         {page === 'connections' ? <>
-          {!demo ? <><HostedApps native={native} onImported={() => { void reload(); }} /><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : <section className="panel compact-panel"><Disclosure title="Connect your coding harness" level={2}><p>Exit the guided demo to connect your local harness.</p><button className="button primary" onClick={exitDemo}>Exit demo and connect</button></Disclosure></section>}
+          {!demo ? <><LiveConnection native={native} onChanged={() => { void reload(); }} /><HostedApps native={native} onImported={() => { void reload(); }} /><HarnessConnections native={native} onCollected={() => { void reload(); }} /><ConnectionSetup native={native} /><ConnectionHealth native={native} /></> : <section className="panel compact-panel"><Disclosure title="Connect your coding harness" level={2}><p>Exit the guided demo to connect your local harness.</p><button className="button primary" onClick={exitDemo}>Exit demo and connect</button></Disclosure></section>}
           <section className="panel compact-panel"><Disclosure title="Definition sources" level={2}>
             {sources.length ? sources.map(source => <Disclosure title={workspace.overview.server_list?.find(item => item.server_id === source)?.display_name || source} key={source}>
               <p>{workspace.tools.filter(tool => tool.server_id === source).length} observed tools · {demo ? 'Fixture source' : 'Recorded definitions'}</p>

@@ -37,7 +37,7 @@ export interface Overview {
 export interface Workspace {
   overview: Overview; tools: ToolRecord[]; activity: AuditEvent[];
 }
-export type BridgeAction = 'host_catalog_import' | 'host_catalog_list' | 'harness_scan' | 'harness_fetch' | 'store_http_credential' | 'remove_http_credential' | 'runtime_info' | 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
+export type BridgeAction = 'live_connect' | 'live_status' | 'live_verify' | 'live_disconnect' | 'live_run_codex' | 'live_cancel_codex' | 'host_catalog_import' | 'host_catalog_list' | 'harness_scan' | 'harness_fetch' | 'store_http_credential' | 'remove_http_credential' | 'runtime_info' | 'overview' | 'list_tools' | 'review' | 'history' | 'activity' |
   'import_definitions' | 'approve' | 'deny' | 'quarantine';
 export interface BridgeRequest {
   action: BridgeAction; server_id?: string; tool_name?: string; expected_sha256?: string; expected_revision?: number;

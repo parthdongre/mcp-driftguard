@@ -5,7 +5,35 @@ Imports use temporary discovery sessions and separate review identities. Start
 with one local server, route the client through the gateway, and approve that
 running connection in the shared desktop workspace.
 
-## Prepare a real server
+## Connect from the desktop app
+
+Requires Node.js 24 or newer. The Codex task also requires a current Codex CLI
+(the integration is verified with 0.165.0) and your normal sign-in.
+
+1. Open **MCP connections → Connect Codex → Connect**. The app installs the
+   pinned Filesystem MCP server privately, creates its sample folder, starts a
+   shared gateway and adds one managed TOML entry to Codex. Existing settings
+   are preserved and backed up. `CODEX_HOME` is honored.
+2. Click **Approve & test local read** to approve the displayed exact definition
+   of `read_text_file` under **driftguard-filesystem** and read the app-owned
+   `check.txt`. Approval details include the definition hash and sample path.
+3. Click **Run sample in Codex**. The app starts a fresh, ephemeral, read-only
+   Codex task using your existing sign-in. It ignores other user configuration
+   for that test, retains normal authentication, and reports success only after
+   observing a successful MCP read through that task's adapter. This uses your
+   Codex account. Cancel stops the test while keeping the gateway available.
+
+No TOML copying, restart sequence or manually typed sample prompt is needed.
+Existing chats pick up the configured entry on their next session. The app does
+not terminate them or claim to hot-reload their configuration. Disconnect stops
+its background gateway and restores the original configuration only if it still
+matches the installed version. Newer user edits are kept and reported.
+
+The background gateway maintains one upstream session across downstream Codex
+reconnects. Restarting the gateway or its upstream requires fresh approval.
+Other harness sources and direct connections are not automatically routed.
+
+## Advanced: manual server setup
 
 Requires the installed DriftGuard source environment and Node.js 24 or newer.
 From the repository root:
@@ -23,7 +51,7 @@ the generated `live-demo/files` directory. Generated files are excluded from Git
 Existing files with different contents are preserved; choose `--output` for a
 fresh directory. The helper also accepts `--server` and `--state` overrides.
 
-## Connect Codex
+## Advanced: manually configure Codex
 
 1. Merge the contents of `live-demo/codex-gateway.toml` into
    `~/.codex/config.toml`. Preserve existing settings and avoid duplicate tables.
@@ -85,7 +113,10 @@ only an authored temporary file. It does not run a model turn or use user data.
 DRIFTGUARD_TEST_FILESYSTEM="$PWD/live-validation/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js" .venv/bin/python -m pytest -q tests/test_real_filesystem.py
 ```
 
-A separate opt-in test uses installed Codex CLI 0.165.0 to launch the gateway and
-discover its pending catalog. A complete authenticated Codex/Claude chat on the
+An additional app-setup test installs the official server, verifies its sample
+read and confirms two Codex CLI 0.165.0 processes can discover the approved tool
+without losing the live upstream approval. Other tests cover stale approvals,
+config preservation, rollback, restart recovery, cancellation and rejection of
+model text that claims a read without making an MCP call. A complete authenticated Codex/Claude chat on the
 user's Mac remains a separate verification step; these tests do not establish
 support for every hosted app or OAuth provider.

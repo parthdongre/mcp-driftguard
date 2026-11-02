@@ -236,6 +236,8 @@ def _is_gateway(settings: Any) -> bool:
     if not isinstance(command, str) or not isinstance(args, list):
         return False
     binary = command.replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".exe")
+    if "driftguard.live_client" in args or "live-client" in args:
+        return True
     return "serve" in args and ("driftguard.gateway_cli" in args or
                                 binary in {"driftguard-gateway", "driftguard-engine"})
 

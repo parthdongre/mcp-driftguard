@@ -144,7 +144,7 @@ try {
   let queue = Promise.resolve();
   const runPython = payload => {
     const operation = queue.then(async () => {
-      const child = execFile(process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: 20000 });
+      const child = execFile(process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: payload.action === 'live_connect' ? 180000 : 45000, env: { ...process.env, CODEX_HOME: resolve(temporary, 'codex-home') } });
       child.stdin.end(JSON.stringify(payload));
       let output = '';
       for await (const chunk of child.stdout) output += chunk;
@@ -233,8 +233,25 @@ for line in sys.stdin:
     check('Hosted descriptions render without claiming a complete input contract', await connected.getByText('Input schema not exported by host. Review metadata only.', { exact: true }).isVisible());
 
     await connected.screenshot({ path: new URL('harness-collected-review.png', output).pathname, fullPage: true });
+    await connected.getByRole('heading', { name: 'Connect Codex', exact: true }).click();
+    await connected.getByRole('button', { name: 'Connect', exact: true }).click();
+    await connected.getByRole('button', { name: 'Approve & test local read', exact: true }).waitFor({ timeout: 180000 });
+    const prepared = await runPython({ action: 'live_status' });
+    check('App prepares a shared gateway and installs its Codex entry', prepared.ok && prepared.data.running && prepared.data.installed && !prepared.data.verified);
+    const codexSettings = await readFile(resolve(temporary, 'codex-home/config.toml'), 'utf8');
+    check('Codex connection is installed as TOML', codexSettings.includes('[mcp_servers."driftguard-filesystem"]'));
+    await connected.getByRole('button', { name: 'Approve & test local read', exact: true }).click();
+    await connected.getByText(/Gateway running.*Local read verified/).waitFor({ timeout: 45000 });
+    const verified = await runPython({ action: 'live_status' });
+    check('In-app approval completes an actual official Filesystem read', verified.ok && verified.data.verified);
+    await connected.getByRole('heading', { name: 'Read approval details', exact: true }).click();
+    await connected.screenshot({ path: new URL('in-app-codex-setup.png', output).pathname, fullPage: true });
+    await connected.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    await connected.getByText('Disconnected. Previous Codex settings restored.', { exact: true }).waitFor();
+    const disconnected = await runPython({ action: 'live_status' });
+    check('Disconnect removes the managed entry and stops the gateway', disconnected.ok && !disconnected.data.installed && !disconnected.data.running);
     check('Real-data review has no runtime errors', errors.length === 0);
-  } finally { await connected.close(); await rm(temporary, { recursive: true, force: true }); }
+  } finally { await runPython({ action: 'live_disconnect' }).catch(() => {}); await connected.close(); await rm(temporary, { recursive: true, force: true }); }
   check('No browser runtime errors', errors.length === 0);
   check('No remote requests made', external.length === 0);
   const sampledAccessibilityPassed = accessibility.every(screen => screen.violations.length === 0);

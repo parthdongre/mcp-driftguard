@@ -162,3 +162,12 @@ On Linux, hardware/virtual-display graphics can require the
 [documented WebKitGTK workarounds](https://v2.tauri.app/develop/debug/linux-graphics/).
 The CI virtual display uses software compositing only for its disposable startup
 test. Manual checks on the intended desktop/GPU remain part of release review.
+
+
+### In-app Codex connection
+
+Use **MCP connections → Connect Codex** to prepare the local Filesystem gateway,
+back up and merge its TOML entry, approve and verify the sample read, then start
+an actual Codex sample task. Node.js 24+ and a signed-in current Codex CLI are
+required. See [the live quickstart](../docs/LIVE_QUICKSTART.md). Disconnect safely
+restores unchanged settings. Existing Codex chats are not forcibly restarted.

@@ -33,6 +33,12 @@ const ACTIONS: &[&str] = &[
     "harness_fetch",
     "host_catalog_import",
     "host_catalog_list",
+    "live_connect",
+    "live_status",
+    "live_verify",
+    "live_disconnect",
+    "live_run_codex",
+    "live_cancel_codex",
 ];
 
 #[derive(Clone)]
@@ -73,6 +79,9 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
     // Deny unexpected arguments at the native boundary, including executable/DB/path overrides.
     let allowed: &[&str] = match action {
         "overview" | "activity" | "runtime_info" | "host_catalog_list" => &["action"],
+        "live_connect" | "live_status" | "live_disconnect" | "live_run_codex"
+        | "live_cancel_codex" => &["action"],
+        "live_verify" => &["action", "expected_sha256", "expected_revision"],
         "host_catalog_import" => &["action", "source"],
         "list_tools" => &["action", "server_id", "summary"],
         "review" | "history" => &["action", "server_id", "tool_name"],
@@ -271,17 +280,22 @@ async fn run_bridge_before(
 }
 
 async fn run_bridge(runtime: BridgeRuntime, bytes: Vec<u8>) -> Result<Value, String> {
-    let discovery = serde_json::from_slice::<Value>(&bytes)
+    let operation_timeout = serde_json::from_slice::<Value>(&bytes)
         .ok()
-        .is_some_and(|request| request["action"] == "harness_fetch");
-    if discovery {
+        .and_then(|request| match request["action"].as_str() {
+            Some("harness_fetch") => Some(DISCOVERY_TIMEOUT),
+            Some("live_connect") => Some(Duration::from_secs(180)),
+            Some("live_verify") => Some(Duration::from_secs(45)),
+            _ => None,
+        });
+    if let Some(duration) = operation_timeout {
         let discovery_lock = runtime.discovery_lock.clone();
         let _guard = discovery_lock.try_lock().map_err(|_| {
-            "Another definition fetch is running. Wait for it to finish before retrying."
+            "Another connection or definition operation is running. Wait for it to finish."
         })?;
         let mut independent = runtime;
         independent.lock = Arc::new(Mutex::new(()));
-        return run_bridge_before(independent, bytes, Instant::now() + DISCOVERY_TIMEOUT).await;
+        return run_bridge_before(independent, bytes, Instant::now() + duration).await;
     }
     run_bridge_before(runtime, bytes, Instant::now() + REQUEST_TIMEOUT).await
 }
@@ -481,6 +495,22 @@ mod tests {
         assert!(validate_request(&json!({"action": "overview", "args": []})).is_err());
         assert!(validate_request(&json!({"action": "overview"})).is_ok());
         assert!(validate_request(&json!({"action": "list_tools", "summary": true})).is_ok());
+        for action in [
+            "live_connect",
+            "live_status",
+            "live_disconnect",
+            "live_run_codex",
+            "live_cancel_codex",
+        ] {
+            assert!(validate_request(&json!({"action": action})).is_ok());
+            assert!(validate_request(&json!({"action": action, "command": "whoami"})).is_err());
+            assert!(validate_request(&json!({"action": action, "path": "/tmp/file"})).is_err());
+            assert!(validate_request(&json!({"action": action, "prompt": "anything"})).is_err());
+        }
+        let verify = json!({
+            "action": "live_verify", "expected_sha256": "abc", "expected_revision": 1,
+        });
+        assert!(validate_request(&verify).is_ok());
         let scan = json!({"action": "harness_scan", "project_dir": "/tmp/project"});
         assert!(validate_request(&scan).is_ok());
         let fetch = json!({
@@ -665,7 +695,7 @@ mod tests {
             let error = run_bridge(runtime.clone(), br#"{"action":"harness_fetch"}"#.to_vec())
                 .await
                 .unwrap_err();
-            assert!(error.contains("Another definition fetch"));
+            assert!(error.contains("Another connection or definition operation"));
             let review = run_bridge(runtime.clone(), br#"{"action":"overview"}"#.to_vec())
                 .await
                 .unwrap_err();

@@ -134,3 +134,7 @@ p { line-height: 1.5; }
 .catalog-count { padding-bottom: 6px; }
 .hosted-apps .disclosure-body { max-width: 100%; }
 .hosted-apps .disclosure-body p { max-width: 78ch; white-space: pre-wrap; }
+
+.live-steps { display: grid; gap: .6rem; padding-left: 1.3rem; margin: 1rem 0 1.4rem; color: var(--muted); }
+.live-steps .complete { color: var(--success, #237a53); }
+.live-hash { overflow-wrap: anywhere; }

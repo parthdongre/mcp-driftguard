@@ -3,7 +3,8 @@
 The trusted native host chooses the database path. The renderer can send only
 allowlisted operations. Harness collection reads known configuration files and
 starts only a freshly discovered selection. No arbitrary executable/file request,
-tool call, policy change or HTTP listener is exposed.
+arbitrary tool call, policy change or HTTP listener is exposed. The fixed live
+connection flow can approve and read its own sample after an explicit app action.
 """
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ ACTIONS = frozenset({
     "store_http_credential", "remove_http_credential",
     "harness_scan", "harness_fetch",
     "host_catalog_import", "host_catalog_list",
+    "live_connect", "live_status", "live_verify", "live_disconnect",
+    "live_run_codex", "live_cancel_codex",
 })
 
 
@@ -48,10 +51,22 @@ def _text(request: dict[str, Any], name: str, *, maximum: int = 1024) -> str:
     return value
 
 
-def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
+def handle_request(store: GuardStore, request: dict[str, Any], *, db_path: Path | None = None) -> Any:
     if not isinstance(request, dict) or request.get("action") not in ACTIONS:
         raise ValueError("Unknown desktop action")
     action = request["action"]
+    if action.startswith("live_"):
+        from . import live_connection as live
+        allowed = {"action", "expected_sha256", "expected_revision"} if action == "live_verify" else {"action"}
+        if db_path is None or set(request) - allowed:
+            raise ValueError("Unexpected live connection request fields")
+        if action == "live_verify":
+            digest = _text(request, "expected_sha256", maximum=64)
+            revision = request.get("expected_revision")
+            if type(revision) is not int or revision < 1:
+                raise ValueError("Reload the current version")
+            return live.control(db_path, "verify", expected_sha256=digest, expected_revision=revision)
+        return getattr(live, action.removeprefix("live_"))(db_path)
     if action in {"host_catalog_import", "host_catalog_list"}:
         from .host_catalog import import_source, list_sources
         if set(request) - ({"action", "source"} if action == "host_catalog_import" else {"action"}):
@@ -157,14 +172,17 @@ def handle_request(store: GuardStore, request: dict[str, Any]) -> Any:
 def execute(db_path: str | Path, raw: bytes) -> dict[str, Any]:
     """Bound input, reject ambiguous JSON, and return safe structured errors."""
     from .harnesses import HarnessError
+    from .live_connection import LiveError
     try:
         if not raw or len(raw) > MAX_REQUEST_BYTES:
             raise ValueError("Desktop request is empty or exceeds the size limit")
         request = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant,
                              object_pairs_hook=_unique_object)
         with GuardStore(db_path) as store:
-            data = handle_request(store, request)
+            data = handle_request(store, request, db_path=Path(db_path).absolute())
         return {"ok": True, "data": data}
+    except LiveError as error:
+        return {"ok": False, "error": {"code": "connection_unavailable", "message": str(error)}}
     except HarnessError as error:
         return {"ok": False, "error": {"code": "harness_unavailable", "message": str(error)}}
     except GateError as error:

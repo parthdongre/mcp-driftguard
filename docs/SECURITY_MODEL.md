@@ -235,3 +235,34 @@ replace unmaintained macro helpers. The raw dated RustSec report is retained
 separately from the source-level compatibility decision; neither substitutes for
 independent security review. Signing, notarization, update trust and manual native
 usability/accessibility verification remain production-release requirements.
+
+
+## App-managed Codex sample connection
+
+The native allowlist includes fixed connect/status/verify/disconnect and
+run/cancel sample actions. Renderer input cannot select a process, database,
+path or model prompt. Explicit verification approves only the displayed current
+`read_text_file` version and reads the app-owned sample file. The app installs
+Filesystem MCP 2.0.1 with npm lifecycle scripts disabled, restricts it to that
+sample folder and creates one backed-up Codex TOML entry. Config writes use a
+cross-process lock and compare the current contents before replacing them.
+Disconnect restores original bytes only while the installed hash still matches;
+newer edits are preserved. This is not a general-purpose configuration editor.
+
+A shared background gateway binds raw TCP to 127.0.0.1 with random 256-bit
+tokens, bounded messages and 16 concurrent sockets. Separate private data and
+controller token files prevent an MCP adapter from approving tools. No token is
+placed in the Codex command line, renderer or audit output. Private files use
+owner-only Unix permissions; on Windows they inherit the user's app-data ACLs.
+No HTTP API, login startup service or copied harness authentication is created.
+The process runs until Disconnect or host shutdown. Downstream reconnects retain
+the live upstream identity; gateway/upstream restarts invalidate consent.
+
+Only an explicit Run sample action launches a normal authenticated Codex task.
+It uses `exec --ignore-user-config --ephemeral --sandbox read-only` with fixed
+MCP overrides, never sandbox bypass flags, and a fixed prompt. Normal CLI auth
+stays in CODEX_HOME. The task is cancellable, limited to 90 seconds and 4 MiB of
+output, and never forwards raw CLI output into the UI. A model's final text is
+not proof: success requires an actual successful sample MCP call tagged to this
+adapter. A read-only shell sandbox does not restrict MCP server behavior; the
+separate Filesystem root and exact-version approval enforce this sample scope.
