@@ -160,6 +160,9 @@ class GuardStore:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA foreign_keys=ON")
         self._db.execute("PRAGMA busy_timeout=5000")
+        if str(path) != ":memory:":
+            # Readers never wait on a writer, so gateways and the desktop app can share a store.
+            self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript("""
             CREATE TABLE IF NOT EXISTS guard_runtime(
                 server_id TEXT PRIMARY KEY, heartbeat_at TEXT NOT NULL, active INTEGER NOT NULL);
@@ -489,6 +492,21 @@ class GuardStore:
             ),
         ).fetchone()
 
+    def _comparison_baseline(self, server: sqlite3.Row, tool_name: str) -> sqlite3.Row | None:
+        """Latest approved definition for this configured server, from any past session.
+
+        This is comparison evidence only. It never authorizes a call: invocation still needs
+        an active approval bound to the current identity, session and policy.
+        """
+        current = self._active_approval(server, tool_name, include_inactive=True)
+        if current is not None:
+            return current
+        return self._db.execute(
+            "SELECT * FROM guard_approvals WHERE server_id=? AND tool_name=? "
+            "ORDER BY id DESC LIMIT 1",
+            (server["server_id"], tool_name),
+        ).fetchone()
+
     def _assess(
         self,
         server: sqlite3.Row,
@@ -497,8 +515,9 @@ class GuardStore:
         *,
         allow_scoring: bool = True,
     ) -> tuple[str, list[str], dict[str, Any]]:
-        # Revoking invocation authority must not erase historical comparison evidence.
-        approval = self._active_approval(server, tool["name"], include_inactive=True)
+        # Revoking invocation authority, or restarting the gateway, must not erase
+        # historical comparison evidence.
+        approval = self._comparison_baseline(server, tool["name"])
         if approval is None:
             return "unreviewed", ["No approved definition exists for this identity and policy."], {}
         if not allow_scoring or (
@@ -721,9 +740,7 @@ class GuardStore:
         with self._lock:
             row = self._tool(server_id, tool_name)
             record = self._record(row)
-            approval = self._active_approval(
-                self._server(server_id), tool_name, include_inactive=True
-            )
+            approval = self._comparison_baseline(self._server(server_id), tool_name)
             record["old_tool"] = json.loads(approval["definition"]) if approval else None
             record["quarantine_active"] = self._db.execute(
                 "SELECT 1 FROM guard_quarantines WHERE server_id=? AND tool_name=? AND sha256=?",
@@ -960,7 +977,12 @@ class GuardStore:
         expected_revision: int,
         identity: ServerIdentity | None = None,
     ) -> T:
-        """Check and dispatch under a local store lock; remote behavior remains unverified."""
+        """Authorize, then dispatch outside the store lock; remote behavior remains unverified.
+
+        The authorization is committed before ``invoke`` runs, so a slow upstream call never
+        holds the database write lock. A revocation that commits after authorization applies
+        to the next call.
+        """
         if not isinstance(arguments, dict):
             raise GateError("Tool arguments must be a JSON object")
         _check_depth(arguments, self.policy.max_depth)
@@ -971,8 +993,6 @@ class GuardStore:
             safe_arguments = json.loads(encoded)
         except (ValueError, UnicodeError, RecursionError) as error:
             raise GateError("Tool arguments must contain bounded finite JSON") from error
-        error: Exception | None = None
-        result: Any = None
         with self._transaction():
             self.authorize_call(
                 server_id,
@@ -993,16 +1013,23 @@ class GuardStore:
                 sha256=expected_hash,
                 revision=expected_revision,
             )
-            try:
-                result = invoke(tool_name, safe_arguments)
-            except Exception as caught:  # noqa: BLE001 - persist callback failure without its content
-                error = caught
-                self._event("call_failed", server_id, tool_name, error_type=type(caught).__name__)
-            else:
-                self._event("call_completed", server_id, tool_name)
-        if error is not None:
-            raise error
+        try:
+            result = invoke(tool_name, safe_arguments)
+        except Exception as caught:  # persist callback failure without its content
+            self._record_outcome("call_failed", server_id, tool_name,
+                                 error_type=type(caught).__name__)
+            raise
+        self._record_outcome("call_completed", server_id, tool_name)
         return result
+
+    def _record_outcome(self, event_type: str, server_id: str, tool_name: str,
+                        **details: Any) -> None:
+        # The call already happened; a busy or closed store must not hide its result.
+        try:
+            with self._transaction():
+                self._event(event_type, server_id, tool_name, **details)
+        except sqlite3.Error:
+            pass
 
     def history(self, server_id: str, tool_name: str) -> list[dict[str, Any]]:
         with self._lock:

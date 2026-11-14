@@ -362,6 +362,11 @@ fn standalone_gateway_registers_a_route_before_any_harness_connects() {
         .contains("--registered"));
 
     let engine = env!("CARGO_BIN_EXE_driftguard-rust");
+    // Manual review is the default; this flow opts in to approving declared read-only tools.
+    assert_eq!(
+        request(serde_json::json!({"action":"set_approval_mode","mode":"read_only"}))["ok"],
+        true
+    );
     assert_eq!(
         request(
             serde_json::json!({"action":"save_gateway_server","server_id":"sample",

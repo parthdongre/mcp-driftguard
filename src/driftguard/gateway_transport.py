@@ -65,9 +65,15 @@ class TransportError(RuntimeError):
 
 
 class RpcError(TransportError):
+    """A complete JSON-RPC error for one request; the connection remains usable."""
     def __init__(self, code: int, message: str, data: Any = None):
         super().__init__(message)
         self.code, self.data = code, data
+
+
+def _rejected_result(message: str) -> RpcError:
+    # The result is withheld from the client, but the connection and approvals stay valid.
+    return RpcError(-32603, message)
 
 
 def _pairs_unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -399,6 +405,8 @@ class StdioPeer:
             except queue.Empty as exc:
                 self.close()
                 raise TransportError("Upstream request timed out") from exc
+            except RpcError:
+                raise  # The upstream answered this request with an error.
             except TransportError:
                 self.close()
                 raise
@@ -503,12 +511,18 @@ class ProtectedGateway:
             self.close()
             raise
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
     def _watch_heartbeat(self) -> None:
         while not self._heartbeat_stop.wait(2):
             try:
                 self.store.mark_gateway(self.identity, active=True)
+            except sqlite3.OperationalError:
+                continue  # A busy store skips one beat; the next one retries.
             except (GateError, OSError, sqlite3.Error):
-                self._heartbeat_stop.set()
+                # Only the heartbeat ends. The catalog watcher keeps checking for changes.
                 return
 
     def _watch_disconnect(self) -> None:
@@ -625,6 +639,8 @@ class ProtectedGateway:
                                         name if isinstance(name, str) and NAME.fullmatch(name) else None,
                                         reason="approval_or_policy_check_failed")
                 raise
+            except RpcError:
+                raise  # One rejected call does not end the session or revoke approvals.
             except TransportError:
                 self.close()
                 raise
@@ -633,26 +649,26 @@ class ProtectedGateway:
         """Bounded text and approved structured-contract egress checks."""
         content = result.get("content")
         if not isinstance(content, list) or len(content) > 256:
-            raise TransportError("Tool result content is invalid or exceeds the item limit")
+            raise _rejected_result("Tool result content is invalid or exceeds the item limit")
         if "isError" in result and not isinstance(result["isError"], bool):
-            raise TransportError("Tool result isError must be boolean")
+            raise _rejected_result("Tool result isError must be boolean")
         clean = []
         for item in content:
             if not isinstance(item, dict) or item.get("type") != "text" or not isinstance(item.get("text"), str):
-                raise TransportError("Only text tool results are supported by this policy")
+                raise _rejected_result("Only text tool results are supported by this policy")
             clean.append({"type": "text", "text": item["text"]})
         encoded = json.dumps(clean, ensure_ascii=False)
         if self._contains_credential("".join(item["text"] for item in clean)):
-            raise TransportError("Tool result contains a configured credential")
+            raise _rejected_result("Tool result contains a configured credential")
         if PRIVATE_KEY.search(encoded):
-            raise TransportError("Tool result contains private key material")
+            raise _rejected_result("Tool result contains private key material")
         forwarded = {"content": clean, "isError": result.get("isError", False)}
         if output_schema is not None and (not forwarded["isError"] or "structuredContent" in result):
             structured = result.get("structuredContent")
             if not isinstance(structured, dict) or not valid_arguments(output_schema, structured):
-                raise TransportError("Structured result violates the approved outputSchema")
+                raise _rejected_result("Structured result violates the approved outputSchema")
             if self._contains_credential(structured) or PRIVATE_KEY.search(json.dumps(structured)):
-                raise TransportError("Structured result contains protected credential material")
+                raise _rejected_result("Structured result contains protected credential material")
             forwarded["structuredContent"] = structured
         # Uncontracted structured data, arbitrary metadata and embedded resources
         # are not forwarded. Text/structured data remain untrusted client input.

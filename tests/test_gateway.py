@@ -81,6 +81,26 @@ def test_exact_persistent_approval_and_protected_callback(tmp_path):
         assert any(event["event_type"] == "call_completed" for event in reopened.events())
 
 
+def test_slow_call_does_not_hold_the_shared_store_write_lock(tmp_path):
+    path = tmp_path / "guard.sqlite"
+    with configured(path) as store:
+        approved = approve(store)
+
+        def invoke(name, args):
+            # Another process (desktop app or second gateway) writes while the call runs.
+            with GuardStore(path) as other:
+                other._db.execute("PRAGMA busy_timeout=100")
+                other.record_event("concurrent_write", "local")
+            return "done"
+
+        assert store.dispatch("local", "search", {"query": "safe"}, invoke,
+                              expected_hash=approved["sha256"],
+                              expected_revision=approved["revision"]) == "done"
+        kinds = [event["event_type"] for event in store.events()]
+        assert kinds.index("call_completed") < kinds.index("concurrent_write")
+        assert store._db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
 def test_catalog_notification_token_changes_only_for_review_or_catalog_state():
     with configured() as store:
         record = store.ingest_catalog('local', [tool()])[0]

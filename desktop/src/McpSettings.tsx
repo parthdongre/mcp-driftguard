@@ -160,12 +160,12 @@ export function ApprovalSettings() {
         <select value={mode ?? ''} disabled={!mode || busy}
           onChange={event => void save(event.target.value as ApprovalMode)}>
           {!mode ? <option value="">Loading…</option> : null}
+          <option value="manual">Require manual approval (default)</option>
           <option value="read_only">Approve declared read-only tools</option>
           <option value="all_first_seen">Approve all compatible first-seen tools</option>
-          <option value="manual">Require manual approval</option>
         </select>
       </label>
-      <p>The policy applies during the next catalog check on managed routes. The all-tools option includes tools that can make changes. Existing approvals remain in effect.</p>
+      <p>Automatic modes apply only to tools in a server's first catalog. Tools a server adds later, and any definition with hidden characters, always go to review. Read-only labels are declared by the server and are not verified. The all-tools option includes tools that can make changes. Existing approvals remain in effect.</p>
       <p>Changed definitions follow the configured decision model or go to review. Blocks and quarantine take precedence.</p>
       {message ? <p role="status">{message}</p> : null}
     </div>

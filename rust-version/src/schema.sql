@@ -78,6 +78,12 @@ CREATE TABLE IF NOT EXISTS helper_changes(
 CREATE TABLE IF NOT EXISTS monitoring_settings(
     id INTEGER PRIMARY KEY CHECK(id=1), settings TEXT NOT NULL
 );
+-- Tools present in a server's first observed catalog. Only these can be approved by an
+-- automatic approval mode; tools a server adds later always need manual review.
+CREATE TABLE IF NOT EXISTS onboarding_tools(
+    server_id TEXT NOT NULL, tool_name TEXT NOT NULL, sha256 TEXT NOT NULL,
+    PRIMARY KEY(server_id, tool_name)
+);
 CREATE TABLE IF NOT EXISTS approval_policy(
     id INTEGER PRIMARY KEY CHECK(id=1), mode TEXT NOT NULL
 );

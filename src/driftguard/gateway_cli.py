@@ -85,6 +85,11 @@ def _serve_connected(config: StdioConfig | HttpConfig, store: GuardStore, gatewa
                 reply = session.error(None, -32700, "Invalid JSON-RPC message")
             if reply is not None:
                 emit(reply)
+            if gateway.closed:
+                # The upstream connection is gone and its approvals were revoked. Exit so
+                # the client reports a stopped server instead of an endless stream of errors.
+                print("DriftGuard gateway lost its upstream connection; exiting.", file=sys.stderr)
+                return 1
     finally:
         notification_stop.set()
         notifier.join(timeout=1)

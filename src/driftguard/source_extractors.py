@@ -19,6 +19,9 @@ def _literal(node: ast.AST | None) -> Any:
         return None
 
 
+MAX_STATIC_STRING = 64 * 1024
+
+
 def _static_value(node: ast.AST | None, bindings: dict[str, Any]) -> Any:
     if node is None:
         return None
@@ -30,7 +33,9 @@ def _static_value(node: ast.AST | None, bindings: dict[str, Any]) -> Any:
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         left = _static_value(node.left, bindings)
         right = _static_value(node.right, bindings)
-        if isinstance(left, str) and isinstance(right, str):
+        # Bound repeated self-concatenation (a = a + a) in untrusted source files.
+        if (isinstance(left, str) and isinstance(right, str)
+                and len(left) + len(right) <= MAX_STATIC_STRING):
             return left + right
     return None
 
