@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 from .diff import build_delta
 from .features import extract_pair_features
@@ -15,6 +16,14 @@ class TemporalConfig:
     cusum_threshold: float = 0.55
     baseline_threshold: float = 0.72
     memory_decay: float = 0.98
+
+    def __post_init__(self) -> None:
+        for name in ("reference_drift", "baseline_threshold", "memory_decay"):
+            value = getattr(self, name)
+            if not isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be finite and in [0, 1]")
+        if not isfinite(self.cusum_threshold) or self.cusum_threshold < 0.0:
+            raise ValueError("cusum_threshold must be finite and nonnegative")
 
 
 def _bounded_structural_risk(features: PairFeatures) -> float:
@@ -67,7 +76,10 @@ class SequentialDriftMonitor:
         self.versions_seen = 1
 
     def observe(self, current: ToolSnapshot) -> TemporalAssessment:
-        if current.server_id != self.approved.server_id or current.tool_name != self.approved.tool_name:
+        if (
+            current.server_id != self.approved.server_id
+            or current.tool_name != self.approved.tool_name
+        ):
             raise ValueError("SequentialDriftMonitor can only track one server/tool lineage")
 
         step_features = extract_pair_features(build_delta(self.previous, current))
@@ -96,10 +108,7 @@ class SequentialDriftMonitor:
 
         alerted = bool(
             reasons
-            and (
-                self.cusum_score >= cfg.cusum_threshold
-                or baseline_risk >= cfg.baseline_threshold
-            )
+            and (self.cusum_score >= cfg.cusum_threshold or baseline_risk >= cfg.baseline_threshold)
         )
         return TemporalAssessment(
             tool_name=current.tool_name,
@@ -114,7 +123,10 @@ class SequentialDriftMonitor:
     def approve(self, snapshot: ToolSnapshot) -> None:
         """Establish a new consent baseline and reset accumulated trust debt."""
 
-        if snapshot.server_id != self.approved.server_id or snapshot.tool_name != self.approved.tool_name:
+        if (
+            snapshot.server_id != self.approved.server_id
+            or snapshot.tool_name != self.approved.tool_name
+        ):
             raise ValueError("Cannot approve a snapshot from another server/tool lineage")
         self.approved = snapshot
         self.previous = snapshot

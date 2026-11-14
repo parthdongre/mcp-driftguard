@@ -1,0 +1,32 @@
+[package]
+name = "driftguard-rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[test]]
+name = "stdio_catalog"
+harness = false
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "process", "rt", "sync", "time"] }
+uuid = { version = "1", features = ["v4"] }
+ureq = { version = "2.12.1", default-features = false, features = ["tls"] }
+url = "2.5.8"
+tempfile = "3"
+toml_edit = "0.22"
+base64 = "0.22.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }

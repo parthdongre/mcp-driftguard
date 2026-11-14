@@ -5,6 +5,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
+from .canonicalize import exact_json, validate_snapshot_integrity
 from .models import StructuralDelta, ToolDelta, ToolSnapshot
 
 SENSITIVE_TERMS = {
@@ -67,7 +68,10 @@ _TOOL_REF_STOPWORDS = {
 
 
 def _input_schema(tool: dict[str, Any]) -> dict[str, Any]:
-    return tool.get("inputSchema") or tool.get("input_schema") or {}
+    schema = tool.get("inputSchema", tool.get("input_schema", {}))
+    if not isinstance(schema, dict):
+        raise TypeError("A tool input schema must be a JSON object")
+    return schema
 
 
 def _properties(tool: dict[str, Any]) -> dict[str, Any]:
@@ -136,7 +140,7 @@ def structural_delta(old: ToolSnapshot, new: ToolSnapshot) -> StructuralDelta:
     old_names = set(old_props)
     new_names = set(new_props)
 
-    type_changes: dict[str, tuple[str | None, str | None]] = {}
+    type_changes: dict[str, tuple[Any, Any]] = {}
     default_changes: dict[str, tuple[Any, Any]] = {}
     enum_changes: list[str] = []
 
@@ -153,10 +157,14 @@ def structural_delta(old: ToolSnapshot, new: ToolSnapshot) -> StructuralDelta:
 
         old_default = old_param.get("default")
         new_default = new_param.get("default")
-        if old_default != new_default:
+        if ("default" in old_param) != ("default" in new_param) or exact_json(
+            old_default
+        ) != exact_json(new_default):
             default_changes[name] = (old_default, new_default)
 
-        if old_param.get("enum") != new_param.get("enum"):
+        if ("enum" in old_param) != ("enum" in new_param) or exact_json(
+            old_param.get("enum")
+        ) != exact_json(new_param.get("enum")):
             enum_changes.append(name)
 
     old_text = _flatten_text(old_tool)
@@ -178,10 +186,15 @@ def structural_delta(old: ToolSnapshot, new: ToolSnapshot) -> StructuralDelta:
 
 
 def build_delta(old: ToolSnapshot, new: ToolSnapshot) -> ToolDelta:
+    validate_snapshot_integrity(old)
+    validate_snapshot_integrity(new)
     old_tool = old.canonical_tool
     new_tool = new.canonical_tool
     changed_fields = sorted(
-        key for key in set(old_tool) | set(new_tool) if old_tool.get(key) != new_tool.get(key)
+        key
+        for key in set(old_tool) | set(new_tool)
+        if (key in old_tool) != (key in new_tool)
+        or exact_json(old_tool.get(key)) != exact_json(new_tool.get(key))
     )
 
     old_serialized = json.dumps(old_tool, sort_keys=True, ensure_ascii=False)

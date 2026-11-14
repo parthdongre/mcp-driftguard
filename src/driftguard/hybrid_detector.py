@@ -8,12 +8,13 @@ from .poisoning import PoisoningDetector, poisoning_security_features
 
 
 def structural_guard_probability(record: PairDatasetRecord) -> float:
-    """Return a high-confidence probability floor for deterministic security invariants.
+    """Return an uncalibrated heuristic score floor for structural risk signals.
 
     The learned detector is best at semantic and lexical generalization, but some tool
-    definition changes are security violations by construction and should not depend on
+    definition changes warrant conservative review and should not depend on
     whether the model has seen a similar positive example. These guards deliberately use
-    conjunctions so legitimate capability expansion remains a hard negative.
+    conjunctions to reduce false positives. The constants are not calibrated
+    probabilities or proof of malicious behavior; legitimate expansion can match.
     """
 
     features = poisoning_security_features(record)
@@ -38,7 +39,7 @@ def structural_guard_probability(record: PairDatasetRecord) -> float:
 
 
 class HybridPoisoningDetector:
-    """Production-facing poisoning detector: learned ranking plus structural invariants."""
+    """Research detector combining learned ranking with uncalibrated rule-score floors."""
 
     def __init__(
         self,

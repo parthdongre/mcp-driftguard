@@ -1,0 +1,22 @@
+.helper-panel { margin-top: 20px; }
+.helper-heading, .helper-toolbar, .helper-items li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+}
+.helper-heading p { margin-top: 5px; }
+.helper-toolbar { justify-content: flex-start; border-top: 1px solid var(--border); }
+.helper-toolbar select { padding: 7px 9px; }
+.helper-toolbar .search-field { flex: 1 1 155px; max-width: 240px; }
+.helper-toolbar input { font-size: 12px; }
+.helper-count, .helper-message { padding: 6px 20px 12px; }
+.helper-items { list-style: none; margin: 0; padding: 0; }
+.helper-items li { border-top: 1px solid var(--border); align-items: flex-start; }
+.helper-items li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.helper-items p, .helper-items code, .helper-status { font-size: 11px; }
+.helper-items code, .helper-status { color: var(--muted); }
+.helper-status { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.helper-more { margin: 12px 20px; }

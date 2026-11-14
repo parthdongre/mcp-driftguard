@@ -1,3 +1,5 @@
+import pytest
+
 from driftguard.mutations import build_low_and_slow_trajectory
 from driftguard.temporal import TemporalConfig
 from driftguard.trajectory_evaluation import (
@@ -87,3 +89,29 @@ def test_aggregate_trajectory_metrics_reports_detection_delay():
     assert metrics.pre_onset_false_alarm_trajectories == 1
     assert metrics.pre_onset_false_alarm_rate == 0.5
     assert metrics.average_detection_delay == 1.0
+
+
+
+def test_trajectory_evaluation_starts_at_explicit_approved_version():
+    trajectory = build_low_and_slow_trajectory(
+        repository_id="owner/repo", server_id="server-1", tool=tool(),
+    )
+    trajectory.approved_version_id = trajectory.steps[2].version_id
+    run = evaluate_trajectory(
+        trajectory, config=TemporalConfig(
+            reference_drift=0.0, cusum_threshold=0.0,
+            baseline_threshold=1.0, memory_decay=1.0,
+        ),
+    )
+    assert run.positive_onset_step == 1
+    assert run.first_alert_step == 1
+    assert run.false_alarm is False
+
+
+def test_trajectory_evaluation_rejects_missing_approval():
+    trajectory = build_low_and_slow_trajectory(
+        repository_id="owner/repo", server_id="server-1", tool=tool(),
+    )
+    trajectory.approved_version_id = "missing"
+    with pytest.raises(ValueError, match="approved version"):
+        evaluate_trajectory(trajectory)

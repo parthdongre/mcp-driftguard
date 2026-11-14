@@ -1,0 +1,14 @@
+{
+  "production_source": "/workspace/scratch/00f4e14529cb/mcp-driftguard/desktop/src-tauri/src/lib.rs",
+  "production_sha256": "a616aa2d4045db37859074ac57a6ebbb0f60126c8a41f02cec663cf90a6c0aea",
+  "headless_source": "/workspace/scratch/00f4e14529cb/native-bridge-headless/src/lib.rs",
+  "headless_sha256": "29f6ac32fc546f6998466483d203c57283907232b3af7c6555ea6922b4e887e9",
+  "transformation": "Remove only use tauri::Manager and the Tauri command/window setup block; process helpers and all tests copied unchanged.",
+  "scope": "Headless process/bridge validation, not native GUI or Tauri application validation.",
+  "unicode_roundtrip": "Read r\u00e9sum\u00e9 notes \u2014 \u6d4b\u8bd5 \ud83c\udf19 asserted through the fixed isolated Python module. PYTHONIOENCODING=ascii was inherited externally but is deliberately ignored by Python -I; this is an isolated-module Unicode roundtrip test, not a forced-codec subprocess test.",
+  "reproduction_command": "python desktop/scripts/check-native.py --headless",
+  "required_python_environment": true,
+  "tested": 11,
+  "passed": 11,
+  "root_script_dependency_policy": "Every resolved headless dependency version/source/checksum must match the production Cargo.lock before running tests."
+}

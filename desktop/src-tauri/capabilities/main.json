@@ -1,0 +1,6 @@
+{
+  "identifier": "main-review",
+  "description": "Only the local main window may call the allowlisted review bridge.",
+  "windows": ["main"],
+  "permissions": ["allow-driftguard-request"]
+}

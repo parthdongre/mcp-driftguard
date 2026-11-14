@@ -63,13 +63,21 @@ class EmbeddingCache:
 class SentenceTransformerProvider:
     """Lazy adapter for sentence-transformers, kept outside the core dependency set."""
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> None:
+    def __init__(
+        self,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        *,
+        revision: str | None = None,
+        local_files_only: bool = False,
+    ) -> None:
         self.model_name = model_name
+        self.revision = revision
+        self.local_files_only = local_files_only
         self._model = None
 
     @property
     def model_id(self) -> str:
-        return self.model_name
+        return f"{self.model_name}@{self.revision}" if self.revision else self.model_name
 
     def _load(self):
         if self._model is None:
@@ -80,7 +88,9 @@ class SentenceTransformerProvider:
                     "sentence-transformers is required for semantic embeddings; "
                     "install mcp-driftguard[ml]"
                 ) from exc
-            self._model = SentenceTransformer(self.model_name)
+            self._model = SentenceTransformer(
+                self.model_name, revision=self.revision, local_files_only=self.local_files_only,
+            )
         return self._model
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:

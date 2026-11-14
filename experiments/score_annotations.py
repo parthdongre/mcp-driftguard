@@ -65,7 +65,7 @@ def main() -> None:
         assert args.reviewed_output is not None
         candidates = read_candidate_jsonl(args.candidates)
         adjudications = read_adjudications_jsonl(args.adjudications)
-        reviewed = adjudications_to_pair_records(candidates, adjudications)
+        reviewed = adjudications_to_pair_records(candidates, adjudications, annotations=[*left, *right])
         write_jsonl(args.reviewed_output, reviewed)
         payload["reviewed_dataset"] = {
             "candidates": str(args.candidates),

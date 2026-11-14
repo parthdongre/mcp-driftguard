@@ -1,0 +1,21 @@
+.sentinel { margin-top: 20px; overflow: hidden; }
+.sentinel-header,.sentinel-toolbar,.sentinel-evidence { padding: 16px 20px; }
+.sentinel-header,.sentinel-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.sentinel-header p { margin-top: 5px; }
+.sentinel-toolbar { justify-content: flex-start; border-block: 1px solid var(--border); }
+.sentinel-toolbar select { max-width: 240px; }
+.sentinel-calls { list-style: none; margin: 0; padding: 0; max-height: 335px; overflow: auto; }
+.sentinel-call { border: 0; border-radius: 0; width: 100%; padding: 10px 20px; background: transparent; text-align: left; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.sentinel-call:hover,.sentinel-call[aria-pressed=true] { background: var(--surface-hover); }
+.sentinel-call small { display: block; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
+.sentinel-state { font-size: 11px; text-transform: capitalize; border-radius: 20px; padding: 3px 9px; color: var(--muted); }
+.sentinel-state[data-state=active] { color: var(--accent); background: var(--accent-bg); }
+.sentinel-state[data-state=completed] { color: var(--green); background: var(--green-bg); }
+.sentinel-state[data-state=blocked],.sentinel-state[data-state=failed] { color: var(--red); background: var(--red-bg); }
+.sentinel-state[data-state=unconfirmed] { color: var(--amber); background: var(--amber-bg); }
+.sentinel-evidence { display: grid; gap: 8px; border-top: 1px solid var(--border); }
+.sentinel-evidence pre { max-height: 270px; overflow: auto; }
+.sentinel-message,.sentinel-more { margin: 12px 20px; }
+.graph-node[data-tone=active] .graph-node-icon { animation: sentinel-pulse 1.8s ease-in-out infinite; }
+.graph-node[data-tone=live] .graph-node-icon,.graph-node[data-tone=completed] .graph-node-icon { color: var(--green); background: var(--green-bg); }
+@keyframes sentinel-pulse { 50% { box-shadow: 0 0 0 5px transparent; } from,to { box-shadow: 0 0 0 1px var(--green); } }
