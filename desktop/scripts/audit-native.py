@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,10 +14,21 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(["cargo", "audit", "--file",
                              str(ROOT / "desktop/src-tauri/Cargo.lock"), "--json"],
-                            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            timeout=300, check=False)
-    audit = json.loads(result.stdout)
+                            cwd=ROOT, capture_output=True, timeout=300, check=False)
     (output / "rustsec-raw.json").write_bytes(result.stdout)
+    stderr = result.stderr.decode("utf-8", errors="replace").strip()
+    # cargo audit exits 1 when it finds vulnerabilities; anything else is a tool failure.
+    if result.returncode not in {0, 1}:
+        print(f"cargo audit failed with exit status {result.returncode}: {stderr}", file=sys.stderr)
+        return 1
+    try:
+        audit = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        print(f"cargo audit did not produce valid JSON ({error}): {stderr}", file=sys.stderr)
+        return 1
+    if not isinstance(audit, dict):
+        print("cargo audit JSON output was not an object", file=sys.stderr)
+        return 1
     variant = (ROOT / "desktop/src-tauri/third_party/glib/src/variant_iter.rs").read_text()
     backport = ("let mut p: *mut libc::c_char = std::ptr::null_mut();" in variant
                 and "\n                &mut p," in variant

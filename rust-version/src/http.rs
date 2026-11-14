@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 use url::Url;
 
+use crate::discovery::identity_kdf;
 use crate::review::ReviewError;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -155,11 +156,11 @@ impl HttpPeer {
         )?;
         let tools = limit_field(config, "max_tools", 1000, 1, 10_000)?;
         let pages = limit_field(config, "max_pages", 100, 1, 1000)?;
-        let digest = token
-            .as_ref()
-            .map(|token| format!("{:x}", Sha256::digest(token.as_bytes())));
+        let token_kdf = token
+            .as_deref()
+            .map(|token| identity_kdf(source, original_endpoint.as_bytes(), token));
         let binding =
-            json!({"endpoint": original_endpoint, "protocol": version, "token_sha256": digest});
+            json!({"endpoint": original_endpoint, "protocol": version, "token_kdf": token_kdf});
         let identity = format!("{:x}", Sha256::digest(serde_json::to_vec(&binding)?));
         Ok(Self {
             source: source.to_owned(),
@@ -831,6 +832,32 @@ mod tests {
     use serde_json::json;
     use std::io::Write;
     use std::net::TcpListener;
+
+    #[test]
+    fn identity_binds_a_salted_token_kdf_not_a_bare_token_hash() {
+        let name = "DRIFTGUARD_TEST_HTTP_IDENTITY_TOKEN";
+        std::env::set_var(name, "hunter22");
+        let url = "http://127.0.0.1:9/mcp";
+        let open = |id: &str| {
+            HttpPeer::open(&json!({
+                "server_id": id, "transport": "http", "url": url,
+                "allow_insecure_loopback": true, "auth_token_env": name
+            }))
+            .unwrap()
+        };
+        let peer = open("fixture");
+        let binding = json!({"endpoint": url, "protocol": LEGACY,
+            "token_kdf": identity_kdf("fixture", url.as_bytes(), "hunter22")});
+        assert_eq!(
+            peer.identity(),
+            format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&binding).unwrap())
+            )
+        );
+        assert_ne!(open("other").identity(), peer.identity());
+        std::env::remove_var(name);
+    }
 
     #[test]
     fn requires_https_or_explicit_literal_loopback() {

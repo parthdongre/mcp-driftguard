@@ -200,10 +200,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action", choices=("set", "delete"))
     parser.add_argument("--server-id", required=True)
     parser.add_argument("--url", required=True)
+    parser.add_argument("--allow-insecure-loopback", action="store_true",
+                        help="accept a plain http:// literal loopback endpoint, matching a profile "
+                             "that sets allow_insecure_loopback")
     args = parser.parse_args(argv)
     try:
         from .gateway_http import HttpConfig
-        HttpConfig(args.server_id, args.url)
+        HttpConfig(args.server_id, args.url, allow_insecure_loopback=args.allow_insecure_loopback)
         secret = getpass.getpass("Bearer credential: ") if args.action == "set" else None
         write(args.server_id, args.url, secret)
         print(json.dumps({"ok": True, "stored": args.action == "set"}))

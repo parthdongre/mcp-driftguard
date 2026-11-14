@@ -34,13 +34,6 @@ main:focus{outline:none}
 
 .connection-setup { padding: 24px; margin-bottom: 24px; }
 .connection-setup .section-heading { padding: 0 0 20px; }
-.connection-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
-.connection-fields .form-label:has(textarea) { grid-column: 1 / -1; }
-.connection-fields textarea { resize: vertical; font-family: var(--mono, monospace); }
-.connection-output { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--border); }
-.connection-output h3 { margin: 22px 0 10px; }
-.connection-output pre { max-height: 260px; overflow: auto; padding: 16px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 1100px) { .connection-fields { grid-template-columns: 1fr; } }
 .harness-scope { margin-top: 16px; line-height: 1.7; }
 .observed-connections { margin-top: 28px; }
 .observed-connections .managed-harness-list { margin-top: 12px; }
@@ -132,10 +125,7 @@ p { line-height: 1.5; }
 .inline-detail ul { padding-left: 18px; margin: 0; line-height: 1.5; }
 .fetch-progress { margin: 6px 0 10px; padding: 9px 11px; border-radius: 7px; background: var(--accent-bg); color: var(--accent); font-size: 12px; }
 .fetch-progress span { display: block; color: var(--muted); margin-top: 3px; }
-.catalog-search { margin: 12px 0 8px; }
 .catalog-count { padding-bottom: 6px; }
-.hosted-apps .disclosure-body { max-width: 100%; }
-.hosted-apps .disclosure-body p { max-width: 78ch; white-space: pre-wrap; }
 
 .live-steps { display: grid; gap: .6rem; padding-left: 1.3rem; margin: 1rem 0 1.4rem; color: var(--muted); }
 .live-steps .complete { color: var(--green); }

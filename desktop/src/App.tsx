@@ -369,7 +369,13 @@ export default function App() {
         : action === 'release_quarantine' ? 'Quarantine released. This version needs review.'
           : `${demo ? 'Demo decision' : 'Decision'} saved: ${status}.`);
       await reload();
-    } catch (failure) { setError(failure instanceof Error ? failure.message : 'The decision could not be saved.'); }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The decision could not be saved.');
+      // A rejected (e.g. stale) or timed-out decision may leave the shown evidence outdated.
+      // Close the confirmation and re-read current evidence; never replay the decision.
+      setApproval(null);
+      void reload(true);
+    }
     finally { setBusy(false); }
   };
   const startDemo = (destination: Page = 'overview') => { setDemo(new DemoWorkspace()); setSelectedKey(''); setActivityTool(null); setCatalogFilters(emptyCatalogFilters); setReviewView('definition'); setPage(destination); setNotice('Guided demo opened. All observations and decisions are isolated fixtures.'); };

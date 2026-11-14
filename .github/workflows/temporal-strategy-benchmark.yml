@@ -13,6 +13,9 @@ on:
       - ".github/workflows/temporal-strategy-benchmark.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest

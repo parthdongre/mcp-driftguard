@@ -11,6 +11,9 @@ on:
       - "experiments/build_public_corpus.py"
       - ".github/workflows/expanded-corpus-pilot.yml"
 
+permissions:
+  contents: read
+
 jobs:
   pilot:
     runs-on: ubuntu-latest

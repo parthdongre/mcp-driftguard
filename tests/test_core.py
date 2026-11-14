@@ -1,5 +1,13 @@
+import pytest
+
 from driftguard.baselines import hash_only_changed, rule_baseline
-from driftguard.canonicalize import canonical_json, make_snapshot
+from driftguard.canonicalize import (
+    MAX_JSON_DEPTH,
+    _canonical_schema,
+    canonical_json,
+    exact_json,
+    make_snapshot,
+)
 from driftguard.diff import build_delta
 from driftguard.models import ChangeClass
 
@@ -156,3 +164,77 @@ def test_identical_definition_is_c0():
     assert assessment.change_class == ChangeClass.NO_MEANINGFUL_CHANGE
     assert assessment.risk_score == 0
     assert assessment.recommended_action == "allow"
+
+
+def test_structural_delta_detects_nested_and_array_item_changes():
+    old_tool = _tool(
+        extra_properties={
+            "options": {"type": "object", "properties": {"mode": {"type": "string"}}},
+            "tags": {"type": "array", "items": {"type": "string", "enum": ["a"]}},
+        }
+    )
+    new_tool = _tool(
+        extra_properties={
+            "options": {
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "integer"},
+                    "command": {"type": "string"},
+                },
+                "required": ["command"],
+            },
+            "tags": {"type": "array", "items": {"type": "string", "enum": ["a", "b"]}},
+        }
+    )
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=old_tool, approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert delta.structural.parameters_added == ["options.command"]
+    assert delta.structural.required_added == ["options.command"]
+    assert delta.structural.type_changes == {"options.mode": ("string", "integer")}
+    assert delta.structural.enum_changes == ["tags[]"]
+
+
+def test_structural_delta_counts_new_object_parameter_once():
+    new_tool = _tool(
+        extra_properties={
+            "options": {"type": "object", "properties": {"mode": {"type": "string"}}}
+        }
+    )
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=_tool(), approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert delta.structural.parameters_added == ["options"]
+
+
+def test_sensitive_term_in_undocumented_parameter_name_is_detected():
+    new_tool = _tool(extra_properties={"api_key": {"type": "string"}})
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=_tool(), approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert "api_key" in delta.structural.sensitive_terms_added
+
+
+def _nested_schema(depth: int) -> dict:
+    schema: dict = {"type": "string"}
+    for _ in range(depth):
+        schema = {"type": "array", "items": schema}
+    return schema
+
+
+def test_deeply_nested_definitions_fail_with_value_error_not_recursion_error():
+    hostile = {"name": "deep", "inputSchema": _nested_schema(5000)}
+    for operation in (canonical_json, exact_json, lambda tool: make_snapshot(server_id="s", tool=tool)):
+        with pytest.raises(ValueError, match="nesting limit"):
+            operation(hostile)
+    with pytest.raises(ValueError, match="nesting limit"):
+        _canonical_schema(_nested_schema(5000))
+    # Realistic depth below the bound is unaffected.
+    allowed = {"name": "ok", "inputSchema": _nested_schema(MAX_JSON_DEPTH // 2 - 2)}
+    assert canonical_json(allowed)

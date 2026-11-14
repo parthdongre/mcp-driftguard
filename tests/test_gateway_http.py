@@ -1,6 +1,7 @@
 """Actual loopback HTTP/SSE exchanges; no external target server is executed."""
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -210,6 +211,50 @@ def test_token_rotation_invalidates_live_identity(monkeypatch):
         assert len(state["requests"]) == count
 
 
+def test_identity_binds_token_through_salted_kdf_not_a_bare_hash(monkeypatch):
+    token = "authored-fixture-token"
+    monkeypatch.setenv("FIXTURE_HTTP_TOKEN", token)
+    profile = HttpConfig("fixture", "https://example.com/mcp", auth_token_env="FIXTURE_HTTP_TOKEN")
+    unsalted_binding = {"endpoint": profile.url, "protocol": profile.protocol_version,
+                        "token_sha256": hashlib.sha256(token.encode()).hexdigest()}
+    unsalted = hashlib.sha256(json.dumps(unsalted_binding, sort_keys=True).encode()).hexdigest()
+    salt = b"driftguard-identity-v1\0fixture\0https://example.com/mcp"
+    derived = hashlib.pbkdf2_hmac("sha256", token.encode(), salt, 100_000).hex()
+    binding = {"endpoint": profile.url, "protocol": profile.protocol_version, "token_kdf": derived}
+    identity = profile.identity()
+    assert identity.fingerprint != unsalted
+    assert identity.fingerprint == hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
+    assert hashlib.sha256(token.encode()).hexdigest() not in json.dumps(binding)
+    assert profile.identity() == identity  # Stable (and memoized) across calls.
+    # Domain separation: the same token on another server or endpoint derives differently.
+    other = HttpConfig("other", "https://example.com/mcp", auth_token_env="FIXTURE_HTTP_TOKEN")
+    moved = HttpConfig("fixture", "https://example.com/other", auth_token_env="FIXTURE_HTTP_TOKEN")
+    assert len({identity.fingerprint, other.identity().fingerprint, moved.identity().fingerprint}) == 3
+
+
+def test_exchange_sends_exactly_the_token_whose_identity_was_verified(monkeypatch):
+    # The first three reads (peer setup, request check, exchange check) return the
+    # reviewed token; a later read would see a rotated one. Previously the exchange
+    # read the credential a second time and sent the unreviewed rotated value.
+    reads = []
+
+    def rotating_token(self):
+        reads.append(None)
+        return "authored-first-token" if len(reads) <= 3 else "authored-rotated-token"
+
+    monkeypatch.setattr(HttpConfig, "token", rotating_token)
+    with server() as (url, state):
+        peer = HttpPeer(config(url, protocol_version=MODERN))
+        peer.request("server/discover")
+        sent = [headers.get("Authorization") for _, headers in state["requests"]]
+        assert sent == ["Bearer authored-first-token"]
+        assert len(reads) == 3
+        # The next exchange reads the rotated token once, fails closed, and sends nothing.
+        with pytest.raises(TransportError):
+            peer.request("server/discover")
+        assert len(state["requests"]) == 1
+
+
 def test_loader_preserves_explicit_transport_and_rejects_unknown_keys(tmp_path):
     path = tmp_path / "profile.json"
     path.write_text(json.dumps({"server_id": "fixture", "transport": "http",
@@ -271,3 +316,30 @@ def test_literal_schema_data_is_not_interpreted_as_routing_and_sentinels_are_esc
                           "default": {"x-mcp-header": "literal-data"}}}}) == []
     assert encode_header("=?base64?literal?=") != "=?base64?literal?="
     assert encode_header(" plain ").startswith("=?base64?")
+
+
+@pytest.mark.parametrize(("url", "expected"), [
+    ("http://[::1]/mcp", ("::1", 80)),
+    ("http://127.0.0.1/mcp", ("127.0.0.1", 80)),
+    ("http://[::1]:8123/mcp", ("::1", 8123)),
+])
+def test_default_port_is_explicit_for_bracketless_ipv6_hosts(monkeypatch, url, expected):
+    from driftguard import gateway_http
+
+    seen = []
+
+    class Recorder:
+        def __init__(self, host, port, **_):
+            seen.append((host, port))
+
+        def connect(self):
+            raise OSError("fixture does not connect")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gateway_http.http.client, "HTTPConnection", Recorder)
+    peer = HttpPeer(config(url, timeout_seconds=2))
+    with pytest.raises(TransportError):
+        peer.request("ping")
+    assert seen == [expected]

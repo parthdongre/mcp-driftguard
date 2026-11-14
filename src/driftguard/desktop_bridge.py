@@ -156,7 +156,12 @@ def handle_request(store: GuardStore, request: dict[str, Any], *, db_path: Path 
         from .credentials import CredentialError, write
         from .gateway_http import HttpConfig
         endpoint = _text(request, "url", maximum=4096)
-        HttpConfig(server_id, endpoint)  # Native credential setup requires HTTPS.
+        # HTTPS unless the caller explicitly opts in for a literal loopback
+        # endpoint, mirroring the profile's allow_insecure_loopback setting.
+        insecure_loopback = request.get("allow_insecure_loopback", False)
+        if type(insecure_loopback) is not bool:
+            raise ValueError("allow_insecure_loopback must be a boolean")
+        HttpConfig(server_id, endpoint, allow_insecure_loopback=insecure_loopback)
         secret = _text(request, "secret", maximum=2048) if action == "store_http_credential" else None
         try:
             write(server_id, endpoint, secret)

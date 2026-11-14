@@ -5,6 +5,7 @@ are rejected rather than transparently bypassing the approval boundary.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import math
@@ -36,6 +37,27 @@ META_PREFIX = "io.modelcontextprotocol/"
 SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT",
             "WINDIR", "TEMP", "TMP", "LANG", "LC_ALL")
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}\Z")
+# Any PEM/PGP private key armor: PKCS#8 (plain and ENCRYPTED), RSA, EC, DSA, OPENSSH, PGP.
+PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY")
+
+
+IDENTITY_KDF_ITERATIONS = 100_000
+
+
+@functools.lru_cache(maxsize=32)
+def _identity_kdf(salt: bytes, secret: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", secret.encode(), salt, IDENTITY_KDF_ITERATIONS).hex()
+
+
+def identity_secret(server_id: str, scope: bytes, secret: str) -> str:
+    """Slow, domain-separated derivation for credentials bound into an identity.
+
+    Fingerprints are printed and stored, so they must not permit cheap offline
+    guessing of low-entropy credentials. Memoized because identity is verified
+    on every exchange.
+    """
+    salt = b"driftguard-identity-v1\0" + server_id.encode() + b"\0" + scope
+    return _identity_kdf(salt, secret)
 
 
 class TransportError(RuntimeError):
@@ -200,7 +222,10 @@ class StdioConfig:
             files[str(candidate)] = digest.hexdigest()
         binding = {"argv": argv, "cwd": str(Path(self.cwd).resolve()),
                    "protocol": self.protocol_version, "files": files,
-                   "environment": self.environment()}
+                   "environment": {
+                       name: value if name in SAFE_ENV
+                       else identity_secret(self.server_id, b"env\0" + name.encode(), value)
+                       for name, value in self.environment().items()}}
         fingerprint = hashlib.sha256(json.dumps(binding, sort_keys=True,
                                                 separators=(",", ":")).encode()).hexdigest()
         # Only a digest is retained: no argv, environment values or secrets in events.
@@ -421,6 +446,14 @@ class StdioPeer:
                 else:
                     self.process.kill()
                 self.process.wait(timeout=1)
+        else:
+            if os.name == "posix":
+                # The direct child exited, but descendants it started can still
+                # hold the gateway-created process group. Terminate them too.
+                try:
+                    os.killpg(self.process.pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
         if self.process.stdout is not None:
             self.process.stdout.close()
 
@@ -611,16 +644,14 @@ class ProtectedGateway:
         encoded = json.dumps(clean, ensure_ascii=False)
         if self._contains_credential("".join(item["text"] for item in clean)):
             raise TransportError("Tool result contains a configured credential")
-        if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", encoded):
+        if PRIVATE_KEY.search(encoded):
             raise TransportError("Tool result contains private key material")
         forwarded = {"content": clean, "isError": result.get("isError", False)}
         if output_schema is not None and (not forwarded["isError"] or "structuredContent" in result):
             structured = result.get("structuredContent")
             if not isinstance(structured, dict) or not valid_arguments(output_schema, structured):
                 raise TransportError("Structured result violates the approved outputSchema")
-            if self._contains_credential(structured) or re.search(
-                r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", json.dumps(structured)
-            ):
+            if self._contains_credential(structured) or PRIVATE_KEY.search(json.dumps(structured)):
                 raise TransportError("Structured result contains protected credential material")
             forwarded["structuredContent"] = structured
         # Uncontracted structured data, arbitrary metadata and embedded resources

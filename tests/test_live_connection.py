@@ -248,7 +248,13 @@ def test_mcp_data_token_cannot_approve_or_use_controller(app):
     with socket.create_connection(('127.0.0.1', endpoint['port']), timeout=2) as peer:
         peer.sendall(json.dumps({'kind': 'control', 'token': endpoint['token']}).encode() + b'\n')
         peer.sendall(b'{"action":"verify"}\n')
-        assert not peer.recv(4096)
+        # The service closes the rejected connection with the second line still
+        # unread. POSIX usually reports EOF; Windows reports a reset. Either way
+        # no reply was sent.
+        try:
+            assert not peer.recv(4096)
+        except (ConnectionAbortedError, ConnectionResetError):
+            pass
     assert not live.status(app)['verified']
 
 
@@ -387,3 +393,83 @@ def test_windows_cancel_targets_only_its_spawned_process_tree(monkeypatch):
         live._stop_task(process)
     assert observed[0][0].endswith('taskkill.exe')
     assert observed[0][1:] == ['/PID', '12345', '/T', '/F']
+
+
+def _managed_target(tmp_path, monkeypatch, name='settings.json'):
+    from driftguard import managed_harnesses as managed
+
+    target = tmp_path / 'client' / name
+    monkeypatch.setattr(managed, 'config_path', lambda selected: target)
+    return managed, target
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX permission bits')
+def test_client_settings_keep_their_permissions(app, tmp_path, monkeypatch):
+    managed, target = _managed_target(tmp_path, monkeypatch)
+    target.parent.mkdir()
+    target.write_bytes(b'{"setting": 1}\n')
+    os.chmod(target, 0o644)
+    managed.install(app, 'cursor')
+    assert target.stat().st_mode & 0o777 == 0o644
+    assert managed.restore(app, 'cursor')
+    assert target.stat().st_mode & 0o777 == 0o644
+    codex = live.codex_config()
+    codex.parent.mkdir(parents=True, exist_ok=True)
+    codex.write_bytes(b'model = "chosen"\n')
+    os.chmod(codex, 0o640)
+    live.install_config(app)
+    assert codex.stat().st_mode & 0o777 == 0o640
+    assert live.restore_config(app)
+    assert codex.stat().st_mode & 0o777 == 0o640
+
+
+def test_restore_falls_back_when_verbatim_insertion_no_longer_parses(app, tmp_path, monkeypatch):
+    managed, target = _managed_target(tmp_path, monkeypatch)
+    managed.install(app, 'cursor')  # Absent file: the insertion has no leading comma.
+    installed = target.read_text()
+    target.write_text(installed.rstrip()[:-1] + ',\n  "added": 1\n}\n')
+    assert managed.restore(app, 'cursor')
+    assert json.loads(target.read_bytes()) == {'added': 1, 'mcpServers': {}}
+
+
+def test_opencode_v2_timeout_only_section_uses_servers(app, tmp_path, monkeypatch):
+    managed, target = _managed_target(tmp_path, monkeypatch, 'opencode.jsonc')
+    target.parent.mkdir()
+    target.write_bytes(b'{"mcp": {"timeout": {"startup": 45000}}}\n')
+    managed.install(app, 'opencode')
+    mcp = json.loads(target.read_bytes())['mcp']
+    assert mcp['timeout'] == {'startup': 45000} and live.SERVER_ID in mcp['servers']
+
+
+def test_codex_install_write_failure_leaves_no_stale_manifest(app, monkeypatch):
+    original = live.save_private
+
+    def failing(path, data, **kwargs):
+        if path == live.codex_config():
+            raise OSError('disk full')
+        return original(path, data, **kwargs)
+
+    monkeypatch.setattr(live, 'save_private', failing)
+    with pytest.raises(OSError):
+        live.install_config(app)
+    assert not live.paths(app)['manifest'].exists()
+
+
+def test_malformed_tool_arguments_get_a_reply_not_a_dropped_session(app):
+    assert send(app, 'live_connect')['ok']
+    endpoint = live.read_private(live.paths(app)['client'])
+    with socket.create_connection(('127.0.0.1', endpoint['port']), timeout=4) as peer:
+        stream = peer.makefile('rwb')
+        frames = [{'kind': 'mcp', 'token': endpoint['token'], 'trace_tag': 'probe'},
+                  {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
+                      'protocolVersion': '2025-11-25', 'capabilities': {},
+                      'clientInfo': {'name': 'test', 'version': '1'}}},
+                  {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+                  {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                   'params': {'name': 'read_text_file', 'arguments': []}}]
+        for frame in frames:
+            stream.write(json.dumps(frame).encode() + b'\n')
+        stream.flush()
+        assert json.loads(stream.readline())['id'] == 1
+        reply = json.loads(stream.readline())
+        assert reply['id'] == 2 and 'error' in reply

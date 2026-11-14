@@ -36,6 +36,7 @@ from .gateway_transport import (
     _pairs_unique,
     decode_message,
     encode_message,
+    identity_secret,
     protocol_meta,
 )
 
@@ -107,9 +108,12 @@ class HttpConfig:
         return token
 
     def identity(self) -> ServerIdentity:
-        token = self.token()
+        return self.identity_for_token(self.token())
+
+    def identity_for_token(self, token: str | None) -> ServerIdentity:
+        """Identity bound to one already-read credential value."""
         binding = {"endpoint": self.url, "protocol": self.protocol_version,
-                   "token_sha256": hashlib.sha256(token.encode()).hexdigest() if token else None}
+                   "token_kdf": identity_secret(self.server_id, self.url.encode(), token) if token else None}
         fingerprint = hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
         return ServerIdentity(self.server_id, fingerprint, "http-configured-user",
                               protocol_version=self.protocol_version, display_name=self.server_id)
@@ -260,12 +264,15 @@ class HttpPeer:
                 raise TransportError("HTTP routing headers exceed their total byte limit")
         return headers
 
-    def verify_identity(self) -> None:
+    def verify_identity(self) -> str | None:
+        """Read the credential once, verify it, and return that same value for dispatch."""
         if self._closed.is_set():
             raise TransportError("HTTP session is closed; reconnect requires review")
-        if self.config.identity().fingerprint != self._config_identity.fingerprint:
+        token = self.config.token()
+        if self.config.identity_for_token(token).fingerprint != self._config_identity.fingerprint:
             self.close()
             raise TransportError("HTTP authorization configuration changed; reconnect requires review")
+        return token
 
     def _accept(self, message: dict[str, Any], request_id: int) -> dict[str, Any] | None:
         if "method" in message:
@@ -336,15 +343,19 @@ class HttpPeer:
                 data.append(line[5:].lstrip(b" ").rstrip(b"\r\n"))
 
     def _exchange(self, method: str, payload: bytes, request_id: int | None) -> dict[str, Any] | None:
-        self.verify_identity()
+        # The token sent below is exactly the value whose identity was verified;
+        # a credential rotation between two reads cannot slip through.
+        token = self.verify_identity()
         parsed = urlsplit(self.config.url)
+        # Always pass an explicit port: with port=None, http.client re-parses the
+        # bracketless IPv6 hostname ("::1") and treats its last group as a port.
         if parsed.scheme == "https":
             connection = http.client.HTTPSConnection(
-                parsed.hostname, parsed.port, timeout=self.config.timeout_seconds,
+                parsed.hostname, parsed.port or 443, timeout=self.config.timeout_seconds,
                 context=ssl.create_default_context())
         else:
             connection = http.client.HTTPConnection(
-                parsed.hostname, parsed.port, timeout=self.config.timeout_seconds)
+                parsed.hostname, parsed.port or 80, timeout=self.config.timeout_seconds)
         self._connection = connection
         try:
             if self._closed.is_set():
@@ -353,7 +364,6 @@ class HttpPeer:
                        "Accept": "application/json, text/event-stream",
                        "MCP-Protocol-Version": self._negotiated_version}
             headers.update(self._routing_headers(method, payload))
-            token = self.config.token()
             if token:
                 headers["Authorization"] = "Bearer " + token
             if self._session_id:

@@ -27,6 +27,9 @@ _SCHEMA_FIELDS = {
     "contentSchema",
 }
 _SCHEMA_ARRAY_FIELDS = {"allOf", "anyOf", "oneOf", "prefixItems"}
+# Well above GuardPolicy's default catalog depth (48) and well below the
+# interpreter recursion limit used by deepcopy/json in the recursive passes.
+MAX_JSON_DEPTH = 128
 
 
 def _normalize_text(value: str) -> str:
@@ -40,19 +43,24 @@ def _stable_sort_key(value: Any) -> str:
 
 
 def _validate_json(value: Any) -> None:
-    if value is None or isinstance(value, (str, bool, int)):
-        return
-    if isinstance(value, float) and math.isfinite(value):
-        return
-    if isinstance(value, list):
-        for item in value:
-            _validate_json(item)
-        return
-    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
-        for item in value.values():
-            _validate_json(item)
-        return
-    raise ValueError("Tool definitions must contain only finite JSON values and string keys")
+    # Iterative with an explicit depth bound so hostile nesting fails with a
+    # ValueError instead of RecursionError (here or in later recursive passes).
+    stack = [(value, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > MAX_JSON_DEPTH:
+            raise ValueError("Tool definitions exceed the JSON nesting limit")
+        if node is None or isinstance(node, (str, bool, int)):
+            continue
+        if isinstance(node, float) and math.isfinite(node):
+            continue
+        if isinstance(node, list):
+            stack.extend((item, depth + 1) for item in node)
+            continue
+        if isinstance(node, dict) and all(isinstance(key, str) for key in node):
+            stack.extend((item, depth + 1) for item in node.values())
+            continue
+        raise ValueError("Tool definitions must contain only finite JSON values and string keys")
 
 
 def exact_json(value: Any) -> str:
@@ -68,28 +76,31 @@ def exact_hash(value: Any) -> str:
     return hashlib.sha256(exact_json(value).encode("utf-8")).hexdigest()
 
 
-def _canonical_schema(value: Any) -> Any:
+def _canonical_schema(value: Any, depth: int = 0) -> Any:
+    if depth > MAX_JSON_DEPTH:
+        raise ValueError("Tool definitions exceed the JSON nesting limit")
     if not isinstance(value, dict):
         return deepcopy(value)
+    depth += 1
     result = {}
     for key, child in sorted(value.items()):
         if key in _TEXT_FIELDS and isinstance(child, str):
             result[key] = _normalize_text(child)
         elif key in _SCHEMA_MAP_FIELDS and isinstance(child, dict):
             result[key] = {
-                name: _canonical_schema(schema) for name, schema in sorted(child.items())
+                name: _canonical_schema(schema, depth) for name, schema in sorted(child.items())
             }
         elif key in _SCHEMA_FIELDS:
             result[key] = (
-                [_canonical_schema(item) for item in child]
+                [_canonical_schema(item, depth) for item in child]
                 if isinstance(child, list)
-                else _canonical_schema(child)
+                else _canonical_schema(child, depth)
             )
         elif key in _SCHEMA_ARRAY_FIELDS and isinstance(child, list):
-            result[key] = [_canonical_schema(item) for item in child]
+            result[key] = [_canonical_schema(item, depth) for item in child]
         elif key == "dependencies" and isinstance(child, dict):
             result[key] = {
-                name: (_canonical_schema(item) if isinstance(item, dict) else deepcopy(item))
+                name: (_canonical_schema(item, depth) if isinstance(item, dict) else deepcopy(item))
                 for name, item in sorted(child.items())
             }
         elif key in {"required", "enum"} and isinstance(child, list):

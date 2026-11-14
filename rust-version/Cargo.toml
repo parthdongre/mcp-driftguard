@@ -21,6 +21,7 @@ url = "2.5.8"
 tempfile = "3"
 toml_edit = "0.22"
 base64 = "0.22.1"
+pbkdf2 = { version = "0.12", features = ["hmac"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -30,3 +31,13 @@ security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
+# Identity fingerprints use PBKDF2; keep debug builds and tests fast.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.hmac]
+opt-level = 3
+
+[profile.dev.package.pbkdf2]
+opt-level = 3

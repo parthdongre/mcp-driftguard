@@ -67,7 +67,7 @@ def _python_discovery(path: Path, text: str, root: Path) -> SourceDiscovery | No
         return None
     try:
         tools = PythonDecoratorToolExtractor().extract(text)
-    except (SyntaxError, ValueError) as exc:
+    except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
         return SourceDiscovery(
             path=path.relative_to(root).as_posix(),
             kind="python",
@@ -91,7 +91,7 @@ def _typescript_discovery(path: Path, text: str, root: Path) -> SourceDiscovery 
         return None
     try:
         tools = TypeScriptRegisterToolExtractor().extract(text)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         return SourceDiscovery(
             path=path.relative_to(root).as_posix(),
             kind="typescript",
@@ -114,7 +114,7 @@ def _json_discovery(path: Path, text: str, root: Path) -> SourceDiscovery | None
         return None
     try:
         tools = parse_tool_manifest(text)
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError) as exc:
         return SourceDiscovery(
             path=path.relative_to(root).as_posix(),
             kind="json",

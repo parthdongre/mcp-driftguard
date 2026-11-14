@@ -8,6 +8,7 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -44,7 +45,12 @@ def engine_args(module: str) -> list[str]:
     return [os.path.abspath(sys.executable), '-I', '-m', module]
 
 
-def save_private(path: Path, data: bytes) -> None:
+def save_private(path: Path, data: bytes, *, keep_mode: bool = False) -> None:
+    """Atomically replace ``path``; new files are owner-only.
+
+    ``keep_mode`` retains an existing user-owned file's permission bits, so
+    editing a client's settings does not silently change who can read them.
+    """
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.driftguard-')
     try:
@@ -52,6 +58,11 @@ def save_private(path: Path, data: bytes) -> None:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
+        if keep_mode:
+            try:
+                os.chmod(temporary, stat.S_IMODE(os.stat(path, follow_symlinks=False).st_mode))
+            except FileNotFoundError:
+                pass
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
@@ -108,7 +119,7 @@ def control(db: Path, action: str, **fields):
             return result['data']
     except LiveError:
         raise
-    except (OSError, KeyError, ValueError, TypeError):
+    except (OSError, KeyError, ValueError, TypeError, AttributeError):
         raise LiveError('The local gateway is unavailable. Connect again from the app.') from None
 
 
@@ -161,10 +172,14 @@ def install_config(db: Path) -> None:
         manifest = {'target': str(target), 'existed': target.exists(),
                     'before': _digest(before), 'installed': _digest(merged)}
         save_private(local['manifest'], json.dumps(manifest).encode())
-        if _read_config(target) != before:
-            local['manifest'].unlink()
-            raise LiveError('Codex settings changed during setup. Your edits were preserved; retry.')
-        save_private(target, merged)
+        try:
+            if _read_config(target) != before:
+                raise LiveError('Codex settings changed during setup. Your edits were preserved; retry.')
+            save_private(target, merged, keep_mode=True)
+        except (OSError, LiveError):
+            # Without an installed entry, a stale manifest would block reconnecting.
+            local['manifest'].unlink(missing_ok=True)
+            raise
 
 
 def restore_config(db: Path) -> bool:
@@ -179,7 +194,7 @@ def restore_config(db: Path) -> bool:
         restored = saved.get('installed') == _digest(_read_config(target)) and saved.get('before') == _digest(before)
         if restored:
             if saved.get('existed'):
-                save_private(target, before)
+                save_private(target, before, keep_mode=True)
             else:
                 target.unlink(missing_ok=True)
         local['manifest'].unlink()
@@ -302,7 +317,10 @@ def connect(db: Path, harness: str = 'codex') -> dict:
                 managed.install(db, harness)
         except Exception:
             if started:
-                control(db, 'stop')
+                try:
+                    control(db, 'stop')
+                except LiveError:
+                    pass  # Report the setup failure, not the cleanup failure.
             raise
         return status(db)
 

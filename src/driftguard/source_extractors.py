@@ -241,6 +241,8 @@ class PythonDecoratorToolExtractor:
 
 
 _REGISTER_TOOL_RE = re.compile(r"\b[A-Za-z_$][\w$]*\.registerTool\s*\(")
+_SCAN_BUDGET_MIN = 4_000_000
+_SCAN_BUDGET_FACTOR = 16
 
 
 def _balanced(text: str, start: int, opener: str, closer: str) -> tuple[str, int]:
@@ -467,12 +469,19 @@ class TypeScriptRegisterToolExtractor:
 
     def extract(self, text: str) -> list[dict[str, Any]]:
         tools: list[dict[str, Any]] = []
+        # Each unterminated call scans to the end of the file. Bound the total scan
+        # so many unterminated calls cannot make extraction quadratic.
+        budget = max(_SCAN_BUDGET_MIN, _SCAN_BUDGET_FACTOR * len(text))
         for match in _REGISTER_TOOL_RE.finditer(text):
             open_paren = text.find("(", match.start())
+            if budget <= 0:
+                raise ValueError("registerTool extraction exceeded its scan budget")
             try:
-                call_body, _ = _balanced(text, open_paren, "(", ")")
+                call_body, end = _balanced(text, open_paren, "(", ")")
             except ValueError:
+                budget -= len(text) - open_paren
                 continue
+            budget -= end - open_paren
             args = _split_top_level(call_body)
             if len(args) < 2:
                 continue

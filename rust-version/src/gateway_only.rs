@@ -159,7 +159,9 @@ pub fn launch(db: &Path, open_terminal: bool) -> Result<Value> {
         return Ok(json!({"opened":false,"servers":[],"skipped":skipped}));
     }
     let (home, _) = crate::harness::home()?;
-    let installed = home.join(".local/bin/codex");
+    let installed = home
+        .join(".local/bin")
+        .join(if cfg!(windows) { "codex.exe" } else { "codex" });
     let executable = if installed.is_file() {
         installed
     } else {

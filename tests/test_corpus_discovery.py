@@ -119,3 +119,16 @@ def test_discovery_does_not_read_files_or_directories_linked_outside_checkout(tm
 def test_discovery_rejects_invalid_file_budget(tmp_path):
     with pytest.raises(ValueError, match="positive"):
         discover_mcp_sources(tmp_path, max_file_bytes=0)
+
+
+def test_deeply_nested_json_is_a_parse_error_not_a_crash(tmp_path):
+    (tmp_path / "deep.json").write_text('{"inputSchema": ' + "[" * 100_000 + "]" * 100_000 + "}")
+    (discovery,) = discover_mcp_sources(tmp_path)
+    assert discovery.status == "parse_error"
+
+
+def test_many_unterminated_register_calls_are_bounded():
+    from driftguard.source_extractors import TypeScriptRegisterToolExtractor
+
+    with pytest.raises(ValueError, match="scan budget"):
+        TypeScriptRegisterToolExtractor().extract("a.registerTool(" * 130_000)

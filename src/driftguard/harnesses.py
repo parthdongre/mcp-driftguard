@@ -264,6 +264,11 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
             if not isinstance(name, str) or not name.strip() or len(name) > 128 or re.search(r"[\x00-\x1f\x7f]", name):
                 warnings.append(f"{harness}: a server name is invalid.")
                 continue
+            try:
+                exact_json(settings)  # TOML datetimes/inf/nan cannot be bound by digest.
+            except (ValueError, TypeError, RecursionError):
+                warnings.append(f"{harness}: {name} has unsupported configuration values.")
+                continue
             sources[harness, name] = _Source(harness, name, scope, path, project,
                                             settings, digest)
 

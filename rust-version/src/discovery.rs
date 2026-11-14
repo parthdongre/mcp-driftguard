@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, Notify};
@@ -33,6 +33,21 @@ const BASE_ENV: &[&str] = &[
     "LANG",
     "LC_ALL",
 ];
+const IDENTITY_KDF_ROUNDS: u32 = 100_000;
+// Codex receives its home directory as a path, never as a credential.
+const PATH_ENV: &[&str] = &["CODEX_HOME"];
+
+/// Fingerprints secret material with a salted, slow KDF so stored identities
+/// cannot be brute-forced offline the way a bare SHA-256 can.
+pub(crate) fn identity_kdf(source: &str, context: &[u8], secret: &str) -> String {
+    let mut salt = b"driftguard-identity-v1\0".to_vec();
+    salt.extend_from_slice(source.as_bytes());
+    salt.push(0);
+    salt.extend_from_slice(context);
+    let mut key = [0; 32];
+    pbkdf2::pbkdf2_hmac::<Sha256>(secret.as_bytes(), &salt, IDENTITY_KDF_ROUNDS, &mut key);
+    key.iter().map(|byte| format!("{byte:02x}")).collect()
+}
 
 pub struct Profile {
     pub source: String,
@@ -40,6 +55,8 @@ pub struct Profile {
     args: Vec<String>,
     cwd: PathBuf,
     environment: BTreeMap<String, String>,
+    // Derived once: `verify` recomputes the identity on every request.
+    environment_binding: OnceLock<BTreeMap<String, String>>,
     secrets: Vec<String>,
     pub timeout: Duration,
     pub version: String,
@@ -207,6 +224,7 @@ impl Profile {
             args: argv,
             cwd,
             environment,
+            environment_binding: OnceLock::new(),
             secrets,
             timeout: Duration::from_secs_f64(timeout),
             version: version.to_owned(),
@@ -258,7 +276,10 @@ impl Profile {
                     .into());
                 }
                 profile.environment.insert(name.clone(), value.to_owned());
-                if value.len() >= 8 && !BASE_ENV.contains(&name.as_str()) {
+                if value.len() >= 8
+                    && !BASE_ENV.contains(&name.as_str())
+                    && !PATH_ENV.contains(&name.as_str())
+                {
                     profile.secrets.push(value.to_owned());
                 }
             }
@@ -266,6 +287,23 @@ impl Profile {
             return Err(ReviewError("Expected an environment object.").into());
         }
         Ok(profile)
+    }
+
+    fn environment_binding(&self) -> &BTreeMap<String, String> {
+        self.environment_binding.get_or_init(|| {
+            self.environment
+                .iter()
+                .map(|(name, value)| {
+                    let value = if BASE_ENV.contains(&name.as_str()) {
+                        value.clone()
+                    } else {
+                        let context = [b"env\0", name.as_bytes()].concat();
+                        identity_kdf(&self.source, &context, value)
+                    };
+                    (name.clone(), value)
+                })
+                .collect()
+        })
     }
 
     pub fn identity(&self) -> Result<String> {
@@ -305,7 +343,7 @@ impl Profile {
             hashes.insert(path, format!("{:x}", digest.finalize()));
         }
         let identity = json!({"executable": self.executable, "argv": self.args, "cwd": self.cwd,
-            "protocol": self.version, "environment": self.environment, "files": hashes});
+            "protocol": self.version, "environment": self.environment_binding(), "files": hashes});
         Ok(format!(
             "{:x}",
             Sha256::digest(serde_json::to_vec(&identity)?)
@@ -334,6 +372,24 @@ fn codex_gateway_path(search: &std::ffi::OsStr, home: &Path) -> Result<std::ffi:
     ))?)
 }
 
+// Windows runs commands such as `node` or `npx` from `node.exe` or `npx.cmd`.
+// Match the extensions used for harness detection.
+#[cfg(windows)]
+const EXECUTABLE_EXTENSIONS: &[&str] = &["exe", "cmd", "bat"];
+#[cfg(not(windows))]
+const EXECUTABLE_EXTENSIONS: &[&str] = &[];
+
+fn executable_names(path: &Path, extensions: &[&str]) -> Vec<PathBuf> {
+    if extensions.is_empty() || path.extension().is_some() {
+        vec![path.to_path_buf()]
+    } else {
+        extensions
+            .iter()
+            .map(|extension| path.with_extension(extension))
+            .collect()
+    }
+}
+
 fn resolve_executable(
     path: &Path,
     cwd: &Path,
@@ -341,12 +397,15 @@ fn resolve_executable(
 ) -> Result<PathBuf> {
     let mut candidates = Vec::new();
     if path.is_absolute() || path.components().count() > 1 {
-        candidates.push(cwd.join(path));
+        candidates.extend(executable_names(&cwd.join(path), EXECUTABLE_EXTENSIONS));
     } else if let Some(search) = search
         .map(std::ffi::OsStr::to_os_string)
         .or_else(|| std::env::var_os("PATH"))
     {
-        candidates.extend(std::env::split_paths(&search).map(|dir| cwd.join(dir).join(path)));
+        candidates
+            .extend(std::env::split_paths(&search).flat_map(|dir| {
+                executable_names(&cwd.join(dir).join(path), EXECUTABLE_EXTENSIONS)
+            }));
     }
     candidates
         .into_iter()
@@ -629,6 +688,24 @@ pub async fn scan(path: &Path) -> Result<(String, String, Vec<Value>)> {
 
 #[cfg(test)]
 #[test]
+fn windows_executable_names_add_launch_extensions_only_when_missing() {
+    let extensions = ["exe", "cmd", "bat"];
+    assert_eq!(
+        executable_names(Path::new("bin/npx"), &extensions),
+        ["bin/npx.exe", "bin/npx.cmd", "bin/npx.bat"].map(PathBuf::from)
+    );
+    assert_eq!(
+        executable_names(Path::new("bin/codex.exe"), &extensions),
+        [PathBuf::from("bin/codex.exe")]
+    );
+    assert_eq!(
+        executable_names(Path::new("bin/node"), &[]),
+        [PathBuf::from("bin/node")]
+    );
+}
+
+#[cfg(test)]
+#[test]
 fn codex_gateway_search_path_drops_only_session_shims() {
     let home = Path::new("/fixture/.codex");
     let first = home.join("tmp/arg0/codex-arg0first");
@@ -642,4 +719,68 @@ fn codex_gateway_search_path_drops_only_session_shims() {
         std::env::split_paths(&filtered).collect::<Vec<_>>(),
         vec![unrelated]
     );
+}
+
+#[cfg(test)]
+#[test]
+fn identity_kdf_is_salted_pbkdf2_sha256() {
+    // Independent vector from Python's hashlib.pbkdf2_hmac with the same salt layout.
+    assert_eq!(
+        identity_kdf("fixture", b"env\0API_KEY", "hunter22"),
+        "a77dd0b33d96d3e234523879ae6464597c451bf9154c8dd4ac67c11cebae891d"
+    );
+    assert_ne!(
+        identity_kdf("fixture", b"env\0API_KEY", "hunter22"),
+        identity_kdf("other", b"env\0API_KEY", "hunter22")
+    );
+    assert_ne!(
+        identity_kdf("fixture", b"env\0API_KEY", "hunter22"),
+        identity_kdf("fixture", b"env\0OTHER_KEY", "hunter22")
+    );
+}
+
+#[cfg(test)]
+fn catalog_profile(environment: Value) -> Profile {
+    let cwd = std::env::temp_dir().canonicalize().unwrap();
+    let executable = std::env::current_exe().unwrap();
+    Profile::for_catalog(
+        &json!({"server_id": "fixture", "argv": [executable], "cwd": cwd}),
+        &environment,
+        &cwd,
+    )
+    .unwrap()
+}
+
+#[cfg(test)]
+#[test]
+fn identity_binds_derived_secrets_not_raw_environment_values() {
+    let profile = catalog_profile(json!({"API_KEY": "hunter22"}));
+    let binding = profile.environment_binding();
+    assert_eq!(
+        binding["API_KEY"],
+        identity_kdf("fixture", b"env\0API_KEY", "hunter22")
+    );
+    assert_eq!(binding["PATH"], profile.environment["PATH"]);
+    let identity = profile.identity().unwrap();
+    assert_eq!(profile.identity().unwrap(), identity);
+    assert_ne!(
+        catalog_profile(json!({"API_KEY": "hunter23"}))
+            .identity()
+            .unwrap(),
+        identity
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn codex_home_path_is_not_treated_as_a_secret() {
+    let profile = catalog_profile(json!({
+        "CODEX_HOME": "/fixture/home/.codex", "API_KEY": "hunter22"
+    }));
+    assert_eq!(profile.secrets, ["hunter22"]);
+    assert!(!contains_secret(
+        &json!({"description": "Reads /fixture/home/.codex/config.toml"}),
+        &profile.secrets
+    ));
+    assert!(contains_secret(&json!(["hunter22"]), &profile.secrets));
 }
