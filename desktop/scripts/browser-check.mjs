@@ -54,7 +54,12 @@ async function auditAccessibility(name, target = page) {
 async function checkRustConnection(engine) {
   const home = await mkdtemp(resolve(tmpdir(), 'driftguard-rust-ui-'));
   const db = resolve(home, 'review.sqlite3');
-  const environment = { ...process.env, DRIFTGUARD_HARNESS_HOME: home };
+  // Detect Codex from a stand-in executable so the check does not depend on an installed CLI.
+  const rustBin = resolve(home, 'bin');
+  await mkdir(rustBin);
+  if (process.platform === 'win32') await writeFile(resolve(rustBin, 'codex.cmd'), '@exit /b 1\r\n');
+  else await symlink(process.execPath, resolve(rustBin, 'codex'));
+  const environment = { ...process.env, DRIFTGUARD_HARNESS_HOME: home, PATH: rustBin + delimiter + process.env.PATH };
   delete environment.DRIFTGUARD_RUST_PROFILE;
   const bridge = payload => new Promise((done, reject) => {
     const child = execFile(engine, ['--db', db], { env: environment }, (error, stdout) => {
