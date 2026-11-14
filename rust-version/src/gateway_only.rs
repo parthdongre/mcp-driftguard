@@ -203,10 +203,10 @@ pub fn launch(db: &Path, open_terminal: bool) -> Result<Value> {
         quote(&executable)?
     );
     if open_terminal {
-        let script = root.path().join("DriftGuard Codex.command");
-        use std::os::unix::fs::PermissionsExt;
         #[cfg(unix)]
         {
+            use std::os::unix::fs::PermissionsExt;
+            let script = root.path().join("DriftGuard Codex.command");
             std::fs::write(&script, format!("#!/bin/sh\n{command}\n"))?;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700))?;
             if !std::process::Command::new("/usr/bin/open")

@@ -9,7 +9,7 @@
       "canonicalize.py": "df63f2b19efe9d305dec3292304f257a333aa76f0f1d43f4c10de11ccc5c8c70",
       "diff.py": "8a1c61f8cc79b532d8cf89ee90932f4bbaf256995c3e34e0e305bc91d06a15eb",
       "features.py": "b28a79e22f81b1140792138c9a63222759edd5d87d1488ab81b6ee4a7a23f9e7",
-      "gateway.py": "4db6b28185b8ddd9e9a41ef2f52bf98ba9a6ec283f3fdcdefce7e3ba3a4f8149",
+      "gateway.py": "901dde841211bf2336b7dab7a5064a370efae78bb241e7b791aa69a2f1572a1a",
       "temporal.py": "ad25dcdf68299d29f9155672fac7df5f13d7888a884678112f4721b40fe79621"
     }
   },
@@ -237,6 +237,7 @@
         },
         "name": "export_report"
       },
+      "quarantine_active": false,
       "capability_delta": {
         "operations_added": [],
         "operations_removed": [],
@@ -323,6 +324,7 @@
         },
         "name": "read_note"
       },
+      "quarantine_active": false,
       "capability_delta": {
         "operations_added": [],
         "operations_removed": [],
@@ -435,6 +437,7 @@
         },
         "name": "search_repository"
       },
+      "quarantine_active": true,
       "capability_delta": {
         "operations_added": [
           "transmit"
@@ -916,17 +919,25 @@
     },
     {
       "id": 15,
-      "event_type": "definition_observed",
+      "event_type": "definition_changed",
       "server_id": "fixture-repository",
       "tool_name": "export_report",
       "timestamp": "2026-10-15T12:31:00+00:00",
       "details": {
+        "changed_fields": [
+          "description",
+          "inputSchema"
+        ],
         "revision": 3,
         "sha256": "a166d475eb8c51a1c77c074daaee9a0a826f625f8d4d069ca43d6a6bedddec02",
         "status": "pending"
       },
-      "event": "definition_observed",
+      "event": "definition_changed",
       "detail": {
+        "changed_fields": [
+          "description",
+          "inputSchema"
+        ],
         "revision": 3,
         "sha256": "a166d475eb8c51a1c77c074daaee9a0a826f625f8d4d069ca43d6a6bedddec02",
         "status": "pending"
@@ -948,17 +959,25 @@
     },
     {
       "id": 13,
-      "event_type": "definition_observed",
+      "event_type": "definition_changed",
       "server_id": "fixture-repository",
       "tool_name": "search_repository",
       "timestamp": "2026-10-15T12:25:00+00:00",
       "details": {
+        "changed_fields": [
+          "description",
+          "inputSchema"
+        ],
         "revision": 5,
         "sha256": "50519ba14198cb609bf13ab5fbfda4c67c2d9152643e1222fcb4b68acc959c9f",
         "status": "quarantined"
       },
-      "event": "definition_observed",
+      "event": "definition_changed",
       "detail": {
+        "changed_fields": [
+          "description",
+          "inputSchema"
+        ],
         "revision": 5,
         "sha256": "50519ba14198cb609bf13ab5fbfda4c67c2d9152643e1222fcb4b68acc959c9f",
         "status": "quarantined"
@@ -980,17 +999,23 @@
     },
     {
       "id": 11,
-      "event_type": "definition_observed",
+      "event_type": "definition_changed",
       "server_id": "fixture-repository",
       "tool_name": "search_repository",
       "timestamp": "2026-10-15T12:20:00+00:00",
       "details": {
+        "changed_fields": [
+          "description"
+        ],
         "revision": 4,
         "sha256": "1fd41935e754f6180531b2f8a11321156d6d40fb77c74680e5d3be379ffe7145",
         "status": "pending"
       },
-      "event": "definition_observed",
+      "event": "definition_changed",
       "detail": {
+        "changed_fields": [
+          "description"
+        ],
         "revision": 4,
         "sha256": "1fd41935e754f6180531b2f8a11321156d6d40fb77c74680e5d3be379ffe7145",
         "status": "pending"
@@ -1012,17 +1037,23 @@
     },
     {
       "id": 9,
-      "event_type": "definition_observed",
+      "event_type": "definition_changed",
       "server_id": "fixture-repository",
       "tool_name": "search_repository",
       "timestamp": "2026-10-15T12:15:00+00:00",
       "details": {
+        "changed_fields": [
+          "description"
+        ],
         "revision": 3,
         "sha256": "f62c36d388872a9eb4af8e1c8c64ed97cd6af6b334d9d3aff77d6d2dd91ca227",
         "status": "pending"
       },
-      "event": "definition_observed",
+      "event": "definition_changed",
       "detail": {
+        "changed_fields": [
+          "description"
+        ],
         "revision": 3,
         "sha256": "f62c36d388872a9eb4af8e1c8c64ed97cd6af6b334d9d3aff77d6d2dd91ca227",
         "status": "pending"

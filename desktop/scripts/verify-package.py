@@ -18,7 +18,10 @@ def main() -> int:
     bundles = ROOT / "desktop/src-tauri/target/release/bundle"
     if os.name == "nt":
         installer, = bundles.glob("nsis/*.exe")
-        with tempfile.TemporaryDirectory(prefix="driftguard-install-check-") as temporary:
+        # The silent NSIS uninstaller finishes asynchronously and can still hold engine
+        # files, so a locked temporary file must not fail an already verified package.
+        with tempfile.TemporaryDirectory(prefix="driftguard-install-check-",
+                                         ignore_cleanup_errors=True) as temporary:
             destination = Path(temporary) / "installed"
             subprocess.run([str(installer), "/S", "/D=" + str(destination)],
                            check=True, timeout=120)
@@ -54,7 +57,9 @@ def main() -> int:
         finally:
             subprocess.run(["sudo", "dpkg", "--remove", package], check=True, timeout=120)
     else:
-        app, = bundles.glob("macos/*.app")
+        # The Rust desktop build bundles into the same directory; verify the Python-engine app.
+        app, = [path for path in bundles.glob("macos/*.app")
+                if (path / "Contents/Resources/engine").is_dir()]
         engine = app / "Contents/Resources/engine/driftguard-engine"
         assert engine.is_file(), "Bundled engine was not found"
         builder.verify(engine)

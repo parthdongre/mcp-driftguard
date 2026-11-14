@@ -7,8 +7,12 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { delimiter, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
+import { existsSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
+// Prefer the repository virtual environment over whatever `python` is first on PATH.
+const projectPython = fileURLToPath(new URL(process.platform === 'win32' ? '../../.venv/Scripts/python.exe' : '../../.venv/bin/python', import.meta.url));
+const testPython = process.env.DRIFTGUARD_TEST_PYTHON ?? (existsSync(projectPython) ? projectPython : 'python');
 
 let base = process.env.DRIFTGUARD_PREVIEW_URL;
 let server;
@@ -50,7 +54,12 @@ async function auditAccessibility(name, target = page) {
 async function checkRustConnection(engine) {
   const home = await mkdtemp(resolve(tmpdir(), 'driftguard-rust-ui-'));
   const db = resolve(home, 'review.sqlite3');
-  const environment = { ...process.env, DRIFTGUARD_HARNESS_HOME: home };
+  // Detect Codex from a stand-in executable so the check does not depend on an installed CLI.
+  const rustBin = resolve(home, 'bin');
+  await mkdir(rustBin);
+  if (process.platform === 'win32') await writeFile(resolve(rustBin, 'codex.cmd'), '@exit /b 1\r\n');
+  else await symlink(process.execPath, resolve(rustBin, 'codex'));
+  const environment = { ...process.env, DRIFTGUARD_HARNESS_HOME: home, PATH: rustBin + delimiter + process.env.PATH };
   delete environment.DRIFTGUARD_RUST_PROFILE;
   const bridge = payload => new Promise((done, reject) => {
     const child = execFile(engine, ['--db', db], { env: environment }, (error, stdout) => {
@@ -399,7 +408,7 @@ try {
   let queue = Promise.resolve();
   const runPython = payload => {
     const operation = queue.then(async () => {
-      const child = execFile(process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: payload.action === 'live_connect' ? 180000 : 45000, env: { ...process.env, CODEX_HOME: resolve(temporary, 'codex-home'), PATH: testBin + delimiter + process.env.PATH } });
+      const child = execFile(testPython, ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: payload.action === 'live_connect' ? 180000 : 45000, env: { ...process.env, CODEX_HOME: resolve(temporary, 'codex-home'), PATH: testBin + delimiter + process.env.PATH } });
       child.stdin.end(JSON.stringify(payload));
       let output = '';
       for await (const chunk of child.stdout) output += chunk;

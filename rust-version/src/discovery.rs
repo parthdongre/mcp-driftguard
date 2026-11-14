@@ -220,6 +220,7 @@ impl Profile {
     }
 
     pub fn for_catalog(config: &Value, environment: &Value, home: &Path) -> Result<Self> {
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut paths: Vec<PathBuf> = std::env::var_os("PATH")
             .map(|path| {
                 std::env::split_paths(&path)

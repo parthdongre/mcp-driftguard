@@ -10,6 +10,7 @@ on:
       - "src/**"
       - "tests/**"
       - "desktop/**"
+      - "rust-version/**"
       - "requirements/**"
       - "pyproject.toml"
       - ".github/workflows/desktop-validation.yml"
@@ -65,10 +66,39 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: desktop
         run: npx playwright install --with-deps chromium
+      - name: Build Rust gateway for browser workflows
+        if: runner.os == 'Linux'
+        run: cargo build --locked --release --manifest-path rust-version/Cargo.toml
       - name: Exercise browser workflows and sampled accessibility
         if: runner.os == 'Linux'
         working-directory: desktop
+        env:
+          DRIFTGUARD_TEST_PYTHON: python
+          DRIFTGUARD_TEST_RUST_ENGINE: ${{ github.workspace }}/rust-version/target/release/driftguard-rust
         run: npm run test:browser
+
+  rust-gateway:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: rust-version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-version -> target
+          cache-on-failure: true
+      - name: Check Rust gateway formatting
+        run: cargo fmt -- --check
+      - name: Lint Rust gateway
+        run: cargo clippy --locked --release --all-targets -- -D warnings
+      - name: Test Rust gateway
+        run: cargo test --locked --release
 
   native-build:
     strategy:
@@ -125,6 +155,13 @@ jobs:
         run: python desktop/scripts/verify-package.py
       - name: Prepare verified unsigned review package
         run: python desktop/scripts/prepare-review-artifact.py
+      - name: Build unsigned macOS Rust application bundle
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        run: npm run desktop:package:rust -- --bundles app
+      - name: Verify Rust application startup
+        if: runner.os == 'macOS'
+        run: python desktop/scripts/smoke-window.py "desktop/src-tauri/target/release/bundle/macos/MCP DriftGuard Rust.app/Contents/MacOS/driftguard-desktop" --rust
       - name: Retain unsigned preview for owner review
         uses: actions/upload-artifact@v4
         with:
