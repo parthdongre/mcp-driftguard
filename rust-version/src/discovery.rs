@@ -334,6 +334,24 @@ fn codex_gateway_path(search: &std::ffi::OsStr, home: &Path) -> Result<std::ffi:
     ))?)
 }
 
+// Windows runs commands such as `node` or `npx` from `node.exe` or `npx.cmd`.
+// Match the extensions used for harness detection.
+#[cfg(windows)]
+const EXECUTABLE_EXTENSIONS: &[&str] = &["exe", "cmd", "bat"];
+#[cfg(not(windows))]
+const EXECUTABLE_EXTENSIONS: &[&str] = &[];
+
+fn executable_names(path: &Path, extensions: &[&str]) -> Vec<PathBuf> {
+    if extensions.is_empty() || path.extension().is_some() {
+        vec![path.to_path_buf()]
+    } else {
+        extensions
+            .iter()
+            .map(|extension| path.with_extension(extension))
+            .collect()
+    }
+}
+
 fn resolve_executable(
     path: &Path,
     cwd: &Path,
@@ -341,12 +359,15 @@ fn resolve_executable(
 ) -> Result<PathBuf> {
     let mut candidates = Vec::new();
     if path.is_absolute() || path.components().count() > 1 {
-        candidates.push(cwd.join(path));
+        candidates.extend(executable_names(&cwd.join(path), EXECUTABLE_EXTENSIONS));
     } else if let Some(search) = search
         .map(std::ffi::OsStr::to_os_string)
         .or_else(|| std::env::var_os("PATH"))
     {
-        candidates.extend(std::env::split_paths(&search).map(|dir| cwd.join(dir).join(path)));
+        candidates
+            .extend(std::env::split_paths(&search).flat_map(|dir| {
+                executable_names(&cwd.join(dir).join(path), EXECUTABLE_EXTENSIONS)
+            }));
     }
     candidates
         .into_iter()
@@ -625,6 +646,24 @@ pub async fn scan(path: &Path) -> Result<(String, String, Vec<Value>)> {
     })
     .await
     .map_err(|_| ReviewError("MCP catalog discovery timed out."))?
+}
+
+#[cfg(test)]
+#[test]
+fn windows_executable_names_add_launch_extensions_only_when_missing() {
+    let extensions = ["exe", "cmd", "bat"];
+    assert_eq!(
+        executable_names(Path::new("bin/npx"), &extensions),
+        ["bin/npx.exe", "bin/npx.cmd", "bin/npx.bat"].map(PathBuf::from)
+    );
+    assert_eq!(
+        executable_names(Path::new("bin/codex.exe"), &extensions),
+        [PathBuf::from("bin/codex.exe")]
+    );
+    assert_eq!(
+        executable_names(Path::new("bin/node"), &[]),
+        [PathBuf::from("bin/node")]
+    );
 }
 
 #[cfg(test)]

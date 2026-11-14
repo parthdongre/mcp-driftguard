@@ -288,6 +288,9 @@ def test_identity_changed_script_is_not_dispatched(server):
 @pytest.mark.parametrize("output", [
     {"content": [{"type": "resource_link", "uri": "file:///secret"}]},
     {"content": [{"type": "text", "text": "-----BEGIN PRIVATE KEY-----secret"}]},
+    {"content": [{"type": "text", "text": "-----BEGIN ENCRYPTED PRIVATE KEY-----secret"}]},
+    {"content": [{"type": "text", "text": "-----BEGIN DSA PRIVATE KEY-----secret"}]},
+    {"content": [{"type": "text", "text": "-----BEGIN PGP PRIVATE KEY BLOCK-----secret"}]},
     {"content": "invalid"},
 ])
 def test_independent_output_policy_blocks_unsupported_or_secret_results(server, output):
@@ -557,3 +560,31 @@ def test_cli_keeps_stdout_json_only_and_does_not_log_command(server):
     assert responses[0]["result"]["tools"] == []
     assert "owned_server.py" not in completed.stderr
     assert "gateway active" in completed.stderr
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process-group cleanup")
+def test_close_terminates_descendants_after_direct_child_exits(tmp_path):
+    marker = tmp_path / "descendant.pid"
+    script = tmp_path / "spawning_server.py"
+    script.write_text(
+        "import subprocess, sys\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        f"open({str(marker)!r}, 'w').write(str(child.pid))\n"
+        "sys.stdin.read()\n"
+    )
+    peer = StdioPeer(StdioConfig("spawner", (sys.executable, str(script)), cwd=str(tmp_path)))
+    deadline = time.monotonic() + 10
+    while not (marker.exists() and marker.read_text()) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    descendant = int(marker.read_text())
+    peer.close()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(descendant, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(descendant, 9)
+        pytest.fail("A descendant of the upstream server survived gateway shutdown")

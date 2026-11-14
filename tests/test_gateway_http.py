@@ -271,3 +271,30 @@ def test_literal_schema_data_is_not_interpreted_as_routing_and_sentinels_are_esc
                           "default": {"x-mcp-header": "literal-data"}}}}) == []
     assert encode_header("=?base64?literal?=") != "=?base64?literal?="
     assert encode_header(" plain ").startswith("=?base64?")
+
+
+@pytest.mark.parametrize(("url", "expected"), [
+    ("http://[::1]/mcp", ("::1", 80)),
+    ("http://127.0.0.1/mcp", ("127.0.0.1", 80)),
+    ("http://[::1]:8123/mcp", ("::1", 8123)),
+])
+def test_default_port_is_explicit_for_bracketless_ipv6_hosts(monkeypatch, url, expected):
+    from driftguard import gateway_http
+
+    seen = []
+
+    class Recorder:
+        def __init__(self, host, port, **_):
+            seen.append((host, port))
+
+        def connect(self):
+            raise OSError("fixture does not connect")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gateway_http.http.client, "HTTPConnection", Recorder)
+    peer = HttpPeer(config(url, timeout_seconds=2))
+    with pytest.raises(TransportError):
+        peer.request("ping")
+    assert seen == [expected]

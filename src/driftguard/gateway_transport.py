@@ -36,6 +36,8 @@ META_PREFIX = "io.modelcontextprotocol/"
 SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT",
             "WINDIR", "TEMP", "TMP", "LANG", "LC_ALL")
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}\Z")
+# Any PEM/PGP private key armor: PKCS#8 (plain and ENCRYPTED), RSA, EC, DSA, OPENSSH, PGP.
+PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY")
 
 
 class TransportError(RuntimeError):
@@ -421,6 +423,14 @@ class StdioPeer:
                 else:
                     self.process.kill()
                 self.process.wait(timeout=1)
+        else:
+            if os.name == "posix":
+                # The direct child exited, but descendants it started can still
+                # hold the gateway-created process group. Terminate them too.
+                try:
+                    os.killpg(self.process.pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
         if self.process.stdout is not None:
             self.process.stdout.close()
 
@@ -611,16 +621,14 @@ class ProtectedGateway:
         encoded = json.dumps(clean, ensure_ascii=False)
         if self._contains_credential("".join(item["text"] for item in clean)):
             raise TransportError("Tool result contains a configured credential")
-        if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", encoded):
+        if PRIVATE_KEY.search(encoded):
             raise TransportError("Tool result contains private key material")
         forwarded = {"content": clean, "isError": result.get("isError", False)}
         if output_schema is not None and (not forwarded["isError"] or "structuredContent" in result):
             structured = result.get("structuredContent")
             if not isinstance(structured, dict) or not valid_arguments(output_schema, structured):
                 raise TransportError("Structured result violates the approved outputSchema")
-            if self._contains_credential(structured) or re.search(
-                r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", json.dumps(structured)
-            ):
+            if self._contains_credential(structured) or PRIVATE_KEY.search(json.dumps(structured)):
                 raise TransportError("Structured result contains protected credential material")
             forwarded["structuredContent"] = structured
         # Uncontracted structured data, arbitrary metadata and embedded resources

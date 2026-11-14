@@ -565,3 +565,15 @@ def test_codex_runtime_forwards_only_configured_credential_references(workspace,
     assert environment['FIXTURE_AUTH_TOKEN'] == 'private-configured-token'
     assert 'UNRELATED_PRIVATE_TOKEN' not in environment
     assert 'private-configured-token' not in json.dumps(scan(str(project)))
+
+
+def test_non_json_toml_value_skips_only_that_server(workspace, monkeypatch):
+    home, project, _, _ = workspace
+    monkeypatch.setenv('CODEX_HOME', str(home / '.codex'))
+    (home / '.codex').mkdir()
+    (home / '.codex/config.toml').write_text(
+        '[mcp_servers.odd]\ncommand = "x"\nstartup_timeout_sec = nan\n'
+        '[mcp_servers.fine]\ncommand = "x"\n')
+    result = scan(str(project))
+    assert [row['name'] for row in result['sources']] == ['fine']
+    assert any('odd' in warning for warning in result['warnings'])

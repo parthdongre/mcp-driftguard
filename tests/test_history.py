@@ -101,3 +101,21 @@ def test_git_history_miner_follows_file_renames_without_breaking_lineage(tmp_pat
     assert versions[1].historical_path == "config/tools.json"
     assert pairs[0][0].tool["description"] == "Search files."
     assert pairs[0][1].tool["description"] == "Search files and symbols."
+
+
+def test_git_history_miner_skips_undecodable_or_overly_nested_versions(tmp_path):
+    repo = tmp_path / "repo"
+    initialize_repo(repo)
+    path = repo / "tools.json"
+    path.write_bytes(b'{"tools": "\xff\xfe not utf-8"}')
+    commit(repo, "binary")
+    path.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+    commit(repo, "deep")
+    path.write_text(json.dumps(manifest("Search files.")), encoding="utf-8")
+    commit(repo, "valid")
+
+    versions = GitManifestHistoryMiner(
+        repo, repository_id="owner/repo", manifest_paths=["tools.json"]
+    ).mine()
+
+    assert [version.tool["description"] for version in versions] == ["Search files."]

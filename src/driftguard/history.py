@@ -134,10 +134,19 @@ class _GitHistoryBase:
         return value or None
 
     def _file_at_commit(self, commit_sha: str, path: str) -> str | None:
-        result = self._git("show", f"{commit_sha}:{path}", check=False)
+        # Blob bytes are decoded explicitly: a non-UTF-8 historical file is skipped
+        # instead of aborting the whole mining run (or using the locale encoding).
+        result = subprocess.run(
+            ["git", "-C", str(self.repository_path), "show", f"{commit_sha}:{path}"],
+            check=False,
+            capture_output=True,
+        )
         if result.returncode != 0:
             return None
-        return result.stdout
+        try:
+            return result.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
 
     def _collect(self, extractor: SourceToolExtractor) -> list[HistoricalToolVersion]:
         versions: list[HistoricalToolVersion] = []
@@ -151,7 +160,7 @@ class _GitHistoryBase:
                     continue
                 try:
                     tools = extractor.extract(text)
-                except (SyntaxError, ValueError, json.JSONDecodeError):
+                except (SyntaxError, ValueError, RecursionError):
                     continue
                 committed_at = timestamp_by_commit.setdefault(
                     commit_sha,

@@ -156,3 +156,58 @@ def test_identical_definition_is_c0():
     assert assessment.change_class == ChangeClass.NO_MEANINGFUL_CHANGE
     assert assessment.risk_score == 0
     assert assessment.recommended_action == "allow"
+
+
+def test_structural_delta_detects_nested_and_array_item_changes():
+    old_tool = _tool(
+        extra_properties={
+            "options": {"type": "object", "properties": {"mode": {"type": "string"}}},
+            "tags": {"type": "array", "items": {"type": "string", "enum": ["a"]}},
+        }
+    )
+    new_tool = _tool(
+        extra_properties={
+            "options": {
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "integer"},
+                    "command": {"type": "string"},
+                },
+                "required": ["command"],
+            },
+            "tags": {"type": "array", "items": {"type": "string", "enum": ["a", "b"]}},
+        }
+    )
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=old_tool, approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert delta.structural.parameters_added == ["options.command"]
+    assert delta.structural.required_added == ["options.command"]
+    assert delta.structural.type_changes == {"options.mode": ("string", "integer")}
+    assert delta.structural.enum_changes == ["tags[]"]
+
+
+def test_structural_delta_counts_new_object_parameter_once():
+    new_tool = _tool(
+        extra_properties={
+            "options": {"type": "object", "properties": {"mode": {"type": "string"}}}
+        }
+    )
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=_tool(), approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert delta.structural.parameters_added == ["options"]
+
+
+def test_sensitive_term_in_undocumented_parameter_name_is_detected():
+    new_tool = _tool(extra_properties={"api_key": {"type": "string"}})
+    delta = build_delta(
+        make_snapshot(server_id="demo", tool=_tool(), approval_state="approved"),
+        make_snapshot(server_id="demo", tool=new_tool),
+    )
+
+    assert "api_key" in delta.structural.sensitive_terms_added

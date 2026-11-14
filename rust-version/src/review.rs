@@ -268,10 +268,18 @@ impl ReviewStore {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        if path.is_symlink() {
+        let existing = match std::fs::symlink_metadata(path) {
+            Ok(meta) => Some(meta),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        if existing
+            .as_ref()
+            .is_some_and(|meta| !meta.file_type().is_file())
+        {
             return Err(ReviewError("Choose a regular database file.").into());
         }
-        if !path.exists() {
+        if existing.is_none() {
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create_new(true);
             #[cfg(unix)]
@@ -1132,19 +1140,6 @@ impl ReviewStore {
                     json!({"sha256":digest,"mode":approval_mode}),
                 )?;
             }
-            if previous
-                .as_ref()
-                .is_some_and(|(definition, _, _)| definition == &encoded)
-            {
-                tx.execute(
-                    "UPDATE tools SET present=1, observed_at=?3,
-                           status=CASE WHEN ?4 THEN 'approved' WHEN status='revoked' THEN 'pending' ELSE status END,
-                           revision=revision+?4 WHERE server_id=?1 AND tool_name=?2",
-                    params![source, name, seen, auto],
-                )?;
-                continue;
-            }
-            let revision = previous.as_ref().map_or(1, |(_, revision, _)| revision + 1);
             let quarantined: bool = tx.query_row(
                 "SELECT EXISTS(SELECT 1 FROM quarantines WHERE server_id=?1 AND tool_name=?2 AND sha256=?3)",
                 params![source, name, digest], |row| row.get(0))?;
@@ -1154,6 +1149,27 @@ impl ReviewStore {
                 params![source, name, digest],
                 |row| row.get(0),
             )?;
+            if previous
+                .as_ref()
+                .is_some_and(|(definition, _, _)| definition == &encoded)
+            {
+                // Reappearance after revocation keeps exact-hash quarantine and denial latches.
+                let reobserved = if quarantined {
+                    "quarantined"
+                } else if denied {
+                    "denied"
+                } else {
+                    "pending"
+                };
+                tx.execute(
+                    "UPDATE tools SET present=1, observed_at=?3,
+                           status=CASE WHEN ?4 THEN 'approved' WHEN status='revoked' THEN ?5 ELSE status END,
+                           revision=revision+?4 WHERE server_id=?1 AND tool_name=?2",
+                    params![source, name, seen, auto, reobserved],
+                )?;
+                continue;
+            }
+            let revision = previous.as_ref().map_or(1, |(_, revision, _)| revision + 1);
             let status = if quarantined {
                 "quarantined"
             } else if denied {
@@ -2185,6 +2201,69 @@ mod tests {
         })();
         std::fs::remove_file(path)?;
         result
+    }
+
+    #[test]
+    fn reappearing_revoked_tool_keeps_quarantine_and_denial_status() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut store = ReviewStore::open(&directory.path().join("review.sqlite"))?;
+        let initial = store.request(&import(vec![definition("Read a note.")]))?;
+        store.request(&decision("quarantine", &initial[0]))?;
+        store.request(&import(vec![]))?;
+        assert_eq!(
+            store.review("import:notes", "read_note")?["status"],
+            "revoked"
+        );
+        store.request(&import(vec![definition("Read a note.")]))?;
+        assert_eq!(
+            store.review("import:notes", "read_note")?["status"],
+            "quarantined"
+        );
+
+        let source = "gateway:codex:notes";
+        let tool = definition("Read a note.");
+        store.observe_gateway(
+            source,
+            "fixture",
+            std::slice::from_ref(&tool),
+            "one",
+            true,
+            None,
+        )?;
+        let version = store.review(source, "read_note")?;
+        store.request(
+            &json!({"action":"deny","server_id":source,"tool_name":"read_note",
+            "expected_sha256":version["sha256"],"expected_revision":version["revision"]}),
+        )?;
+        store.observe_gateway(source, "fixture", &[], "one", false, None)?;
+        store.observe_gateway(
+            source,
+            "fixture",
+            std::slice::from_ref(&tool),
+            "one",
+            false,
+            None,
+        )?;
+        assert_eq!(store.review(source, "read_note")?["status"], "denied");
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_rejects_non_regular_database_paths() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let fifo = directory.path().join("fifo.sqlite");
+        let encoded = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes())?;
+        // The path is NUL terminated and valid for the duration of the call.
+        assert_eq!(unsafe { libc::mkfifo(encoded.as_ptr(), 0o600) }, 0);
+        assert!(ReviewStore::open(&fifo).is_err());
+        assert!(ReviewStore::open(directory.path()).is_err());
+        let target = directory.path().join("target.sqlite");
+        ReviewStore::open(&target)?;
+        let link = directory.path().join("link.sqlite");
+        std::os::unix::fs::symlink(&target, &link)?;
+        assert!(ReviewStore::open(&link).is_err());
+        Ok(())
     }
 
     #[test]

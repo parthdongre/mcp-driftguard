@@ -277,17 +277,38 @@ def prepare_learned_trajectory(
     model: LogisticPairClassifier,
     trajectory: TrajectoryDatasetRecord,
 ) -> LearnedPreparedTrajectory:
+    """Score every lineage pair from the approved version onward.
+
+    Indices are relative to the approved version (0), matching ``_attack_onset`` and the
+    simulator; versions before approval are never observed by the policy.
+    """
+
+    approved_index = next(
+        (
+            index
+            for index, step in enumerate(trajectory.steps)
+            if step.version_id == trajectory.approved_version_id
+        ),
+        None,
+    )
+    if approved_index is None:
+        raise ValueError(
+            f"Approved version {trajectory.approved_version_id!r} missing from "
+            f"trajectory {trajectory.trajectory_id!r}"
+        )
+    if approved_index == len(trajectory.steps) - 1:
+        raise ValueError("Trajectory has no observations after its approved version")
     pair_probabilities: dict[tuple[int, int], dict[str, float]] = {}
-    for old_index in range(len(trajectory.steps) - 1):
+    for old_index in range(approved_index, len(trajectory.steps) - 1):
         for new_index in range(old_index + 1, len(trajectory.steps)):
-            pair_probabilities[(old_index, new_index)] = model.predict_proba(
-                _probability_record(trajectory, old_index, new_index)
+            pair_probabilities[(old_index - approved_index, new_index - approved_index)] = (
+                model.predict_proba(_probability_record(trajectory, old_index, new_index))
             )
     return LearnedPreparedTrajectory(
         trace_id=trajectory.trajectory_id,
         final_label=trajectory.final_label,
         attack_onset=_attack_onset(trajectory),
-        version_ids=tuple(step.version_id for step in trajectory.steps[1:]),
+        version_ids=tuple(step.version_id for step in trajectory.steps[approved_index + 1 :]),
         pair_probabilities=pair_probabilities,
     )
 
@@ -530,10 +551,11 @@ def pair_classification_metrics(
         if len(set(binary_truth)) == 2
         else None
     )
+    observed = [label for label in labels if label in set(y_true) | set(y_pred)]
     return PairClassificationMetrics(
         records=len(records),
         macro_f1=round(
-            float(f1_score(y_true, y_pred, labels=labels, average="macro", zero_division=0)),
+            float(f1_score(y_true, y_pred, labels=observed, average="macro", zero_division=0)),
             6,
         ),
         malicious_auroc=(round(auroc, 6) if auroc is not None else None),

@@ -61,3 +61,48 @@ def test_learned_family_benchmark_runs_without_repository_or_family_leakage() ->
         0.0 <= result.pair_metrics.malicious_auroc <= 1.0
     )
     assert len(result.strategies) == 3
+
+
+def test_multiclass_macro_f1_ignores_classes_absent_from_truth_and_predictions() -> None:
+    from driftguard.evaluation import multiclass_metrics
+
+    labels = [ChangeClass.BENIGN_MAINTENANCE, ChangeClass.MALICIOUS_DRIFT]
+    assert multiclass_metrics(labels, labels)["macro_f1"] == 1.0
+
+
+def test_prepared_trajectory_starts_at_approved_version() -> None:
+    from driftguard.dataset import TrajectoryDatasetRecord, TrajectoryStep
+    from driftguard.learned_family_benchmark import prepare_learned_trajectory
+
+    class StubModel:
+        def predict_proba(self, record):
+            return {"C3": 1.0 if record.new_version_id == "v3" else 0.0}
+
+    tool = {"name": "t", "description": "Search."}
+    trajectory = TrajectoryDatasetRecord(
+        trajectory_id="t",
+        repository_id="r",
+        server_id="s",
+        tool_name="t",
+        approved_version_id="v1",
+        steps=[
+            TrajectoryStep(version_id=f"v{index}", tool={**tool, "description": f"v{index}"})
+            for index in range(3)
+        ]
+        + [
+            TrajectoryStep(
+                version_id="v3",
+                tool={**tool, "description": "v3"},
+                transition_label=ChangeClass.MALICIOUS_DRIFT,
+                attack_family="x",
+            )
+        ],
+        final_label=ChangeClass.MALICIOUS_DRIFT,
+        provenance="test",
+    )
+    prepared = prepare_learned_trajectory(StubModel(), trajectory)
+
+    assert prepared.version_ids == ("v2", "v3")
+    assert prepared.attack_onset == 1
+    assert prepared.pair_probabilities[(0, 2)]["C3"] == 1.0
+    assert set(prepared.pair_probabilities) == {(0, 1), (0, 2), (1, 2)}

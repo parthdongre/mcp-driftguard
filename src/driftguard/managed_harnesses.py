@@ -133,7 +133,8 @@ def _edit(before: bytes, harness: str, db: Path) -> tuple[bytes, str, tuple[str,
         sections = ('mcp', 'servers')
         entry = {'type': 'local', 'command': [command, *arguments]}
         current = json.loads(parsed).get('mcp', {})
-        if isinstance(current, dict) and current and 'servers' not in current:
+        # V2 nests servers under mcp.servers and also defines mcp.timeout.
+        if isinstance(current, dict) and 'servers' not in current and set(current) - {'timeout'}:
             # Existing OpenCode installations may use the earlier flat map.
             sections = ('mcp',)
     if harness == 'vscode':
@@ -193,7 +194,7 @@ def install(db: Path, harness: str) -> None:
         try:
             if _read(target) != before or target.exists() != existed:
                 raise LiveError('Client settings changed during setup. Try connecting again.')
-            save_private(target, merged)
+            save_private(target, merged, keep_mode=True)
         except (OSError, LiveError):
             manifest.unlink()
             backup.unlink()
@@ -258,23 +259,35 @@ def restore(db: Path, harness: str) -> bool:
             if _read(target) != current:
                 return False
             if saved['existed']:
-                save_private(target, original)
+                save_private(target, original, keep_mode=True)
             else:
                 target.unlink(missing_ok=True)
         elif current and current != original:
             insertion = saved['insertion'].encode()
-            try:
-                cleaned = (current.replace(insertion, b'', 1) if current.count(insertion) == 1
-                           else _remove_entry(current, harness, saved['names'], saved['entry']))
-                if cleaned is None:
+            jsonc = harness in {'vscode', 'opencode'}
+            cleaned = None
+            if current.count(insertion) == 1:
+                # The verbatim insertion may have had no leading comma; a later
+                # sibling then leaves an invalid result. Fall back to parsing.
+                candidate = current.replace(insertion, b'', 1)
+                try:
+                    source = candidate.decode('utf-8-sig')
+                    json.loads(_mask(source) if jsonc else source)
+                    cleaned = candidate
+                except (ValueError, RecursionError):
+                    pass
+            if cleaned is None:
+                try:
+                    cleaned = _remove_entry(current, harness, saved['names'], saved['entry'])
+                    if cleaned is None:
+                        return False
+                    source = cleaned.decode('utf-8-sig')
+                    json.loads(_mask(source) if jsonc else source)
+                except (ValueError, RecursionError):
                     return False
-                source = cleaned.decode('utf-8-sig')
-                json.loads(_mask(source) if harness in {'vscode', 'opencode'} else source)
-            except (ValueError, RecursionError):
-                return False
             if _read(target) != current:
                 return False
-            save_private(target, cleaned)
+            save_private(target, cleaned, keep_mode=True)
         manifest.unlink()
         backup.unlink()
     return True

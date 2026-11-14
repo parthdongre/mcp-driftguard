@@ -338,13 +338,15 @@ class HttpPeer:
     def _exchange(self, method: str, payload: bytes, request_id: int | None) -> dict[str, Any] | None:
         self.verify_identity()
         parsed = urlsplit(self.config.url)
+        # Always pass an explicit port: with port=None, http.client re-parses the
+        # bracketless IPv6 hostname ("::1") and treats its last group as a port.
         if parsed.scheme == "https":
             connection = http.client.HTTPSConnection(
-                parsed.hostname, parsed.port, timeout=self.config.timeout_seconds,
+                parsed.hostname, parsed.port or 443, timeout=self.config.timeout_seconds,
                 context=ssl.create_default_context())
         else:
             connection = http.client.HTTPConnection(
-                parsed.hostname, parsed.port, timeout=self.config.timeout_seconds)
+                parsed.hostname, parsed.port or 80, timeout=self.config.timeout_seconds)
         self._connection = connection
         try:
             if self._closed.is_set():

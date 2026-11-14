@@ -269,8 +269,10 @@ class Handler(socketserver.StreamRequestHandler):
                     return
                 reply = self.session.handle(message)
                 params = message.get('params', {})
-                if (tag and message.get('method') == 'tools/call' and params.get('name') == 'read_text_file'
-                        and params.get('arguments', {}).get('path') == str(service.local['sample'])
+                arguments = params.get('arguments', {}) if isinstance(params, dict) else None
+                if (tag and message.get('method') == 'tools/call' and isinstance(arguments, dict)
+                        and params.get('name') == 'read_text_file'
+                        and arguments.get('path') == str(service.local['sample'])
                         and reply and 'result' in reply and not reply['result'].get('isError')):
                     with service.state_lock:
                         if tag not in service.calls and len(service.calls) >= 128:

@@ -47,7 +47,7 @@ export function AnnotationLab() {
       {!candidates.length ? <div className="annotation-import"><label className="form-label">Annotator ID<input value={annotator} maxLength={128} onChange={event => setAnnotator(event.target.value)} placeholder="Your independent rater ID" /></label><label className="file-drop"><Icon name="file" size={26} /><strong>Choose annotation candidates</strong><span>AnnotationCandidate JSONL · real_history only · 1 MiB maximum</span><input type="file" accept=".jsonl,.ndjson,application/x-ndjson" aria-label="Choose annotation candidate JSONL" disabled={!annotator.trim()} onChange={event => {
         const file = event.target.files?.[0]; if (!file) return;
         if (file.size > MAX_IMPORT_BYTES) { setError('Choose a candidate file smaller than 1 MiB.'); return; }
-        void file.text().then(text => { try { setCandidates(parseCandidates(text)); setError(''); } catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid candidate JSONL.'); } });
+        void file.text().then(text => { try { setCandidates(parseCandidates(text)); setError(''); } catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid candidate JSONL.'); } }).catch(() => setError('The candidate file could not be read.'));
       }} /></label></div> : candidate ? <>
         <div className="annotation-heading"><div><span className="eyebrow">CANDIDATE {annotations.length + 1} OF {candidates.length}</span><h3>{candidate.tool_name}</h3><p>{candidate.repository_id} · {candidate.old_version_id.slice(0, 12)} → {candidate.new_version_id.slice(0, 12)}</p></div><span className="badge">Rater: {annotator}</span></div>
         <DefinitionDiff oldTool={candidate.old_tool} newTool={candidate.new_tool} />

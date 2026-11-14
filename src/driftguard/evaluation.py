@@ -242,9 +242,14 @@ def multiclass_metrics(
     truth = [label.value for label in y_true]
     pred = [label.value for label in y_pred]
     labels = [label.value for label in ChangeClass]
+    # Macro-F1 averages only classes present in truth or predictions (sklearn's default);
+    # absent classes would otherwise contribute F1=0 and deflate the score.
+    observed = [label for label in labels if label in set(truth) | set(pred)]
     return {
         "accuracy": float(accuracy_score(truth, pred)),
-        "macro_f1": float(f1_score(truth, pred, labels=labels, average="macro", zero_division=0)),
+        "macro_f1": float(
+            f1_score(truth, pred, labels=observed, average="macro", zero_division=0)
+        ),
         "classification_report": classification_report(
             truth,
             pred,
