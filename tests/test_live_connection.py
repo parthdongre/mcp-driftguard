@@ -248,7 +248,13 @@ def test_mcp_data_token_cannot_approve_or_use_controller(app):
     with socket.create_connection(('127.0.0.1', endpoint['port']), timeout=2) as peer:
         peer.sendall(json.dumps({'kind': 'control', 'token': endpoint['token']}).encode() + b'\n')
         peer.sendall(b'{"action":"verify"}\n')
-        assert not peer.recv(4096)
+        # The service closes the rejected connection with the second line still
+        # unread. POSIX usually reports EOF; Windows reports a reset. Either way
+        # no reply was sent.
+        try:
+            assert not peer.recv(4096)
+        except (ConnectionAbortedError, ConnectionResetError):
+            pass
     assert not live.status(app)['verified']
 
 
