@@ -7,10 +7,8 @@ const built = await build({
   stdin: { contents: `
     import { renderToStaticMarkup } from 'react-dom/server.node';
     import { Disclosure } from './src/Disclosure';
-    import { HarnessConnections } from './src/HarnessConnections';
     import { ReviewPanel } from './src/ReviewPanel';
     export const row = () => renderToStaticMarkup(<Disclosure title="Codex MCP catalog"><p>Private details</p><button>Fetch definitions</button></Disclosure>);
-    export const harness = () => renderToStaticMarkup(<HarnessConnections native={false} onCollected={() => {}} />);
     export const review = () => renderToStaticMarkup(<ReviewPanel review={{ server_id:'source', tool_name:'read_notes', sha256:'a'.repeat(64), status:'pending', old_tool:null, new_tool:{name:'read_notes',inputSchema:{type:'object'}}, reasons:['Review required'] }} onDecision={() => {}} busy={false} />);
   `, resolveDir: process.cwd(), loader: 'tsx' },
   bundle: true, platform: 'node', format: 'esm', write: false, jsx: 'automatic',
@@ -26,14 +24,6 @@ test('a collapsed source exposes only its name and keeps actions inside the body
   assert.equal(summary.replace(/<[^>]*>/g, ''), 'Codex MCP catalog');
   assert.ok(!summary.includes('Private details') && !summary.includes('Fetch definitions'));
   assert.ok(html.indexOf('Fetch definitions') > html.indexOf('</summary>'));
-});
-
-test('connection controls remain in the closed setup body and browser access stays disabled', () => {
-  const html = ui.harness();
-  assert.ok(summaries(html).some(summary => summary.includes('Connect your coding harness')));
-  assert.ok(summaries(html).every(summary => !summary.includes('<button') && !summary.includes('<p>')));
-  assert.match(html, /<button[^>]*disabled=""[^>]*>Find harness connections<\/button>/);
-  assert.ok(!/<details[^>]*\sopen(?:[=\s>])/.test(html));
 });
 
 test('security evidence and contracts collapse while approval actions remain explicit', () => {

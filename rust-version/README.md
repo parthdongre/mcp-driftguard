@@ -194,7 +194,11 @@ Scans collect tool definitions for review. Gateway approvals bind to the exact
 definition and verified server identity. Review a recorded version even when
 the client is offline. Concurrent sessions for the same verified server share
 the decision. A changed definition is evaluated again, and a changed server
-identity invalidates approvals for that route. The gateway refreshes the
+identity invalidates approvals for that route. Server identities bind
+credentials and non-base environment values through salted
+PBKDF2-HMAC-SHA256 (100,000 iterations), never a bare hash. Approvals
+recorded before this change are revoked once on upgrade and must be
+reviewed again. The gateway refreshes the
 catalog before calls, on stdio change
 notifications, every 15 seconds for two minutes after gateway tool use,
 and every five minutes when idle by default. Running gateway sessions

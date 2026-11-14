@@ -27,10 +27,10 @@ def main() -> int:
                            check=True, timeout=120)
             try:
                 engine = destination / "engine/driftguard-engine.exe"
-                assert engine.is_file(), "Installed engine was not found"
+                builder.check(engine.is_file(), "Installed engine was not found")
                 builder.verify(engine)
                 executable = destination / "driftguard-desktop.exe"
-                assert executable.is_file()
+                builder.check(executable.is_file(), "Installed desktop executable was not found")
                 subprocess.run([sys.executable, str(ROOT / "desktop/scripts/smoke-window.py"),
                                 str(executable)], check=True, timeout=65)
             finally:
@@ -61,9 +61,9 @@ def main() -> int:
         app, = [path for path in bundles.glob("macos/*.app")
                 if (path / "Contents/Resources/engine").is_dir()]
         engine = app / "Contents/Resources/engine/driftguard-engine"
-        assert engine.is_file(), "Bundled engine was not found"
+        builder.check(engine.is_file(), "Bundled engine was not found")
         builder.verify(engine)
-        assert (app / "Contents/Info.plist").is_file()
+        builder.check((app / "Contents/Info.plist").is_file(), "Bundled Info.plist was not found")
         subprocess.run([sys.executable, str(ROOT / "desktop/scripts/smoke-window.py"),
                         str(app / "Contents/MacOS/driftguard-desktop")], check=True, timeout=50)
     print("Packaged runtime, Unicode state and review decisions verified.")

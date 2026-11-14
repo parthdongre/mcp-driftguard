@@ -34,16 +34,16 @@ closing the browser. Never treat automated QA fixture labels as research evidenc
 
 ## Native development
 
-The native **MCP connections** page can find Codex and Claude Code configuration
-and fetch definitions directly, including Codex App Server and Claude's own MCP
-tool catalog. See [harness connections](../docs/HARNESS_CONNECTIONS.md) for setup,
-supported configuration scopes and limits. This capability requires the native
-app; browser preview cannot read local configuration or start harness processes.
+The native **MCP connections** page discovers configured MCP servers and
+collects their tool definitions for review. See
+[harness connections](../docs/HARNESS_CONNECTIONS.md) for supported configuration
+scopes and limits. This capability requires the native app; browser preview
+cannot read local configuration or start harness processes.
 
-Apps installed in ChatGPT/Codex use a different catalog. Import their authorized
-names/descriptions snapshot through **ChatGPT / Codex installed apps**; see
-[hosted catalogs](../docs/HOSTED_APP_CATALOG.md). This import does not connect
-provider accounts or supply raw MCP schemas.
+Apps installed in ChatGPT/Codex use a different catalog. The current desktop
+interface has no import screen for it; the engine's `host_catalog_import` bridge
+action remains. See [hosted catalogs](../docs/HOSTED_APP_CATALOG.md). This import
+does not connect provider accounts or supply raw MCP schemas.
 
 Install [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/)
 and Rust. `npm run desktop:dev` selects the repository's `.venv` Python and checks

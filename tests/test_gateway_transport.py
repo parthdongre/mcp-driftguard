@@ -1,4 +1,5 @@
 """Actual subprocess wire tests using only an authored local fixture server."""
+import hashlib
 import json
 import os
 import subprocess
@@ -588,3 +589,31 @@ def test_close_terminates_descendants_after_direct_child_exits(tmp_path):
     else:
         os.kill(descendant, 9)
         pytest.fail("A descendant of the upstream server survived gateway shutdown")
+
+
+def test_stdio_identity_derives_pass_env_values_through_salted_kdf(tmp_path, monkeypatch):
+    import driftguard.gateway_transport as transport
+    secret = "authored-low-entropy"
+    monkeypatch.setenv("DRIFTGUARD_TEST_TOKEN", secret)
+    profile = StdioConfig("fixture", (sys.executable,), cwd=str(tmp_path),
+                          pass_env=("DRIFTGUARD_TEST_TOKEN",))
+    bindings = []
+    real_dumps = json.dumps
+    monkeypatch.setattr(transport.json, "dumps",
+                        lambda value, **kw: bindings.append(value) or real_dumps(value, **kw))
+    identity = profile.identity()
+    monkeypatch.setattr(transport.json, "dumps", real_dumps)
+    environment = bindings[-1]["environment"]
+    salt = b"driftguard-identity-v1\0fixture\0env\0DRIFTGUARD_TEST_TOKEN"
+    assert environment["DRIFTGUARD_TEST_TOKEN"] == hashlib.pbkdf2_hmac(
+        "sha256", secret.encode(), salt, 100_000).hex()
+    encoded = real_dumps(bindings[-1])
+    assert secret not in encoded and hashlib.sha256(secret.encode()).hexdigest() not in encoded
+    if "PATH" in os.environ:
+        assert environment["PATH"] == os.environ["PATH"]  # SAFE_ENV values stay raw.
+    unsalted = {**bindings[-1], "environment": {**environment, "DRIFTGUARD_TEST_TOKEN": secret}}
+    assert identity.fingerprint != hashlib.sha256(
+        real_dumps(unsalted, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert profile.identity() == identity
+    monkeypatch.setenv("DRIFTGUARD_TEST_TOKEN", "authored-rotated-value")
+    assert profile.identity() != identity  # Rotation still invalidates the binding.

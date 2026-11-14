@@ -27,8 +27,11 @@ such as the following, using your own server executable, script and directory:
 }
 ```
 
-To connect a legacy server, explicitly choose `2025-11-25`. There is no automatic
-version downgrade. A stdio profile uses a fixed argument vector, with `shell=False`.
+To connect a legacy server, explicitly choose `2025-11-25`. The gateway never
+falls back from the modern protocol to the legacy handshake on its own. Within an
+explicitly chosen legacy handshake, the upstream may select an older supported
+legacy version (`2025-06-18` or `2025-03-26`) as the MCP specification allows;
+the identity and approvals then bind to the negotiated version. A stdio profile uses a fixed argument vector, with `shell=False`.
 Use the separate explicit HTTP profile below for a remote endpoint.
 
 ```bash
@@ -133,7 +136,7 @@ Verified against official primary specifications on 2026-10-15:
 |---|---|
 | 2025-11-25 stdio | Explicit `initialize`, matching version, `notifications/initialized`, tools listing/calls |
 | 2026-07-28 stdio | Per-request `params._meta` protocol version and client capabilities; modern `server/discover`; complete results with gateway serverInfo |
-| Downstream compatibility | Separate explicit legacy initialization or required modern request metadata; no silent downgrade |
+| Downstream compatibility | Separate explicit legacy initialization or required modern request metadata; never falls back from modern to the legacy handshake; a legacy handshake may negotiate `2025-06-18`/`2025-03-26`, and identity binds to the negotiated version |
 | List caching | Modern facade returns deterministic names, `ttlMs: 0`, `cacheScope: private`; relists before calls |
 | Catalog pagination | Bounded complete upstream pagination; facade returns a single bounded approved catalog |
 | Subscriptions | Legacy clients receive tool-list change notifications after local review/catalog changes; modern subscriptions remain unsupported |
@@ -237,11 +240,22 @@ store fails; no plaintext fallback is created. Linux needs an installed
 Alternatively replace `use_os_vault` with `"auth_token_env": "MCP_API_TOKEN"`.
 Only the variable name belongs in the profile. The two sources are exclusive.
 Credential rotation changes the identity binding and requires a new review.
+The identity binds a credential (the HTTP bearer token, or a stdio `pass_env`
+value) only through a slow, salted PBKDF2-HMAC-SHA256 derivation scoped to the
+server id and endpoint or variable name, so a printed or stored fingerprint does
+not allow cheap offline guessing of the credential. Each exchange verifies the
+identity from the same credential value it then sends. Fingerprints produced
+before this derivation was introduced no longer match: existing approvals for
+every HTTP server and for stdio servers with `pass_env` values are revoked once
+(fail-closed) and need a new review.
 OAuth discovery, interactive authorization and refresh are not implemented.
 
 HTTPS uses the system trust store. Redirects and ambient HTTP proxy settings are
 not followed; authentication/session failure does not automatically retry a call.
 Plain HTTP requires `allow_insecure_loopback: true` and a literal loopback address.
+To store a vault credential for such a profile, pass `--allow-insecure-loopback`
+to `driftguard-credentials set`/`delete` (or `allow_insecure_loopback: true` in
+the desktop bridge credential request); non-loopback `http://` stays rejected.
 The desktop setup deliberately offers HTTPS endpoints only. URLs with embedded
 credentials, queries or fragments are rejected.
 

@@ -8,9 +8,11 @@ scan cannot enumerate an arbitrary hosted session or borrow its authentication.
 ## Inspect hosted descriptions
 
 1. Obtain a `driftguard-host-catalog-v1` export from the authorized host session.
-2. Open **MCP connections → ChatGPT / Codex installed apps**.
-3. Choose the JSON catalog, inspect the preview, and save it to the workspace.
-4. Expand an app and tool to read descriptions. Search matches names and text.
+2. Send each app entry to the engine with the `host_catalog_import` bridge action,
+   then read saved entries with `host_catalog_list`.
+
+The current desktop interface does not include the earlier
+**ChatGPT / Codex installed apps** import screen.
 
 This is an explicit snapshot import. It does not synchronize future host changes,
 connect provider accounts, fetch user data, call provider tools, copy credentials
@@ -28,8 +30,7 @@ for inspection, and rejects attempts to authorize execution for the
 Hosted source metadata survives app restart, including entries without tools.
 The `host:` namespace is separate from local gateway and manually imported
 identities. Each app import is atomic, bounded to 500 tools, and validates all
-definitions before changing the store. The UI accepts a 16-MiB catalog and sends
-bounded per-app requests to the native bridge.
+definitions before changing the store.
 
 ## Local discovery fixes
 

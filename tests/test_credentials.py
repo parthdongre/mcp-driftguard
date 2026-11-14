@@ -31,6 +31,31 @@ def test_renderer_can_write_but_never_read_credential_values(tmp_path, monkeypat
     assert response["ok"] is False
 
 
+def test_explicit_plain_loopback_credential_is_accepted_only_with_opt_in(tmp_path, monkeypatch, capsys):
+    written = []
+    monkeypatch.setattr(credentials, "write", lambda server, endpoint, secret: written.append((server, endpoint, secret)))
+    monkeypatch.setattr(credentials.getpass, "getpass", lambda prompt: "authored-test-secret")
+    loopback = "http://127.0.0.1:8765/mcp"
+    db = tmp_path / "guard.sqlite3"
+    request = {"action": "store_http_credential", "server_id": "fixture", "url": loopback,
+               "secret": "authored-test-secret"}
+    assert execute(db, json.dumps(request).encode())["ok"] is False
+    assert credentials.main(["set", "--server-id", "fixture", "--url", loopback]) == 2
+    assert execute(db, json.dumps({**request, "allow_insecure_loopback": "yes"}).encode())["ok"] is False
+    assert written == []
+    response = execute(db, json.dumps({**request, "allow_insecure_loopback": True}).encode())
+    assert response == {"ok": True, "data": {"stored": True, "available": True}}
+    assert credentials.main(["set", "--server-id", "fixture", "--url", loopback,
+                             "--allow-insecure-loopback"]) == 0
+    assert written == [("fixture", loopback, "authored-test-secret")] * 2
+    # The opt-in never extends to non-loopback plain HTTP.
+    remote = "http://example.com/mcp"
+    assert execute(db, json.dumps({**request, "url": remote, "allow_insecure_loopback": True}).encode())["ok"] is False
+    assert credentials.main(["set", "--server-id", "fixture", "--url", remote, "--allow-insecure-loopback"]) == 2
+    assert len(written) == 2
+    capsys.readouterr()
+
+
 def test_vault_unavailability_has_no_plaintext_fallback(tmp_path, monkeypatch):
     def unavailable(*args):
         raise credentials.CredentialError(credentials.UNAVAILABLE)

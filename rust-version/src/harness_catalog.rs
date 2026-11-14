@@ -14,7 +14,9 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(75);
 const MAX_SOURCES: usize = 48;
 
 pub(crate) fn configured_name(name: &str) -> bool {
+    // Names are passed to `codex mcp login <name>`; a leading dash would parse as a flag.
     !name.is_empty()
+        && !name.starts_with('-')
         && name.len() <= 128
         && name
             .bytes()
@@ -236,4 +238,15 @@ pub fn sync(db: &Path) -> Result<Value> {
         }
         Ok(json!({"servers":servers}))
     })
+}
+
+#[cfg(test)]
+#[test]
+fn configured_names_cannot_be_parsed_as_cli_flags() {
+    assert!(configured_name("github"));
+    assert!(configured_name("my-server.v2"));
+    for name in ["-h", "--help", "--config=evil", "-", ""] {
+        assert!(!configured_name(name), "{name}");
+    }
+    assert!(crate::servers::name(&serde_json::json!("--help")).is_err());
 }

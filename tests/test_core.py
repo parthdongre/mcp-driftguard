@@ -1,5 +1,13 @@
+import pytest
+
 from driftguard.baselines import hash_only_changed, rule_baseline
-from driftguard.canonicalize import canonical_json, make_snapshot
+from driftguard.canonicalize import (
+    MAX_JSON_DEPTH,
+    _canonical_schema,
+    canonical_json,
+    exact_json,
+    make_snapshot,
+)
 from driftguard.diff import build_delta
 from driftguard.models import ChangeClass
 
@@ -211,3 +219,22 @@ def test_sensitive_term_in_undocumented_parameter_name_is_detected():
     )
 
     assert "api_key" in delta.structural.sensitive_terms_added
+
+
+def _nested_schema(depth: int) -> dict:
+    schema: dict = {"type": "string"}
+    for _ in range(depth):
+        schema = {"type": "array", "items": schema}
+    return schema
+
+
+def test_deeply_nested_definitions_fail_with_value_error_not_recursion_error():
+    hostile = {"name": "deep", "inputSchema": _nested_schema(5000)}
+    for operation in (canonical_json, exact_json, lambda tool: make_snapshot(server_id="s", tool=tool)):
+        with pytest.raises(ValueError, match="nesting limit"):
+            operation(hostile)
+    with pytest.raises(ValueError, match="nesting limit"):
+        _canonical_schema(_nested_schema(5000))
+    # Realistic depth below the bound is unaffected.
+    allowed = {"name": "ok", "inputSchema": _nested_schema(MAX_JSON_DEPTH // 2 - 2)}
+    assert canonical_json(allowed)

@@ -102,7 +102,11 @@ checks the stored identity binding, active policy, current catalog, exact approv
 presence, approval state and expected revision. `dispatch` performs that check and invokes
 the trusted transport callback while holding a local lock and SQLite `BEGIN IMMEDIATE`
 transaction. Other cooperating store processes cannot revise local trust during the
-protected dispatch. A returned `CallPermit` is descriptive evidence and is not a reusable
+protected dispatch. This describes the Python engine. The Rust engine's `authorize`
+performs the same checks and records the call as active in one `BEGIN IMMEDIATE`
+transaction, then commits before the upstream `tools/call`; completion is recorded in a
+separate transaction afterwards. In the Rust engine, a local trust revision made while a
+call is in flight affects only later calls. A returned `CallPermit` is descriptive evidence and is not a reusable
 bearer token; dispatch must perform authorization again.
 
 This does not eliminate the remote race between discovery and execution. MCP `tools/call`
@@ -203,7 +207,7 @@ discovered source/digest, but cannot submit a raw executable, argv, arbitrary
 configuration filename or database path. The Python collector reads known Codex
 and Claude configuration locations, revalidates the selection, and can launch
 that configured server or the installed harness's fixed discovery command.
-Selecting **Fetch definitions** authorizes startup with user permissions; this is
+Requesting `harness_fetch` authorizes startup with user permissions; this is
 not sandboxing or a defense against a compromised authorized renderer. Collection
 never invokes tools or starts model turns. Its `harness:` observations are
 review-only and cannot authorize a live gateway identity. See
