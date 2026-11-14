@@ -49,6 +49,10 @@ def verify(engine: Path) -> None:
         })
         assert imported["ok"], imported
         tool = imported["data"][0]
+        summary = exchange(engine, db, {"action": "list_tools", "summary": True})["data"][0]
+        assert summary["catalog"]["operations"] == ["read"]
+        assert "definition" not in summary
+        assert exchange(engine, db, {"action": "definition_alerts"})["data"]["unread"] == 0
         identity = {"server_id": tool["server_id"], "tool_name": tool["tool_name"]}
         reviewed = exchange(engine, db, {"action": "review", **identity})
         assert reviewed["data"]["new_tool"]["description"] == "Read résumé — 测试 🌙"

@@ -1,0 +1,13 @@
+{
+  "productName": "MCP DriftGuard Rust",
+  "identifier": "io.driftguard.desktop.rust",
+  "bundle": {
+    "active": true,
+    "resources": {
+      "../build/rust-engine/": "rust-engine/"
+    },
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "publisher": "Parth Dongre",
+    "category": "DeveloperTool"
+  }
+}

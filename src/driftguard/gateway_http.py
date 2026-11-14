@@ -29,6 +29,7 @@ from .gateway_transport import (
     LEGACY,
     META_PREFIX,
     MODERN,
+    TOOLS_CHANGED,
     RpcError,
     StdioConfig,
     TransportError,
@@ -205,6 +206,7 @@ class HttpPeer:
         self._sequence = 0
         self._lock = threading.Lock()
         self._closed = threading.Event()
+        self.catalog_changed = threading.Event()
         self._connection: http.client.HTTPConnection | None = None
         self._active_socket: socket.socket | None = None
 
@@ -268,9 +270,11 @@ class HttpPeer:
     def _accept(self, message: dict[str, Any], request_id: int) -> dict[str, Any] | None:
         if "method" in message:
             if "id" in message or message.get("method") not in {
-                "notifications/tools/list_changed", "notifications/progress", "notifications/message"
+                TOOLS_CHANGED, "notifications/progress", "notifications/message"
             }:
                 raise TransportError("Unsupported HTTP server-to-client operation")
+            if message["method"] == TOOLS_CHANGED:
+                self.catalog_changed.set()
             return None
         if (type(message.get("id")) is not int or message["id"] != request_id
                 or ("result" in message) == ("error" in message)):

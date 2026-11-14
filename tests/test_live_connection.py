@@ -12,7 +12,7 @@ import pytest
 from driftguard import live_connection as live
 from driftguard.desktop_bridge import execute
 from driftguard.gateway import GuardStore
-from driftguard.gateway_transport import LEGACY, StdioConfig, StdioPeer
+from driftguard.gateway_transport import LEGACY, RpcError, StdioConfig, StdioPeer
 
 FIXTURE = r'''
 import json, pathlib, sys
@@ -127,6 +127,97 @@ def test_newer_settings_preserved(app):
     live.save_private(live.codex_config(), edited)
     assert not live.restore_config(app)
     assert live.codex_config().read_bytes() == edited
+
+
+@pytest.mark.parametrize(('harness', 'sections'), [
+    ('claude', ('mcpServers',)), ('cursor', ('mcpServers',)),
+    ('antigravity', ('mcpServers',)), ('gemini', ('mcpServers',)),
+    ('opencode', ('mcp', 'servers')), ('vscode', ('servers',)),
+])
+def test_managed_harness_configuration_round_trip(app, tmp_path, monkeypatch, harness, sections):
+    from driftguard import managed_harnesses as managed
+
+    target = tmp_path / harness / 'settings.json'
+    monkeypatch.setattr(managed, 'config_path', lambda selected: target)
+    original = b'{\n  "setting": "keep me"\n}\n'
+    live.save_private(target, original)
+    managed.install(app, harness)
+    installed = target.read_bytes()
+    parsed = json.loads(installed)
+    assert parsed['setting'] == 'keep me'
+    for section in sections:
+        parsed = parsed[section]
+    entry = parsed[live.SERVER_ID]
+    argv = entry['command'] if harness == 'opencode' else [entry['command'], *entry['args']]
+    assert argv == live.engine_args('driftguard.live_client') + [
+        '--connection', str(live.paths(app)['client']), '--trace-tag', f'harness:{harness}',
+    ]
+    managed.install(app, harness)
+    assert target.read_bytes() == installed
+    assert managed.restore(app, harness)
+    assert target.read_bytes() == original
+
+
+def test_managed_jsonc_preserves_comments_and_removes_only_its_entry(app, tmp_path, monkeypatch):
+    from driftguard import managed_harnesses as managed
+
+    target = tmp_path / 'mcp.json'
+    monkeypatch.setattr(managed, 'config_path', lambda selected: target)
+    original = b'{\n  // Keep this comment\n  "servers": { "mine": {"url":"https://example.invalid"}, },\n}\n'
+    target.write_bytes(original)
+    managed.install(app, 'vscode')
+    installed = target.read_bytes()
+    assert b'// Keep this comment' in installed
+    edited = installed.replace(b'https://example.invalid', b'https://updated.invalid')
+    target.write_bytes(edited)
+    assert managed.restore(app, 'vscode')
+    assert target.read_bytes() == original.replace(b'https://example.invalid', b'https://updated.invalid')
+
+
+def test_disconnect_removes_managed_entry_after_client_reformats_settings(app, tmp_path, monkeypatch):
+    from driftguard import managed_harnesses as managed
+
+    target = tmp_path / '.claude.json'
+    monkeypatch.setattr(managed, 'config_path', lambda selected: target)
+    managed.install(app, 'claude')
+    parsed = json.loads(target.read_bytes())
+    parsed['other'] = {'keep': True}
+    parsed['mcpServers']['unrelated'] = {'command': 'keep'}
+    target.write_text(json.dumps(parsed, indent=4))
+    assert managed.restore(app, 'claude')
+    assert json.loads(target.read_bytes()) == {
+        'other': {'keep': True}, 'mcpServers': {'unrelated': {'command': 'keep'}},
+    }
+
+
+def test_harness_connect_uses_one_gateway_and_requires_review(app, tmp_path, monkeypatch):
+    from driftguard import managed_harnesses as managed
+
+    monkeypatch.setattr(managed, 'config_path', lambda selected: tmp_path / f'{selected}.json')
+    monkeypatch.setattr(managed, 'detected', lambda selected: True)
+    assert send(app, 'live_connect', harness='not-a-client')['ok'] is False
+    assert send(app, 'live_connect', harness='cursor', path='/tmp/anything')['ok'] is False
+    first = send(app, 'live_connect', harness='cursor')
+    assert first['ok'] and first['data']['tool']['status'] == 'pending'
+    second = send(app, 'live_connect', harness='antigravity')
+    assert second['ok']
+    assert first['data']['tool']['revision'] == second['data']['tool']['revision']
+    entry = json.loads((tmp_path / 'cursor.json').read_bytes())['mcpServers'][live.SERVER_ID]
+    peer = StdioPeer(StdioConfig('cursor', (entry['command'], *entry['args']),
+                               cwd=str(tmp_path), protocol_version=LEGACY, timeout_seconds=4))
+    try:
+        peer.initialize()
+        peer.request('tools/list')
+        assert live.status(app)['harnesses'][2]['attached'] == 1
+        assert send(app, 'live_disconnect', harness='cursor')['ok']
+        with pytest.raises(RpcError):
+            peer.request('tools/list')
+    finally:
+        peer.close()
+    assert live.status(app)['running']
+    assert not (tmp_path / 'cursor.json').exists()
+    assert send(app, 'live_disconnect', harness='antigravity')['ok']
+    wait_for(app, lambda state: not state['service_alive'])
 
 
 def test_app_approves_current_version_and_downstream_reconnect_keeps_approval(app):

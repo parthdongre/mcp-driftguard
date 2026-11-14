@@ -20,15 +20,47 @@ const ACTIONS: &[&str] = &[
     "store_http_credential",
     "remove_http_credential",
     "runtime_info",
+    "gateway_servers",
+    "register_codex_hosted",
+    "launch_gateway_only_codex",
+    "save_gateway_server",
+    "remove_gateway_server",
+    "link_gateway_server_codex",
+    "link_gateway_server",
+    "check_gateway_server",
+    "codex_mcp_sign_in",
     "overview",
+    "connection_graph",
+    "mcp_activity",
+    "monitoring_settings",
+    "approval_mode",
+    "set_approval_mode",
+    "route_codex_mcps",
+    "restore_codex_mcps",
+    "set_monitoring_settings",
+    "sentinel_calls",
+    "sentinel_evidence",
+    "sentinel_stop",
+    "sentinel_resume",
+    "sentinel_clear",
+    "sync_harness_catalogs",
+    "harness_helpers",
+    "tool_activity",
     "list_tools",
     "review",
     "history",
     "activity",
+    "definition_alerts",
+    "dismiss_definition_alerts",
     "import_definitions",
     "approve",
     "deny",
     "quarantine",
+    "release_quarantine",
+    "block_tool",
+    "unblock_tool",
+    "block_tool_all",
+    "unblock_tool_all",
     "harness_scan",
     "harness_fetch",
     "host_catalog_import",
@@ -44,6 +76,7 @@ const ACTIONS: &[&str] = &[
 #[derive(Clone)]
 struct BridgeRuntime {
     python: Option<PathBuf>,
+    rust: Option<PathBuf>,
     frozen: bool,
     db: PathBuf,
     lock: Arc<Mutex<()>>,
@@ -78,13 +111,51 @@ fn validate_request(request: &Value) -> Result<Vec<u8>, String> {
     }
     // Deny unexpected arguments at the native boundary, including executable/DB/path overrides.
     let allowed: &[&str] = match action {
-        "overview" | "activity" | "runtime_info" | "host_catalog_list" => &["action"],
-        "live_connect" | "live_status" | "live_disconnect" | "live_run_codex"
-        | "live_cancel_codex" => &["action"],
+        "overview"
+        | "gateway_servers"
+        | "register_codex_hosted"
+        | "connection_graph"
+        | "monitoring_settings"
+        | "approval_mode"
+        | "route_codex_mcps"
+        | "restore_codex_mcps"
+        | "sentinel_clear"
+        | "sync_harness_catalogs"
+        | "harness_helpers"
+        | "activity"
+        | "definition_alerts"
+        | "runtime_info"
+        | "host_catalog_list" => &["action"],
+        "dismiss_definition_alerts" => &["action", "through_id"],
+        "save_gateway_server" => &[
+            "action",
+            "server_id",
+            "transport",
+            "url",
+            "use_os_vault",
+            "argv",
+            "cwd",
+            "pass_env",
+        ],
+        "remove_gateway_server"
+        | "link_gateway_server_codex"
+        | "check_gateway_server"
+        | "codex_mcp_sign_in" => &["action", "server_id"],
+        "link_gateway_server" => &["action", "server_id", "harness"],
+        "launch_gateway_only_codex" => &["action", "open_terminal"],
+        "set_approval_mode" => &["action", "mode"],
+        "set_monitoring_settings" => &["action", "settings"],
+        "mcp_activity" => &["action", "before_id", "include_checks"],
+        "sentinel_calls" => &["action", "before_id"],
+        "sentinel_evidence" => &["action", "call_id"],
+        "sentinel_stop" | "sentinel_resume" => &["action", "server_id"],
+        "live_connect" | "live_disconnect" => &["action", "harness"],
+        "live_status" | "live_run_codex" | "live_cancel_codex" => &["action"],
         "live_verify" => &["action", "expected_sha256", "expected_revision"],
         "host_catalog_import" => &["action", "source"],
         "list_tools" => &["action", "server_id", "summary"],
-        "review" | "history" => &["action", "server_id", "tool_name"],
+        "review" | "history" | "tool_activity" | "block_tool" | "unblock_tool"
+        | "block_tool_all" | "unblock_tool_all" => &["action", "server_id", "tool_name"],
         "import_definitions" => &["action", "server_id", "identity", "tools"],
         "store_http_credential" => &["action", "server_id", "url", "secret"],
         "remove_http_credential" => &["action", "server_id", "url"],
@@ -256,14 +327,16 @@ async fn run_bridge_before(
     let _lock = timeout_at(deadline, runtime.lock.lock())
         .await
         .map_err(|_| TIMEOUT_ERROR)?;
-    let python = runtime.python.as_ref().ok_or(
+    let engine = runtime.rust.as_ref().or(runtime.python.as_ref()).ok_or(
         "Local engine unavailable. Reinstall the packaged app. For debug builds, set DRIFTGUARD_PYTHON to a trusted absolute virtual-environment executable.",
     )?;
-    if !python.is_absolute() || !python.is_file() {
+    if !engine.is_absolute() || !engine.is_file() {
         return Err("The local engine must be an existing absolute executable".into());
     }
-    let mut command = Command::new(python);
-    if runtime.frozen {
+    let mut command = Command::new(engine);
+    if runtime.rust.is_some() {
+        command.arg("--db");
+    } else if runtime.frozen {
         command.args(["bridge", "--db"]);
     } else {
         command.args(["-I", "-m", "driftguard.desktop_bridge", "--db"]);
@@ -283,7 +356,11 @@ async fn run_bridge(runtime: BridgeRuntime, bytes: Vec<u8>) -> Result<Value, Str
     let operation_timeout = serde_json::from_slice::<Value>(&bytes)
         .ok()
         .and_then(|request| match request["action"].as_str() {
-            Some("harness_fetch") => Some(DISCOVERY_TIMEOUT),
+            Some("harness_fetch" | "sync_harness_catalogs") => Some(DISCOVERY_TIMEOUT),
+            Some(
+                "check_gateway_server" | "launch_gateway_only_codex" | "register_codex_hosted",
+            ) => Some(DISCOVERY_TIMEOUT),
+            Some("codex_mcp_sign_in") => Some(Duration::from_secs(300)),
             Some("live_connect") => Some(Duration::from_secs(180)),
             Some("live_verify") => Some(Duration::from_secs(45)),
             _ => None,
@@ -311,7 +388,7 @@ async fn driftguard_request(
     }
     let bytes = validate_request(&request)?;
     let owned = runtime.inner().clone();
-    if request["action"] == "runtime_info" {
+    if request["action"] == "runtime_info" && owned.rust.is_none() {
         let executable = owned
             .python
             .as_ref()
@@ -359,6 +436,23 @@ pub fn run() {
                 "driftguard-engine"
             };
             let packaged = app.path().resource_dir()?.join("engine").join(engine_name);
+            let rust_name = if cfg!(windows) {
+                "driftguard-rust.exe"
+            } else {
+                "driftguard-rust"
+            };
+            let bundled_rust = app
+                .path()
+                .resource_dir()?
+                .join("rust-engine")
+                .join(rust_name);
+            let rust = if bundled_rust.is_file() {
+                Some(bundled_rust)
+            } else if cfg!(debug_assertions) {
+                std::env::var_os("DRIFTGUARD_RUST_ENGINE").map(PathBuf::from)
+            } else {
+                None
+            };
             let (python, frozen) = select_engine(
                 packaged,
                 std::env::var_os("DRIFTGUARD_PYTHON").map(PathBuf::from),
@@ -367,7 +461,12 @@ pub fn run() {
             app.manage(BridgeRuntime {
                 python,
                 frozen,
-                db: directory.join("guard.sqlite3"),
+                db: directory.join(if rust.is_some() {
+                    "guard-rust.sqlite3"
+                } else {
+                    "guard.sqlite3"
+                }),
+                rust,
                 lock: Arc::new(Mutex::new(())),
                 discovery_lock: Arc::new(Mutex::new(())),
             });
@@ -441,6 +540,7 @@ mod tests {
         fn runtime(&self, python: PathBuf) -> BridgeRuntime {
             BridgeRuntime {
                 python: Some(python),
+                rust: None,
                 frozen: false,
                 db: self.0.join("review store.sqlite3"),
                 lock: Arc::new(Mutex::new(())),
@@ -494,6 +594,10 @@ mod tests {
         assert!(validate_request(&json!({"action": "approve", "command": "whoami"})).is_err());
         assert!(validate_request(&json!({"action": "overview", "args": []})).is_err());
         assert!(validate_request(&json!({"action": "overview"})).is_ok());
+        assert!(validate_request(&json!({"action": "connection_graph"})).is_ok());
+        assert!(
+            validate_request(&json!({"action": "connection_graph", "path": "/tmp/file"})).is_err()
+        );
         assert!(validate_request(&json!({"action": "list_tools", "summary": true})).is_ok());
         for action in [
             "live_connect",
@@ -507,6 +611,11 @@ mod tests {
             assert!(validate_request(&json!({"action": action, "path": "/tmp/file"})).is_err());
             assert!(validate_request(&json!({"action": action, "prompt": "anything"})).is_err());
         }
+        assert!(validate_request(&json!({"action": "live_connect", "harness": "cursor"})).is_ok());
+        assert!(validate_request(
+            &json!({"action": "live_connect", "harness": "cursor", "args": []})
+        )
+        .is_err());
         let verify = json!({
             "action": "live_verify", "expected_sha256": "abc", "expected_revision": 1,
         });
@@ -636,6 +745,7 @@ mod tests {
             let _guard = lock.lock().await;
             let runtime = BridgeRuntime {
                 python: None,
+                rust: None,
                 frozen: false,
                 db: PathBuf::new(),
                 lock: lock.clone(),

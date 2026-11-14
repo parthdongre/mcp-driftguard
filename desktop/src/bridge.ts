@@ -40,15 +40,23 @@ export class DemoWorkspace {
       case 'activity': result = data.activity; break;
       case 'history': result = data.history.filter(t => t.server_id === payload.server_id && t.tool_name === payload.tool_name); break;
       case 'review': result = data.reviews.find(t => t.server_id === payload.server_id && t.tool_name === payload.tool_name); break;
-      case 'approve': case 'deny': case 'quarantine': {
+      case 'approve': case 'deny': case 'quarantine': case 'release_quarantine': {
         if (!tool || tool.sha256 !== payload.expected_sha256 || tool.revision !== payload.expected_revision) throw new Error('This version has changed. Refresh the evidence before deciding.');
         const identity = `${toolKey(tool)}:${tool.sha256}`;
         if (payload.action === 'approve' && this.quarantined.has(identity)) throw new Error('Quarantined definitions cannot be approved. Correct the source and observe a safe version.');
         if (payload.action === 'quarantine') this.quarantined.add(identity);
+        if (payload.action === 'release_quarantine' && !this.quarantined.delete(identity)) {
+          throw new Error('This definition is not quarantined.');
+        }
         tool.revision = (tool.revision ?? 0) + 1;
-        tool.status = payload.action === 'approve' ? 'approved' : payload.action === 'deny' ? 'denied' : 'quarantined';
+        tool.status = { approve: 'approved', deny: 'denied', quarantine: 'quarantined',
+          release_quarantine: 'pending' }[payload.action];
         const review = data.reviews.find(t => t.server_id === tool.server_id && t.tool_name === tool.tool_name);
-        if (review) { review.status = tool.status; review.revision = tool.revision; }
+        if (review) {
+          review.status = tool.status;
+          review.revision = tool.revision;
+          review.quarantine_active = this.quarantined.has(identity);
+        }
         data.overview.pending = data.tools.filter(t => ['pending', 'unreviewed', 'review_required'].includes(t.status)).length;
         data.overview.approved = data.tools.filter(t => t.status === 'approved').length;
         data.overview.quarantined = data.tools.filter(t => t.status === 'quarantined').length;
@@ -68,8 +76,8 @@ export function toolKey(tool: Pick<ToolRecord, 'server_id' | 'tool_name'>): stri
 }
 export const statusLabel = (status: string = 'observed'): string => ({
   approved: 'Approved', quarantined: 'Quarantined', denied: 'Denied', pending: 'Needs review',
-  approved_reference: 'Approved reference', observed: 'Observed', revoked: 'Revoked',
-  unreviewed: 'Needs review', review_required: 'Needs review',
+  approved_reference: 'Approved reference', observed_reference: 'Initial baseline', observed: 'Observed', revoked: 'Revoked',
+  unreviewed: 'Needs review', review_required: 'Needs review', blocked: 'Blocked',
 }[status] ?? status.replaceAll('_', ' '));
-export const isPending = (tool: ToolRecord): boolean => ['pending', 'unreviewed', 'review_required'].includes(tool.status);
+export const isPending = (tool: ToolRecord): boolean => !tool.blocked && ['pending', 'unreviewed', 'review_required'].includes(tool.status);
 export type { HistoryVersion, Review };

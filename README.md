@@ -31,8 +31,9 @@ Start with the [first live connection](docs/LIVE_QUICKSTART.md),
 [desktop setup](desktop/README.md), [gateway setup](docs/GATEWAY.md),
 [architecture](docs/ARCHITECTURE.md), and [verified progress](docs/IMPLEMENTATION_PROGRESS.md).
 
-The native connection screen also [discovers Codex and Claude Code sources](docs/HARNESS_CONNECTIONS.md)
-and fetches their tool definitions directly for review, without manual JSON exports.
+The native connection screen detects and configures Codex, Claude Code, Cursor,
+Antigravity, Gemini CLI, OpenCode, and VS Code / Copilot for the app-owned
+Filesystem sample gateway. See the [live quickstart](docs/LIVE_QUICKSTART.md).
 
 The gateway supports restricted stdio and Streamable HTTP tools for MCP `2025-11-25`
 and `2026-07-28`, including modern routing headers and JSON/SSE responses. Native

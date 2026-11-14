@@ -61,7 +61,7 @@ def generate_fixture() -> None:
                     for name in ["canonicalize.py", "diff.py", "features.py", "gateway.py", "temporal.py"]
                 },
             },
-            "overview": overview, "tools": records,
+            "overview": overview, "tools": handle_request(store, {"action": "list_tools", "summary": True}),
             "reviews": [store.get_tool(server, record["tool_name"]) for record in records],
             "history": [entry for record in records for entry in handle_request(
                 store, {"action": "history", "server_id": server, "tool_name": record["tool_name"]})],

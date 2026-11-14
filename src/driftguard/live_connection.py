@@ -137,7 +137,7 @@ def _digest(data: bytes) -> str:
 
 def _entry(db: Path) -> bytes:
     command, *arguments = engine_args('driftguard.live_client')
-    arguments += ['--connection', str(paths(db)['client'])]
+    arguments += ['--connection', str(paths(db)['client']), '--trace-tag', 'harness:codex']
     return (BEGIN + f'[mcp_servers."{SERVER_ID}"]\ncommand = ' + json.dumps(command, ensure_ascii=False) +
             '\nargs = ' + json.dumps(arguments, ensure_ascii=False) + '\nstartup_timeout_sec = 90\n' + END).encode()
 
@@ -187,7 +187,9 @@ def restore_config(db: Path) -> bool:
 
 
 def _program(name: str) -> str | None:
-    search = os.pathsep.join([os.environ.get('PATH', os.defpath), '/opt/homebrew/bin', '/usr/local/bin', str(Path.home() / '.local/bin')])
+    home = Path.home()
+    search = os.pathsep.join([os.environ.get('PATH', os.defpath), '/opt/homebrew/bin',
+        '/usr/local/bin', str(home / '.local/bin'), str(home / '.npm-global/bin')])
     found = shutil.which(name, path=search)
     return os.path.abspath(found) if found else None
 
@@ -239,6 +241,8 @@ def _resources(db: Path) -> None:
 
 
 def status(db: Path) -> dict:
+    from . import managed_harnesses as managed
+
     try:
         result = control(db, 'status')
         result['service_alive'] = True
@@ -247,10 +251,22 @@ def status(db: Path) -> dict:
                   'tool': None, 'job': {'stage': 'idle'}}
     return {**result, 'installed': paths(db)['manifest'].exists(),
             'codex_available': _program('codex') is not None, 'config_path': str(codex_config()),
-            'sample_path': str(paths(db)['sample'])}
+            'sample_path': str(paths(db)['sample']),
+            'harnesses': [
+                {'id': harness, 'label': details[0], 'detected': managed.detected(harness),
+                 'installed': managed.manifest_path(db, harness).exists(),
+                 'attached': result.get('attached_harnesses', {}).get(harness, 0)}
+                for harness, details in managed.CLIENTS.items()
+            ]}
 
 
-def connect(db: Path) -> dict:
+def connect(db: Path, harness: str = 'codex') -> dict:
+    from . import managed_harnesses as managed
+
+    if harness not in managed.CLIENTS:
+        raise LiveError('Choose a supported coding harness.')
+    if harness != 'codex' and not managed.detected(harness):
+        raise LiveError('Install this coding harness and reopen DriftGuard.')
     with operation_lock(paths(db)['root'] / 'operation.lock'):
         current = status(db)
         started = False
@@ -280,7 +296,10 @@ def connect(db: Path) -> dict:
                     process.wait(timeout=3)
                 raise LiveError('The local gateway did not start. Check the engine and reconnect.')
         try:
-            install_config(db)
+            if harness == 'codex':
+                install_config(db)
+            else:
+                managed.install(db, harness)
         except Exception:
             if started:
                 control(db, 'stop')
@@ -288,15 +307,25 @@ def connect(db: Path) -> dict:
         return status(db)
 
 
-def disconnect(db: Path) -> dict:
+def disconnect(db: Path, harness: str = 'codex') -> dict:
+    from . import managed_harnesses as managed
+
+    if harness not in managed.CLIENTS:
+        raise LiveError('Choose a supported coding harness.')
     with operation_lock(paths(db)['root'] / 'operation.lock'):
-        try:
-            control(db, 'stop')
-        except LiveError:
-            pass
-        restored = restore_config(db)
+        restored = restore_config(db) if harness == 'codex' else managed.restore(db, harness)
+        other_clients = any(managed.manifest_path(db, other).exists()
+                            for other in managed.CLIENTS if other != harness)
+        if not other_clients:
+            try:
+                control(db, 'stop')
+            except LiveError:
+                pass
+        if harness != 'codex' and not restored:
+            raise LiveError('The managed entry was edited. DriftGuard preserved the client settings.')
+        label = managed.CLIENTS[harness][0]
         return {**status(db), 'settings_restored': restored,
-                'message': 'Disconnected. Previous Codex settings restored.' if restored else
+                'message': f'Disconnected. Previous {label} settings restored.' if restored else
                 'Disconnected. Newer Codex edits were preserved; its DriftGuard entry remains in the file.'}
 
 

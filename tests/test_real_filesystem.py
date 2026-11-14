@@ -43,10 +43,24 @@ def test_official_filesystem_live_review_read_and_revocation(tmp_path):
         assert result['structuredContent'] == {'content': selected.read_text()}
         with GuardStore(db) as store:
             row = store.get_tool('live-filesystem', 'read_text_file')
-        denied = execute(db, json.dumps({'action': 'deny', 'server_id': row['server_id'],
-            'tool_name': row['tool_name'], 'expected_sha256': row['sha256'],
-            'expected_revision': row['revision']}).encode())
-        assert denied['ok']
+
+        def decide(action, version):
+            response = execute(db, json.dumps({'action': action, 'server_id': version['server_id'],
+                'tool_name': version['tool_name'], 'expected_sha256': version['sha256'],
+                'expected_revision': version['revision']}).encode())
+            assert response['ok'], response
+            return response['data']
+
+        quarantined = decide('quarantine', row)
+        assert client._messages.get(timeout=5)['method'] == 'notifications/tools/list_changed'
+        assert client.request('tools/list')['tools'] == []
+        released = decide('release_quarantine', quarantined)
+        assert released['status'] == 'pending'
+        assert client.request('tools/list')['tools'] == []
+        reapproved = decide('approve', released)
+        assert client._messages.get(timeout=5)['method'] == 'notifications/tools/list_changed'
+        assert [t['name'] for t in client.request('tools/list')['tools']] == ['read_text_file']
+        decide('deny', reapproved)
         assert client._messages.get(timeout=5)['method'] == 'notifications/tools/list_changed'
         assert client.request('tools/list')['tools'] == []
         with pytest.raises(RpcError):

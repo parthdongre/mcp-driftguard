@@ -192,6 +192,7 @@ class GuardStore:
             CREATE TABLE IF NOT EXISTS guard_events(
                 id INTEGER PRIMARY KEY, event_type TEXT NOT NULL, server_id TEXT,
                 tool_name TEXT, timestamp TEXT NOT NULL, details TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS guard_events_type_id ON guard_events(event_type, id);
         """)
         with self._transaction():
             stored = self._db.execute("SELECT value FROM guard_meta WHERE key='policy'").fetchone()
@@ -631,13 +632,22 @@ class GuardStore:
                             exact_json(temporal),
                         ),
                     )
+                    changed = {}
+                    if old:
+                        previous = json.loads(old["definition"])
+                        changed["changed_fields"] = sorted(
+                            field for field in previous.keys() | tool.keys()
+                            if field not in previous or field not in tool
+                            or exact_json(previous[field]) != exact_json(tool[field])
+                        )[:32]
                     self._event(
-                        "definition_observed",
+                        "definition_changed" if old else "definition_observed",
                         server_id,
                         name,
                         sha256=digest,
                         status=status,
                         revision=revision,
+                        **changed,
                     )
                 # Removal revokes consent so remove/re-add cannot silently resurrect approval.
                 self._db.execute(
@@ -715,6 +725,10 @@ class GuardStore:
                 self._server(server_id), tool_name, include_inactive=True
             )
             record["old_tool"] = json.loads(approval["definition"]) if approval else None
+            record["quarantine_active"] = self._db.execute(
+                "SELECT 1 FROM guard_quarantines WHERE server_id=? AND tool_name=? AND sha256=?",
+                (server_id, tool_name, row["sha256"]),
+            ).fetchone() is not None
             if (
                 approval
                 and max(
@@ -760,6 +774,13 @@ class GuardStore:
             ).fetchone()
             if action == "approved" and (row["status"] == "quarantined" or previously_quarantined):
                 raise GateError("Quarantined definitions cannot be approved")
+            if action == "release_quarantine":
+                if not previously_quarantined and row["status"] != "quarantined":
+                    raise GateError("This definition is not quarantined")
+                self._db.execute(
+                    "DELETE FROM guard_quarantines WHERE server_id=? AND tool_name=? AND sha256=?",
+                    (server_id, tool_name, expected_hash),
+                )
             if action == "quarantined":
                 self._db.execute(
                     "INSERT OR IGNORE INTO guard_quarantines VALUES(?,?,?)",
@@ -790,10 +811,19 @@ class GuardStore:
             self._db.execute(
                 "UPDATE guard_tools SET status=?,revision=revision+1,temporal=? "
                 "WHERE server_id=? AND tool_name=?",
-                (action, "{}", server_id, tool_name),
+                ("pending" if action == "release_quarantine" else action, "{}", server_id, tool_name),
             )
             self._event("tool_" + action, server_id, tool_name, sha256=expected_hash, actor=actor)
         return self.get_tool(server_id, tool_name)
+
+    def release_quarantine(
+        self, server_id: str, tool_name: str, *, expected_hash: str,
+        expected_revision: int | None = None, actor: str = "local-user",
+    ) -> dict[str, Any]:
+        return self._review(
+            server_id, tool_name, "release_quarantine", expected_hash=expected_hash,
+            expected_revision=expected_revision, actor=actor,
+        )
 
     def approve(
         self,
@@ -986,6 +1016,37 @@ class GuardStore:
                     item[field] = json.loads(item[field])
                 records.append(item)
             return records
+
+    def definition_alerts(self, through_id: int | None = None) -> dict[str, Any]:
+        with self._transaction():
+            read = self._db.execute(
+                "SELECT value FROM guard_meta WHERE key='definition_alerts_read'"
+            ).fetchone()
+            cursor = int(read[0]) if read else 0
+            if through_id is not None:
+                if type(through_id) is not int or not 0 < through_id <= 2**53 - 1:
+                    raise ValueError("A valid alert ID is required")
+                exists = self._db.execute(
+                    "SELECT 1 FROM guard_events WHERE id=? AND event_type='definition_changed'",
+                    (through_id,),
+                ).fetchone()
+                if not exists:
+                    raise ValueError("Unknown definition alert")
+                cursor = max(cursor, through_id)
+                self._db.execute(
+                    "INSERT OR REPLACE INTO guard_meta VALUES('definition_alerts_read',?)",
+                    (str(cursor),),
+                )
+            count = self._db.execute(
+                "SELECT COUNT(*) FROM guard_events WHERE event_type='definition_changed' AND id>?",
+                (cursor,),
+            ).fetchone()[0]
+            row = self._db.execute(
+                "SELECT * FROM guard_events WHERE event_type='definition_changed' AND id>? "
+                "ORDER BY id DESC LIMIT 1", (cursor,),
+            ).fetchone()
+            latest = {**dict(row), "detail": json.loads(row["details"])} if row else None
+            return {"unread": count, "latest": latest}
 
     def events(self, limit: int = 100) -> list[dict[str, Any]]:
         if type(limit) is not int or not 1 <= limit <= 10000:

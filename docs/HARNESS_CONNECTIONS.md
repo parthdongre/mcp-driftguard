@@ -1,24 +1,12 @@
 # Connect Codex and Claude Code
 
-The native app discovers harness connections and collects current tool definitions
-directly. You do not need to export `tools/list` JSON manually.
+For in-app setup, follow the [live quickstart](LIVE_QUICKSTART.md).
+**Security review** groups observed tools by source and offers filters for
+review status and inferred capability. Select a tool to switch between its
+current review and version history.
 
-For apps installed in the ChatGPT/Codex host, use the separate
-[hosted app catalog](HOSTED_APP_CATALOG.md) import. A local CLI inventory does not
-represent all installed hosted apps, their skills or their available tools.
-
-1. Update to the branch containing harness discovery and start the native app.
-2. Open **MCP connections → Connect your coding harness**.
-3. Enter an absolute project directory to include project settings. Leave it blank
-   for user configuration. Click **Find harness connections**.
-4. Choose **Fetch definitions** on a discovered source.
-5. Open **Security review** or **Tool evolution** to inspect the collected tools.
-   Use **Refresh definitions** to collect another complete observation.
-
-Connection names, definition fields, activity entries and settings use compact
-disclosure rows. Click a name or focus its disclosure and press Enter/Space to
-show its description, controls and diagnostic details. The interface uses native
-system typography, including the macOS interface font, without remote font files.
+The adapters below document definition-only collection through the desktop
+bridge's `harness_scan` and `harness_fetch` operations.
 
 Scanning only reads configuration; fetching can launch configured programs with
 your user permissions. It does not call tools or start model turns. Harness

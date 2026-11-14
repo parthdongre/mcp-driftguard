@@ -17,12 +17,14 @@ from pathlib import Path
 from typing import Any
 
 from .canonicalize import exact_hash
+from .capabilities import catalog_capabilities
 from .gateway import GateError, GuardStore, ServerIdentity
 
 MAX_REQUEST_BYTES = 2_100_000
 ACTIONS = frozenset({
     "overview", "list_tools", "review", "history", "activity",
-    "import_definitions", "approve", "deny", "quarantine",
+    "definition_alerts", "dismiss_definition_alerts",
+    "import_definitions", "approve", "deny", "quarantine", "release_quarantine",
     "store_http_credential", "remove_http_credential",
     "harness_scan", "harness_fetch",
     "host_catalog_import", "host_catalog_list",
@@ -58,6 +60,8 @@ def handle_request(store: GuardStore, request: dict[str, Any], *, db_path: Path 
     if action.startswith("live_"):
         from . import live_connection as live
         allowed = {"action", "expected_sha256", "expected_revision"} if action == "live_verify" else {"action"}
+        if action in {"live_connect", "live_disconnect"}:
+            allowed.add("harness")
         if db_path is None or set(request) - allowed:
             raise ValueError("Unexpected live connection request fields")
         if action == "live_verify":
@@ -66,6 +70,9 @@ def handle_request(store: GuardStore, request: dict[str, Any], *, db_path: Path 
             if type(revision) is not int or revision < 1:
                 raise ValueError("Reload the current version")
             return live.control(db_path, "verify", expected_sha256=digest, expected_revision=revision)
+        if action in {"live_connect", "live_disconnect"} and "harness" in request:
+            return getattr(live, action.removeprefix("live_"))(
+                db_path, _text(request, "harness", maximum=24))
         return getattr(live, action.removeprefix("live_"))(db_path)
     if action in {"host_catalog_import", "host_catalog_list"}:
         from .host_catalog import import_source, list_sources
@@ -117,12 +124,21 @@ def handle_request(store: GuardStore, request: dict[str, Any], *, db_path: Path 
         if summary:
             # The sidebar needs metadata. Full definitions are loaded on selection;
             # _record otherwise serializes two copies of each full definition.
-            return [{key: value for key, value in tool.items()
-                     if key not in {"definition", "new_tool"}} for tool in tools]
+            return [
+                {**{key: value for key, value in tool.items() if key not in {"definition", "new_tool"}},
+                 "catalog": catalog_capabilities(tool["definition"])}
+                for tool in tools
+            ]
         return tools
     if action == "activity":
         return [{**event, "event": event["event_type"], "detail": event["details"]}
                 for event in store.events(limit=request.get("limit", 200))]
+    if action == "definition_alerts" and set(request) == {"action"}:
+        return store.definition_alerts()
+    if action == "dismiss_definition_alerts" and set(request) == {"action", "through_id"}:
+        if request["through_id"] is not None:
+            return store.definition_alerts(request["through_id"])
+        raise ValueError("A valid alert ID is required")
     server_id = _text(request, "server_id")
     if action == "import_definitions":
         identity = _text(request, "identity")

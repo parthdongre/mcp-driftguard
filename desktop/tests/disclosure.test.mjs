@@ -11,7 +11,7 @@ const built = await build({
     import { ReviewPanel } from './src/ReviewPanel';
     export const row = () => renderToStaticMarkup(<Disclosure title="Codex MCP catalog"><p>Private details</p><button>Fetch definitions</button></Disclosure>);
     export const harness = () => renderToStaticMarkup(<HarnessConnections native={false} onCollected={() => {}} />);
-    export const review = () => renderToStaticMarkup(<ReviewPanel review={{ server_id:'source', tool_name:'read_notes', sha256:'a'.repeat(64), status:'pending', old_tool:null, new_tool:{name:'read_notes',inputSchema:{type:'object'}}, reasons:['Review required'] }} onDecision={() => {}} onTimeline={() => {}} busy={false} />);
+    export const review = () => renderToStaticMarkup(<ReviewPanel review={{ server_id:'source', tool_name:'read_notes', sha256:'a'.repeat(64), status:'pending', old_tool:null, new_tool:{name:'read_notes',inputSchema:{type:'object'}}, reasons:['Review required'] }} onDecision={() => {}} busy={false} />);
   `, resolveDir: process.cwd(), loader: 'tsx' },
   bundle: true, platform: 'node', format: 'esm', write: false, jsx: 'automatic',
   banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(resolve('package.json'))});` },

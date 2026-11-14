@@ -115,6 +115,41 @@ def _match_categories(
     return sorted(matched), evidence
 
 
+_CATALOG_OPERATIONS = {
+    **_OPERATION_TERMS,
+    "read": (*_OPERATION_TERMS["read"], "get", "find", "show"),
+    "write": (*_OPERATION_TERMS["write"], "move", "rename", "copy", "append", "replace", "patch"),
+}
+_CATALOG_RESOURCES = {
+    **_RESOURCE_TERMS,
+    "filesystem": (*_RESOURCE_TERMS["filesystem"], "directories", "folder", "folders"),
+    "repository": (*_RESOURCE_TERMS["repository"], "repositories", "commit", "branch", "pull request"),
+    "database": ("database", "sql", "table", "tables", "schema", "schemas", "postgres", "sqlite"),
+    "design": ("design", "figma", "canvas", "component"),
+    "calendar": ("calendar", "appointment", "meeting", "schedule"),
+    "messaging": ("message", "messages", "chat", "slack", "teams", "discord"),
+}
+
+
+def catalog_capabilities(tool: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Label a tool by declared purpose for browsing, independently of security policy."""
+    def text(value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        return re.sub(r"[_-]+", " ", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value)).lower()
+
+    name = text(tool.get("name"))
+    title = text(tool.get("title"))
+    purpose = re.split(r"[.!?]\s+|\r?\n", text(tool.get("description")), maxsplit=1)[0]
+    operations, _ = _match_categories(name, _CATALOG_OPERATIONS)
+    if not operations:
+        operations, _ = _match_categories(title or purpose, _CATALOG_OPERATIONS)
+    if not operations and title:
+        operations, _ = _match_categories(purpose, _CATALOG_OPERATIONS)
+    resources, _ = _match_categories(f"{name} {title} {purpose}", _CATALOG_RESOURCES)
+    return {"operations": operations, "resources": resources}
+
+
 def extract_capability_profile(snapshot: ToolSnapshot) -> CapabilityProfile:
     """Extract an interpretable capability profile from one canonical tool definition."""
 

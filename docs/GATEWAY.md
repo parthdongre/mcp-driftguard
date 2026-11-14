@@ -45,6 +45,19 @@ while reviewing newly discovered definitions; every new tool is initially withhe
 After local approval, the client's next `tools/list` returns approved tools. Every
 `tools/call` performs another complete upstream listing before authorization.
 
+Connected gateways also refresh the catalog after a tool-list change notification
+and after five minutes without a catalog refresh. Stdio can deliver a notification
+while idle. Streamable HTTP uses notifications received during a supported
+response stream and the same periodic refresh. The local SQLite database stores
+current definitions, version history, and change alerts. The open desktop app
+shows unread changes to previously observed definitions and keeps dismissed
+changes in Security Activity. If a refresh fails, the gateway closes the
+connection and requires a reconnect before calls can resume.
+
+Use **Release to review** to clear a quarantine for the exact tool version.
+The tool returns to **Needs review**. An explicit approval is required before
+the gateway can run that version.
+
 Local approvals never travel over MCP. A model cannot approve, revoke or change
 policy through this gateway. The local desktop bridge uses the separate
 `driftguard-desktop-bridge --db /absolute/path/to/driftguard.sqlite3` entry point.

@@ -29,6 +29,9 @@ from .input_contracts import supported_input_schema, valid_arguments
 MODERN = "2026-07-28"
 LEGACY = "2025-11-25"
 HANDSHAKE_VERSIONS = (LEGACY, "2025-06-18", "2025-03-26")
+CATALOG_REFRESH_SECONDS = 300
+MIN_CATALOG_REFRESH_SECONDS = 1
+TOOLS_CHANGED = "notifications/tools/list_changed"
 META_PREFIX = "io.modelcontextprotocol/"
 SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT",
             "WINDIR", "TEMP", "TMP", "LANG", "LC_ALL")
@@ -226,6 +229,8 @@ class StdioPeer:
         self._messages: queue.Queue[dict[str, Any] | TransportError] = queue.Queue(maxsize=32)
         self._closed = False
         self._overflow = threading.Event()
+        self.catalog_changed = threading.Event()
+        self.watch_catalog_changes = False
         self.process = subprocess.Popen(config.resolved_argv(), cwd=config.cwd,
                                         env=config.environment(), stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -257,7 +262,11 @@ class StdioPeer:
                     search_from = 0
                     item = self._decode_line(line)
                     if item is not None:
-                        self._messages.put_nowait(item)
+                        if (self.watch_catalog_changes and item.get("method") == TOOLS_CHANGED
+                                and "id" not in item):
+                            self.catalog_changed.set()
+                        else:
+                            self._messages.put_nowait(item)
                 if len(pending) > self.config.max_message_bytes:
                     raise TransportError("Upstream JSON line exceeds the configured response size limit")
         except queue.Full:
@@ -332,9 +341,11 @@ class StdioPeer:
                     if "method" in reply:
                         if "id" in reply:
                             raise TransportError("Upstream server-to-client requests are unsupported")
-                        if reply.get("method") not in ("notifications/tools/list_changed",
+                        if reply.get("method") not in (TOOLS_CHANGED,
                                                        "notifications/progress", "notifications/message"):
                             raise TransportError("Unsupported upstream notification")
+                        if self.watch_catalog_changes and reply.get("method") == TOOLS_CHANGED:
+                            self.catalog_changed.set()
                         continue
                     if (type(reply.get("id")) is not int or reply["id"] != request_id
                             or ("result" in reply) == ("error" in reply)):
@@ -427,6 +438,8 @@ class ProtectedGateway:
                     raise TypeError("Unsupported gateway transport configuration")
                 peer_factory = HttpPeer
         self.peer = peer_factory(config)
+        if isinstance(self.peer, StdioPeer):
+            self.peer.watch_catalog_changes = True
         self._credentials = tuple(os.environ[name] for name in config.pass_env
                                   if name in os.environ and len(os.environ[name]) >= 8)
         if hasattr(config, "token"):
@@ -437,6 +450,8 @@ class ProtectedGateway:
         self._closed = False
         self._lock = threading.RLock()
         self._heartbeat_stop = threading.Event()
+        self._catalog_wake = getattr(self.peer, "catalog_changed", threading.Event())
+        self._last_catalog_refresh = 0.0
         try:
             self.store.register_server(self.identity)
             self.peer.initialize()
@@ -446,6 +461,8 @@ class ProtectedGateway:
             self.store.mark_gateway(self.identity, active=True)
             self._heartbeat = threading.Thread(target=self._watch_heartbeat, daemon=True)
             self._heartbeat.start()
+            self._catalog_monitor = threading.Thread(target=self._watch_catalog, daemon=True)
+            self._catalog_monitor.start()
             if getattr(self.peer, "process", None) is not None:
                 self._monitor = threading.Thread(target=self._watch_disconnect, daemon=True)
                 self._monitor.start()
@@ -470,6 +487,26 @@ class ProtectedGateway:
                 # The call path independently revalidates and fails closed even
                 # if the local review store became unavailable during shutdown.
                 self.peer.close()
+
+    def _watch_catalog(self) -> None:
+        while not self._heartbeat_stop.is_set():
+            elapsed = time.monotonic() - self._last_catalog_refresh
+            self._catalog_wake.wait(max(0, CATALOG_REFRESH_SECONDS - elapsed))
+            with self._lock:
+                if self._closed:
+                    return
+                elapsed = time.monotonic() - self._last_catalog_refresh
+                notified = self._catalog_wake.is_set()
+                interval = MIN_CATALOG_REFRESH_SECONDS if notified else CATALOG_REFRESH_SECONDS
+                if elapsed >= interval:
+                    self._catalog_wake.clear()
+                    try:
+                        self.refresh_catalog()
+                    except (TransportError, GateError, OSError, sqlite3.Error):
+                        return  # refresh_catalog has already closed the failed connection.
+                    continue
+            if notified:
+                self._heartbeat_stop.wait(interval - elapsed)
 
     def refresh_catalog(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -509,8 +546,10 @@ class ProtectedGateway:
                                 self.store.record_event(
                                     "gateway_tool_withheld", self.config.server_id, name,
                                     reason="invalid_http_routing_annotation")
-                        return self.store.ingest_catalog(self.config.server_id, tools,
-                                                         identity=self.identity)
+                        records = self.store.ingest_catalog(self.config.server_id, tools,
+                                                            identity=self.identity)
+                        self._last_catalog_refresh = time.monotonic()
+                        return records
                     if not isinstance(cursor, str) or not cursor or cursor in cursors:
                         raise TransportError("Invalid or repeated pagination cursor")
                     cursors.add(cursor)
@@ -608,6 +647,7 @@ class ProtectedGateway:
                 return
             self._closed = True
             self._heartbeat_stop.set()
+            self._catalog_wake.set()
             try:
                 try:
                     self.store.mark_gateway(self.identity, active=False)

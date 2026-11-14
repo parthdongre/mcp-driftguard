@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import venv
 from dataclasses import replace
 from pathlib import Path
@@ -25,8 +26,14 @@ from driftguard.gateway_transport import (
 )
 
 FIXTURE = r'''
-import json, pathlib, sys, time
+import json, pathlib, sys, threading, time
 root = pathlib.Path(sys.argv[1])
+def announce():
+    marker = root / "catalog-changed"
+    while not marker.exists():
+        time.sleep(0.01)
+    print(json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}), flush=True)
+threading.Thread(target=announce, daemon=True).start()
 for line in sys.stdin:
     request = json.loads(line)
     if "id" not in request:
@@ -204,6 +211,33 @@ def test_changed_definition_and_revocation_block_dispatch(server):
                          expected_revision=record["revision"])
             with pytest.raises(GateError):
                 gateway.call("weather", {})
+        finally:
+            gateway.close()
+
+
+@pytest.mark.parametrize("notification", [True, False])
+def test_idle_catalog_observes_changed_definition(server, monkeypatch, notification):
+    from driftguard import gateway_transport
+
+    config, update, root = server
+    monkeypatch.setattr(gateway_transport, "CATALOG_REFRESH_SECONDS", 60 if notification else 0.05,
+                        raising=False)
+    monkeypatch.setattr(gateway_transport, "MIN_CATALOG_REFRESH_SECONDS", 0.02, raising=False)
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(LEGACY), store)
+        try:
+            approve(store)
+            update(tools=[tool("Read local weather forecasts")])
+            if notification:
+                (root / "catalog-changed").touch()
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if store.get_tool("fixture", "weather")["status"] == "pending":
+                    break
+                time.sleep(0.01)
+            assert store.get_tool("fixture", "weather")["description"] == "Read local weather forecasts"
+            assert len(store.history("fixture", "weather")) == 2
+            assert not (root / "calls.jsonl").exists()
         finally:
             gateway.close()
 

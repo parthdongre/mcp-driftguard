@@ -12,6 +12,52 @@ def request(db, **payload):
     return execute(db, json.dumps(payload).encode())
 
 
+def test_definition_alerts_survive_restart_and_can_be_dismissed(tmp_path):
+    db = tmp_path / "review.db"
+
+    def observe(description):
+        result = request(db, action="import_definitions", server_id="source", identity="fixture",
+                         tools=[{"name": "read_note", "description": description,
+                                 "inputSchema": {"type": "object"}}])
+        assert result["ok"]
+
+    observe("Read a note.")
+    assert request(db, action="definition_alerts")["data"]["unread"] == 0
+    observe("Read the selected note.")
+    observe("Read the selected note.")
+    alerts = request(db, action="definition_alerts")["data"]
+    assert alerts["unread"] == 1
+    assert alerts["latest"]["tool_name"] == "read_note"
+    assert alerts["latest"]["detail"]["changed_fields"] == ["description"]
+    alert_id = alerts["latest"]["id"]
+    observe("Read the selected local note.")
+    assert request(db, action="dismiss_definition_alerts", through_id=alert_id)["ok"]
+    remaining = request(db, action="definition_alerts")["data"]
+    assert remaining["unread"] == 1
+    assert remaining["latest"]["id"] > alert_id
+    history = request(db, action="history", server_id="import:source", tool_name="read_note")["data"]
+    assert [entry["description"] for entry in history] == [
+        "Read a note.", "Read the selected note.", "Read the selected local note.",
+    ]
+
+
+def test_release_quarantine_requires_current_revision_and_new_approval(tmp_path):
+    db = tmp_path / "review.db"
+    initial, = request(db, action="import_definitions", server_id="source", identity="fixture",
+                       tools=[{"name": "read_note", "inputSchema": {"type": "object"}}])["data"]
+    identity = {"server_id": initial["server_id"], "tool_name": initial["tool_name"],
+                "expected_sha256": initial["sha256"], "expected_revision": initial["revision"]}
+    quarantined = request(db, action="quarantine", **identity)["data"]
+    assert not request(db, action="release_quarantine", **identity)["ok"]
+    identity["expected_revision"] = quarantined["revision"]
+    released = request(db, action="release_quarantine", **identity)["data"]
+    assert released["status"] == "pending"
+    assert not released["quarantine_active"]
+    assert request(db, action="overview")["data"]["approved"] == 0
+    identity["expected_revision"] = released["revision"]
+    assert request(db, action="approve", **identity)["data"]["status"] == "approved"
+
+
 def test_persistent_review_roundtrip_and_stale_decision_rejection(tmp_path):
     db = tmp_path / "review.db"
     imported = request(db, action="import_definitions", server_id="manual", identity="review-v1",
@@ -73,6 +119,27 @@ def test_tool_summary_preserves_metadata_and_loads_full_contract_on_selection(tm
     review = request(db, action='review', server_id=summary['server_id'], tool_name='search')
     assert review['data']['new_tool'] == definition
     assert not request(db, action='list_tools', summary='yes')['ok']
+
+
+def test_catalog_labels_follow_current_definition_without_changing_review_state(tmp_path):
+    db = tmp_path / 'review.db'
+    definition = {'name': 'move_file', 'title': 'Move a file',
+                  'description': 'Move a file. Use read_file to inspect it first.',
+                  'annotations': {'readOnlyHint': True},
+                  'inputSchema': {'type': 'object', 'properties': {'path': {'type': 'string'}}}}
+    assert request(db, action='import_definitions', server_id='files', identity='fixture',
+                   tools=[definition])['ok']
+    summary = request(db, action='list_tools', summary=True)['data'][0]
+    assert summary['catalog'] == {'operations': ['write'], 'resources': ['filesystem']}
+    assert summary['status'] == 'pending'
+    assert 'catalog' not in request(db, action='list_tools')['data'][0]
+
+    changed = {'name': 'opaque', 'description': 'Query a database',
+               'inputSchema': {'type': 'object'}}
+    assert request(db, action='import_definitions', server_id='files', identity='fixture',
+                   tools=[changed])['ok']
+    summary, = request(db, action='list_tools', summary=True)['data']
+    assert summary['catalog'] == {'operations': ['read'], 'resources': ['database']}
 
 
 def test_subprocess_protocol_preserves_unicode_with_ascii_text_streams(tmp_path):

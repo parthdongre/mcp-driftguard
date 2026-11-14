@@ -29,7 +29,7 @@ def main() -> int:
                 executable = destination / "driftguard-desktop.exe"
                 assert executable.is_file()
                 subprocess.run([sys.executable, str(ROOT / "desktop/scripts/smoke-window.py"),
-                                str(executable)], check=True, timeout=50)
+                                str(executable)], check=True, timeout=65)
             finally:
                 uninstallers = list(destination.glob("*ninstall*.exe"))
                 if uninstallers:

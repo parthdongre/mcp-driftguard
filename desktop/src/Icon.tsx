@@ -1,10 +1,11 @@
 export type IconName = 'shield' | 'overview' | 'connections' | 'review' | 'timeline' | 'activity' |
   'research' | 'settings' | 'arrow' | 'plus' | 'check' | 'close' | 'search' | 'refresh' |
-  'download' | 'sun' | 'moon' | 'chevron' | 'lock' | 'file' | 'alert' | 'external';
+  'download' | 'sun' | 'moon' | 'chevron' | 'lock' | 'file' | 'alert' | 'external' | 'graph';
 
 const paths: Record<IconName, string[]> = {
   shield: ['M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z', 'm8 12 3 3 5-6'],
   overview: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
+  graph: ['M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M18 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'm9 7.5 6 3m-6 6 6-3'],
   connections: ['M8 12H5a4 4 0 0 1 0-8h4a4 4 0 0 1 4 4v1', 'M16 12h3a4 4 0 0 1 0 8h-4a4 4 0 0 1-4-4v-1', 'm8 16 8-8'],
   review: ['M9 4H5v16h14V4h-4', 'M9 2h6v5H9z', 'm8 13 2 2 5-5', 'M8 18h8'],
   timeline: ['M4 3v18h17', 'm8 15 4-6 4 3 5-8'],

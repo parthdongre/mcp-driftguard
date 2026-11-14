@@ -3,6 +3,8 @@
 React/TypeScript/Vite interface with a Tauri 2 shell. This is a development
 preview. Native package builds include their own Python engine; source development
 can use a local virtual environment. No signed/notarized production installer is delivered.
+The separate Rust desktop build bundles the native MCP gateway and uses its
+own SQLite workspace. See [Rust gateway and harness setup](../rust-version/README.md).
 
 ## Browser interface
 
@@ -164,10 +166,10 @@ The CI virtual display uses software compositing only for its disposable startup
 test. Manual checks on the intended desktop/GPU remain part of release review.
 
 
-### In-app Codex connection
+### Managed coding-harness connections
 
-Use **MCP connections → Connect Codex** to prepare the local Filesystem gateway,
-back up and merge its TOML entry, approve and verify the sample read, then start
-an actual Codex sample task. Node.js 24+ and a signed-in current Codex CLI are
-required. See [the live quickstart](../docs/LIVE_QUICKSTART.md). Disconnect safely
-restores unchanged settings. Existing Codex chats are not forcibly restarted.
+Open **MCP connections** in the native desktop app and click **Connect** next
+to the detected client. DriftGuard starts the shared Filesystem sample gateway,
+installs its client entry, and verifies the sample read after exact-version
+approval in Security review. See the [live quickstart](../docs/LIVE_QUICKSTART.md)
+for supported clients and verification details.

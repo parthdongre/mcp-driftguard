@@ -1,37 +1,27 @@
 # First live connection
 
-Importing a harness catalog does not connect that harness through DriftGuard.
-Imports use temporary discovery sessions and separate review identities. Start
-with one local server, route the client through the gateway, and approve that
-running connection in the shared desktop workspace.
-
 ## Connect from the desktop app
 
-Requires Node.js 24 or newer. The Codex task also requires a current Codex CLI
-(the integration is verified with 0.165.0) and your normal sign-in.
+Install Node.js 24 or newer and the coding client you want to use. Open
+**MCP connections** in the native app. DriftGuard detects Codex, Claude Code,
+Cursor, Antigravity, Gemini CLI, OpenCode, and VS Code / Copilot.
 
-1. Open **MCP connections → Connect Codex → Connect**. The app installs the
-   pinned Filesystem MCP server privately, creates its sample folder, starts a
-   shared gateway and adds one managed TOML entry to Codex. Existing settings
-   are preserved and backed up. `CODEX_HOME` is honored.
-2. Click **Approve & test local read** to approve the displayed exact definition
-   of `read_text_file` under **driftguard-filesystem** and read the app-owned
-   `check.txt`. Approval details include the definition hash and sample path.
-3. Click **Run sample in Codex**. The app starts a fresh, ephemeral, read-only
-   Codex task using your existing sign-in. It ignores other user configuration
-   for that test, retains normal authentication, and reports success only after
-   observing a successful MCP read through that task's adapter. This uses your
-   Codex account. Cancel stops the test while keeping the gateway available.
+1. Click **Connect** next to an installed client. DriftGuard adds one
+   user-level entry for its local gateway and keeps a backup of the settings.
+2. Click **Review sample tool**. Approve the exact version of
+   `driftguard-filesystem/read_text_file` in Security review. DriftGuard
+   automatically reads its own sample file and reports the result.
+3. Open a new session in the coding client. A live MCP handshake changes its
+   row from **Configured** to **Connected**. **Verify in Codex** optionally
+   runs a read-only model task using your existing Codex sign-in.
 
-No TOML copying, restart sequence or manually typed sample prompt is needed.
-Existing chats pick up the configured entry on their next session. The app does
-not terminate them or claim to hot-reload their configuration. Disconnect stops
-its background gateway and restores the original configuration only if it still
-matches the installed version. Newer user edits are kept and reported.
+**Disconnect** removes DriftGuard’s managed entry and restores the original
+settings when possible. Unrelated edits are preserved. When the last client
+disconnects, the shared gateway stops. A restart requires fresh tool approval.
 
-The background gateway maintains one upstream session across downstream Codex
-reconnects. Restarting the gateway or its upstream requires fresh approval.
-Other harness sources and direct connections are not automatically routed.
+The managed entry routes DriftGuard’s app-owned Filesystem sample. Existing MCP
+servers keep their own configuration and route. OpenRouter and Ollama can power
+the coding client, for example OpenCode, using that client's provider settings.
 
 ## Advanced: manual server setup
 
@@ -70,8 +60,7 @@ fresh directory. The helper also accepts `--server` and `--state` overrides.
    or denied; no second upstream call may be recorded.
 
 For Claude Code, merge `live-demo/claude-gateway.json` into the trusted project's
-`.mcp.json`, then follow the same live review steps. The desktop connection setup
-now offers separate Codex TOML and Claude Code JSON exports.
+`.mcp.json`, then follow the same live review steps. The CLI helper prepares both client configuration files.
 
 Keep the gateway session alive while reviewing. Restarting it deliberately
 invalidates old session approvals. An MCP client that does not consume tool-list

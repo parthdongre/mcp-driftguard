@@ -10,6 +10,7 @@ import socketserver
 import sqlite3
 import subprocess
 import threading
+from collections import Counter
 from pathlib import Path
 
 from .gateway import GateError, GuardStore
@@ -21,6 +22,7 @@ from .gateway_transport import (
     decode_message,
 )
 from .live_connection import MAX_FRAME, SERVER_ID, LiveError, _run_codex_task, paths, save_private
+from .managed_harnesses import CLIENTS, manifest_path
 
 
 def _unique(pairs):
@@ -89,9 +91,22 @@ class Service(socketserver.ThreadingTCPServer):
         row = self.reader.get_tool(SERVER_ID, 'read_text_file')
         version = (row['sha256'], row['revision'])
         with self.state_lock:
+            attached = Counter(client.harness for client in self.clients
+                               if client.harness and client.session.legacy_ready
+                               and manifest_path(self.db, client.harness).exists())
             return {'running': not self.guard._closed, 'clients': len(self.clients),
+                    'attached_harnesses': dict(attached),
                     'verified': row['status'] == 'approved' and self.verified_version == version,
                     'tool': {key: row[key] for key in ('sha256', 'revision', 'status', 'definition')}, 'job': dict(self.job)}
+
+    def check_sample(self, version):
+        result = self.guard.call('read_text_file', {'path': str(self.local['sample'])})
+        expected = self.local['sample'].read_bytes()
+        actual = ''.join(part['text'] for part in result.get('content', []) if part.get('type') == 'text')
+        if result.get('isError') or len(expected) > 4096 or actual != expected.decode('utf-8'):
+            raise LiveError('The sample read did not match the local file. Review the connection.')
+        with self.state_lock:
+            self.verified_version = version
 
     def controller(self, request):
         action = request.get('action')
@@ -116,14 +131,8 @@ class Service(socketserver.ThreadingTCPServer):
             if row['status'] != 'approved':
                 self.store.approve(SERVER_ID, 'read_text_file', expected_hash=digest,
                                    expected_revision=revision, actor='desktop-user')
-            result = self.guard.call('read_text_file', {'path': str(self.local['sample'])})
-            expected = self.local['sample'].read_bytes()
-            actual = ''.join(part['text'] for part in result.get('content', []) if part.get('type') == 'text')
-            if result.get('isError') or len(expected) > 4096 or actual != expected.decode('utf-8'):
-                raise LiveError('The sample read did not match the local file. Review the connection.')
-            row = self.store.get_tool(SERVER_ID, 'read_text_file')
-            with self.state_lock:
-                self.verified_version = (row['sha256'], row['revision'])
+            approved = self.store.get_tool(SERVER_ID, 'read_text_file')
+            self.check_sample((approved['sha256'], approved['revision']))
             return self.status()
         if action == 'probe_result':
             tag = request['tag']
@@ -174,6 +183,13 @@ class Service(socketserver.ThreadingTCPServer):
                                 client.emit({'jsonrpc': '2.0', 'method': 'notifications/tools/list_changed'})
                             except OSError:
                                 pass
+                    tool = self.reader.get_tool(SERVER_ID, 'read_text_file')
+                    if tool['status'] == 'approved' and self.verified_version != (
+                            tool['sha256'], tool['revision']):
+                        try:
+                            self.check_sample((tool['sha256'], tool['revision']))
+                        except (LiveError, GateError, TransportError, OSError):
+                            pass
         except (GateError, OSError, sqlite3.Error):
             self.stopping.set()
 
@@ -237,6 +253,9 @@ class Handler(socketserver.StreamRequestHandler):
         tag = auth.get('trace_tag', '')
         if not isinstance(tag, str) or len(tag) > 128:
             return
+        self.harness = tag.removeprefix('harness:') if tag.startswith('harness:') else ''
+        if self.harness and self.harness not in CLIENTS:
+            return
         self.session = DownstreamSession(service.guard)
         self.request.settimeout(None)
         with service.state_lock:
@@ -244,6 +263,10 @@ class Handler(socketserver.StreamRequestHandler):
         try:
             while raw := self.read():
                 message = decode_message(raw, max_bytes=MAX_FRAME)
+                if self.harness and not manifest_path(service.db, self.harness).exists():
+                    if 'id' in message:
+                        self.emit(self.session.error(message['id'], -32603, 'DriftGuard client disconnected'))
+                    return
                 reply = self.session.handle(message)
                 params = message.get('params', {})
                 if (tag and message.get('method') == 'tools/call' and params.get('name') == 'read_text_file'

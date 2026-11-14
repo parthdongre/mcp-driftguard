@@ -17,19 +17,52 @@ from pathlib import Path
 IDENTIFIER = "io.driftguard.desktop"
 
 
+def wait_for_windows_window(process: subprocess.Popen, timeout: float = 15) -> None:
+    from ctypes import WINFUNCTYPE, WinDLL, byref, wintypes
+
+    user32 = WinDLL("user32", use_last_error=True)
+    callback_type = WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, wintypes.LPDWORD]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    found = False
+
+    @callback_type
+    def visit(window, _):
+        nonlocal found
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(window, byref(owner))
+        if (owner.value == process.pid and user32.IsWindowVisible(window)
+                and user32.GetWindowTextLengthW(window) > 0):
+            found = True
+            return False
+        return True
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and process.poll() is None:
+        user32.EnumWindows(visit, 0)
+        if found:
+            return
+        time.sleep(0.2)
+    raise RuntimeError("The Windows native window was not visible after startup")
+
+
 def main() -> int:
     executable = Path(sys.argv[1])
+    rust = "--rust" in sys.argv[2:]
+    identifier = IDENTIFIER + ".rust" if rust else IDENTIFIER
     isolated = tempfile.TemporaryDirectory(prefix="driftguard-native-startup-")
     environment = dict(os.environ)
     if sys.platform.startswith("linux"):
         environment["XDG_DATA_HOME"] = str(Path(isolated.name) / "data")
     if sys.platform == "darwin":
-        directory = Path.home() / "Library/Application Support" / IDENTIFIER
+        directory = Path.home() / "Library/Application Support" / identifier
     elif os.name == "nt":
-        directory = Path(os.environ["APPDATA"]) / IDENTIFIER
+        directory = Path(os.environ["APPDATA"]) / identifier
     else:
-        directory = Path(environment["XDG_DATA_HOME"]) / IDENTIFIER
-    database = directory / "guard.sqlite3"
+        directory = Path(environment["XDG_DATA_HOME"]) / identifier
+    database = directory / ("guard-rust.sqlite3" if rust else "guard.sqlite3")
     if database.exists():
         raise RuntimeError("Native startup verification requires a fresh disposable runner store")
     diagnostics = tempfile.TemporaryFile()
@@ -51,25 +84,23 @@ def main() -> int:
             if database.is_file():
                 try:
                     with sqlite3.connect("file:" + database.as_posix() + "?mode=ro", uri=True) as db:
-                        initialized = db.execute("SELECT value FROM guard_meta WHERE key='policy'").fetchone() is not None
+                        query = ("SELECT cursor FROM alerts WHERE id=1" if rust else
+                                 "SELECT value FROM guard_meta WHERE key='policy'")
+                        initialized = db.execute(query).fetchone() is not None
                 except sqlite3.Error:
                     initialized = False
                 if initialized:
                     break
             time.sleep(0.2)
         if not initialized:
-            raise RuntimeError("Native renderer did not initialize the bundled Python review store")
+            raise RuntimeError("Native renderer did not initialize the bundled review store")
         if sys.platform.startswith("linux"):
             window = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "MCP DriftGuard"],
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
             if window.returncode != 0 or not window.stdout.strip():
                 raise RuntimeError("The Linux native window was not visible under Xvfb")
         elif os.name == "nt":
-            check = subprocess.run(["powershell", "-NoProfile", "-Command",
-                f"(Get-Process -Id {process.pid}).MainWindowHandle"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, text=True)
-            if check.returncode != 0 or check.stdout.strip() == "0" or not check.stdout.strip():
-                raise RuntimeError("The Windows native window handle was unavailable")
+            wait_for_windows_window(process)
         print("Actual packaged WebView startup and renderer-to-engine SQLite initialization passed.")
     except BaseException:
         print(f"Startup state directory exists: {directory.is_dir()}; database exists: {database.is_file()}", file=sys.stderr)

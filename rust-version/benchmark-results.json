@@ -1,0 +1,166 @@
+{
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "runs_per_operation": 15,
+  "results": {
+    "Python": {
+      "Bridge startup and fresh database": {
+        "median_ms": 133.66,
+        "p95_ms": 136.39,
+        "median_peak_rss_mib": 38.67,
+        "max_peak_rss_mib": 38.8
+      },
+      "Import 350 definitions": {
+        "median_ms": 147.79,
+        "p95_ms": 158.0,
+        "median_peak_rss_mib": 41.61,
+        "max_peak_rss_mib": 41.83
+      },
+      "Load 350 catalog summaries": {
+        "median_ms": 170.58,
+        "p95_ms": 254.91,
+        "median_peak_rss_mib": 40.36,
+        "max_peak_rss_mib": 40.42
+      },
+      "Open current review": {
+        "median_ms": 128.01,
+        "p95_ms": 139.93,
+        "median_peak_rss_mib": 38.66,
+        "max_peak_rss_mib": 38.78
+      },
+      "Approve a version": {
+        "median_ms": 130.59,
+        "p95_ms": 138.74,
+        "median_peak_rss_mib": 38.83,
+        "max_peak_rss_mib": 39.03
+      },
+      "Quarantine a version": {
+        "median_ms": 130.23,
+        "p95_ms": 214.07,
+        "median_peak_rss_mib": 38.8,
+        "max_peak_rss_mib": 38.94
+      },
+      "Release quarantine": {
+        "median_ms": 130.24,
+        "p95_ms": 199.49,
+        "median_peak_rss_mib": 38.86,
+        "max_peak_rss_mib": 38.98
+      },
+      "Rescan 350 tools with one change": {
+        "median_ms": 141.7,
+        "p95_ms": 178.31,
+        "median_peak_rss_mib": 41.44,
+        "max_peak_rss_mib": 41.58
+      },
+      "Read tool version history": {
+        "median_ms": 129.46,
+        "p95_ms": 142.64,
+        "median_peak_rss_mib": 38.94,
+        "max_peak_rss_mib": 39.11
+      },
+      "Read change notifications": {
+        "median_ms": 127.39,
+        "p95_ms": 129.88,
+        "median_peak_rss_mib": 38.56,
+        "max_peak_rss_mib": 38.67
+      },
+      "Dismiss change notifications": {
+        "median_ms": 128.61,
+        "p95_ms": 134.3,
+        "median_peak_rss_mib": 38.62,
+        "max_peak_rss_mib": 38.72
+      },
+      "Load security activity": {
+        "median_ms": 128.35,
+        "p95_ms": 131.59,
+        "median_peak_rss_mib": 39.03,
+        "max_peak_rss_mib": 39.17
+      },
+      "Discover official Filesystem MCP over stdio": {
+        "median_ms": 232.49,
+        "p95_ms": 234.71,
+        "median_peak_rss_mib": 70.72,
+        "max_peak_rss_mib": 70.88
+      }
+    },
+    "Rust": {
+      "Bridge startup and fresh database": {
+        "median_ms": 7.38,
+        "p95_ms": 8.42,
+        "median_peak_rss_mib": 7.62,
+        "max_peak_rss_mib": 7.64
+      },
+      "Import 350 definitions": {
+        "median_ms": 11.56,
+        "p95_ms": 11.82,
+        "median_peak_rss_mib": 14.09,
+        "max_peak_rss_mib": 14.14
+      },
+      "Load 350 catalog summaries": {
+        "median_ms": 7.4,
+        "p95_ms": 8.0,
+        "median_peak_rss_mib": 9.09,
+        "max_peak_rss_mib": 9.17
+      },
+      "Open current review": {
+        "median_ms": 4.3,
+        "p95_ms": 4.71,
+        "median_peak_rss_mib": 7.47,
+        "max_peak_rss_mib": 7.5
+      },
+      "Approve a version": {
+        "median_ms": 4.63,
+        "p95_ms": 5.89,
+        "median_peak_rss_mib": 7.59,
+        "max_peak_rss_mib": 7.62
+      },
+      "Quarantine a version": {
+        "median_ms": 4.5,
+        "p95_ms": 5.17,
+        "median_peak_rss_mib": 7.59,
+        "max_peak_rss_mib": 7.61
+      },
+      "Release quarantine": {
+        "median_ms": 4.43,
+        "p95_ms": 4.78,
+        "median_peak_rss_mib": 7.59,
+        "max_peak_rss_mib": 7.59
+      },
+      "Rescan 350 tools with one change": {
+        "median_ms": 9.55,
+        "p95_ms": 14.48,
+        "median_peak_rss_mib": 13.72,
+        "max_peak_rss_mib": 13.8
+      },
+      "Read tool version history": {
+        "median_ms": 4.46,
+        "p95_ms": 4.88,
+        "median_peak_rss_mib": 7.59,
+        "max_peak_rss_mib": 7.62
+      },
+      "Read change notifications": {
+        "median_ms": 3.98,
+        "p95_ms": 4.88,
+        "median_peak_rss_mib": 7.44,
+        "max_peak_rss_mib": 7.47
+      },
+      "Dismiss change notifications": {
+        "median_ms": 4.35,
+        "p95_ms": 4.74,
+        "median_peak_rss_mib": 7.44,
+        "max_peak_rss_mib": 7.45
+      },
+      "Load security activity": {
+        "median_ms": 4.77,
+        "p95_ms": 5.1,
+        "median_peak_rss_mib": 8.33,
+        "max_peak_rss_mib": 8.38
+      },
+      "Discover official Filesystem MCP over stdio": {
+        "median_ms": 92.23,
+        "p95_ms": 98.42,
+        "median_peak_rss_mib": 70.45,
+        "max_peak_rss_mib": 70.73
+      }
+    }
+  }
+}
