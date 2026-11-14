@@ -7,8 +7,12 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { delimiter, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
+import { existsSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
+// Prefer the repository virtual environment over whatever `python` is first on PATH.
+const projectPython = fileURLToPath(new URL(process.platform === 'win32' ? '../../.venv/Scripts/python.exe' : '../../.venv/bin/python', import.meta.url));
+const testPython = process.env.DRIFTGUARD_TEST_PYTHON ?? (existsSync(projectPython) ? projectPython : 'python');
 
 let base = process.env.DRIFTGUARD_PREVIEW_URL;
 let server;
@@ -399,7 +403,7 @@ try {
   let queue = Promise.resolve();
   const runPython = payload => {
     const operation = queue.then(async () => {
-      const child = execFile(process.env.DRIFTGUARD_TEST_PYTHON ?? 'python', ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: payload.action === 'live_connect' ? 180000 : 45000, env: { ...process.env, CODEX_HOME: resolve(temporary, 'codex-home'), PATH: testBin + delimiter + process.env.PATH } });
+      const child = execFile(testPython, ['-m', 'driftguard.desktop_bridge', '--db', statePath], { maxBuffer: 16 * 1024 * 1024, timeout: payload.action === 'live_connect' ? 180000 : 45000, env: { ...process.env, CODEX_HOME: resolve(temporary, 'codex-home'), PATH: testBin + delimiter + process.env.PATH } });
       child.stdin.end(JSON.stringify(payload));
       let output = '';
       for await (const chunk of child.stdout) output += chunk;

@@ -17,7 +17,9 @@ def main() -> int:
     output = ROOT / "desktop/build/review"
     output.mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin":
-        app, = BUNDLES.glob("macos/*.app")
+        # Archive the Python-engine app; the Rust desktop build shares this directory.
+        app, = [path for path in BUNDLES.glob("macos/*.app")
+                if (path / "Contents/Resources/engine").is_dir()]
         destination = output / "MCP-DriftGuard-macOS-arm64-unsigned-preview.zip"
         subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
                         str(app), str(destination)], check=True, timeout=120)
