@@ -6,7 +6,7 @@ import type { BridgeAction, BridgeRequest, CatalogSync, ToolRecord } from './typ
 import { groupCatalog } from './catalog-connections';
 import { harnessPresentation } from './harness-state';
 
-type Harness = { id: string; label: string; detected: boolean; installed: boolean; configured: boolean; attached: number };
+type Harness = { id: string; label: string; detected: boolean; installed: boolean; configured?: boolean; attached: number };
 
 type LiveStatus = {
   engine?: 'rust'; pending?: number; catalog_tools?: number;
@@ -62,9 +62,11 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
   const act = async (action: BridgeAction, label: string, harness?: string) => {
     if (!native || working.current) return;
     working.current = true; generation.current += 1; setBusy(label); setError(''); setNotice('');
+    let operationApplied = false;
     try {
       const payload: BridgeRequest = harness ? { action, harness } : { action };
       const result = await request<LiveStatus>(payload);
+      operationApplied = true;
       const next = await request<LiveStatus>({ action: 'live_status' });
       if (mounted.current) {
         setData(next); setNotice(result.message ?? ''); previousJob.current = next.job.stage;
@@ -75,7 +77,13 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
         await onSync();
       }
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Connection operation failed.');
+      if (mounted.current) {
+        const detail = failure instanceof Error ? failure.message : 'Unknown error.';
+        setError(operationApplied
+          ? `The harness configuration was changed, but refresh failed: ${detail}`
+          : `Connection operation failed: ${detail}`);
+        // Let the next timer poll reconcile state without replaying the mutation.
+      }
     } finally { working.current = false; if (mounted.current) setBusy(''); }
   };
   const [skippedRoutes, setSkippedRoutes] = useState<string[]>([]);
@@ -106,7 +114,8 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
       if (mounted.current) setBusy('');
     }
   };
-  const codexConnected = data?.harnesses.some(client => client.id === 'codex' && client.configured);
+  const codexConnected = data?.harnesses.some(client => client.id === 'codex' &&
+    (client.configured ?? (data.engine !== 'rust' && client.installed && data.running)));
   const activeJob = codexConnected && data?.job.stage === 'running';
   const bypassedRoutes = data?.codex_skipped_routes ?? skippedRoutes;
   const discovered = catalogSync?.servers.filter(server => server.state === 'observed') ?? [];
@@ -135,7 +144,11 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
     {!native ? <p className="harness-preview">Open the desktop app to detect and connect coding harnesses on this device.</p>
       : !data && !statusError ? <p role="status">Detecting installed harnesses…</p> : null}
     {data?.harnesses.length ? <ul className="managed-harness-list">{data.harnesses.map(client => {
-      const state = harnessPresentation(client);
+      // The legacy Python workspace does not expose the Rust 'configured' field.
+      const state = harnessPresentation({
+        ...client,
+        configured: client.configured ?? (data.engine !== 'rust' && client.installed && data.running),
+      });
       return <li key={client.id}>
         <div><strong>{client.label}</strong><span>{state.description}</span></div>
         <div className="managed-harness-actions">
