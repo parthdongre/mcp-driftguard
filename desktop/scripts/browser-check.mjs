@@ -228,7 +228,7 @@ async function checkRustConnection(engine) {
     await tab.getByRole('button', { name: 'MCP connections', exact: true }).click();
     await auditAccessibility('rust-harness-setup', tab);
     await tab.getByRole('button', { name: 'Disconnect Codex', exact: true }).click();
-    await tab.getByText('Disconnected Codex.').waitFor();
+    await tab.getByText(/Removed Codex's managed MCP configuration\./).waitFor();
     await ended;
     assert.equal((await bridge({ action: 'live_status' })).data.running, false);
     await tab.getByRole('button', { name: 'MCP graph', exact: true }).click();
