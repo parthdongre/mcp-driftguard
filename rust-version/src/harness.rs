@@ -220,7 +220,7 @@ pub(crate) fn catalog_configs(db: &Path) -> Result<Vec<CatalogConfigResult>> {
             let read = || {
                 let manifest = read_manifest(&location(db, client))?;
                 let target = if let Some(manifest) = manifest {
-                    if manifest.disconnecting || !check_entry(client, &manifest)? {
+                    if !is_connected(client, &manifest)? {
                         return Ok(None);
                     }
                     manifest.target
