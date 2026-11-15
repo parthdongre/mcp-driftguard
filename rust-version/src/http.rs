@@ -19,6 +19,8 @@ const LEGACY: &str = "2025-11-25";
 const MAX_LINE: usize = 1024 * 1024;
 const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
 const FAILED: &str = "HTTP exchange failed. Reconnect and review the server.";
+/// A complete JSON-RPC error for this request. The session is still usable.
+const REJECTED: &str = "The MCP server rejected the request.";
 
 #[derive(Clone)]
 struct Connection {
@@ -328,6 +330,7 @@ impl HttpPeer {
                                     error.0,
                                     "The HTTPS server requires authentication."
                                         | "The HTTPS server denied access."
+                                        | REJECTED
                                 ) =>
                             {
                                 *error
@@ -340,7 +343,9 @@ impl HttpPeer {
         let response = tokio::time::timeout(self.timeout(), receiver)
             .await
             .map_err(|_| ReviewError("HTTP request timed out. Reconnect and review the server."))?
-            .map_err(|_| ReviewError(FAILED))??;
+            .map_err(|_| ReviewError(FAILED))?;
+        // A JSON-RPC error is a finished exchange, so it does not end the session.
+        let response = response.inspect_err(|error| self.closed = error.0 != REJECTED)?;
         self.session = response.session;
         self.changed |= response.changed;
         self.closed = false;
@@ -664,6 +669,13 @@ fn accept(bytes: &[u8], id: u64, modern: bool, changed: &mut bool) -> Result<Opt
         }
         *changed |= method == "notifications/tools/list_changed";
         return Ok(None);
+    }
+    if message["id"].as_u64() == Some(id)
+        && message.get("result").is_none()
+        && message["error"]["code"].is_i64()
+        && message["error"]["message"].is_string()
+    {
+        return Err(ReviewError(REJECTED).into());
     }
     if message["id"].as_u64() != Some(id)
         || message.get("error").is_some()
@@ -1018,6 +1030,69 @@ mod tests {
             assert!(!peer.take_changed());
             assert!(peer.request("tools/list", json!({})).await.is_err());
             assert!(peer.verify().is_err());
+        });
+        fixture.join().unwrap();
+    }
+
+    fn read_fixture_request(socket: &mut std::net::TcpStream) -> Value {
+        let mut reader = BufReader::new(socket);
+        let mut line = String::new();
+        let mut length = 0;
+        reader.read_line(&mut line).unwrap();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" {
+                break;
+            }
+            let (key, value) = line.split_once(':').unwrap();
+            if key.eq_ignore_ascii_case("Content-Length") {
+                length = value.trim().parse::<usize>().unwrap();
+            }
+        }
+        let mut bytes = vec![0; length];
+        reader.read_exact(&mut bytes).unwrap();
+        crate::input::parse(&bytes).unwrap()
+    }
+
+    #[test]
+    fn json_rpc_error_keeps_the_session_open() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let fixture = std::thread::spawn(move || {
+            for exchange in 0..2 {
+                let (mut socket, _) = listener.accept().unwrap();
+                let message = read_fixture_request(&mut socket);
+                let body = if exchange == 0 {
+                    json!({"jsonrpc":"2.0","id":message["id"],
+                        "error":{"code":-32602,"message":"Unknown argument"}})
+                } else {
+                    json!({"jsonrpc":"2.0","id":message["id"],"result":{"tools":[]}})
+                }
+                .to_string();
+                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let mut peer = HttpPeer::open(&json!({
+            "server_id": "fixture", "transport": "http", "url": format!("http://{address}/mcp"),
+            "allow_insecure_loopback": true, "timeout_seconds": 3
+        }))
+        .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let error = peer
+                .request("tools/call", json!({"name":"x","arguments":{}}))
+                .await
+                .unwrap_err();
+            assert_eq!(error.to_string(), REJECTED);
+            peer.verify().unwrap();
+            assert_eq!(
+                peer.request("tools/list", json!({})).await.unwrap()["tools"],
+                json!([])
+            );
         });
         fixture.join().unwrap();
     }

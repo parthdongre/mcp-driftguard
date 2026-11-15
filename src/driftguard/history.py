@@ -11,6 +11,9 @@ from typing import Any
 from .canonicalize import canonicalize_tool, schema_hash
 from .source_extractors import SourceToolExtractor
 
+# Bounds a hung or very slow git process while mining one repository.
+GIT_TIMEOUT_SECONDS = 300
+
 
 @dataclass(frozen=True)
 class HistoricalToolVersion:
@@ -70,6 +73,7 @@ class _GitHistoryBase:
             check=check,
             capture_output=True,
             text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
         )
 
     def commits(self) -> list[str]:
@@ -140,6 +144,7 @@ class _GitHistoryBase:
             ["git", "-C", str(self.repository_path), "show", f"{commit_sha}:{path}"],
             check=False,
             capture_output=True,
+            timeout=GIT_TIMEOUT_SECONDS,
         )
         if result.returncode != 0:
             return None

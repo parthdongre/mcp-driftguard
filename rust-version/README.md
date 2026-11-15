@@ -52,8 +52,12 @@ stdio entries and supported HTTPS entries authenticated with a bearer
 environment variable. It reports skipped entries, including Codex-hosted apps
 and remote OAuth connections. **Restore direct connections** undoes routing.
 
-In **Settings → Automatic MCP approvals**, choose declared read-only tools
-(the default), all compatible first-seen tools, or manual approval. This policy
+In **Settings → Automatic MCP approvals**, choose manual approval (the default),
+declared read-only tools, or all compatible first-seen tools. Automatic modes
+apply only to tools in a server's first catalog on a route. Tools a server adds
+later, and definitions containing hidden or bidirectional characters, always go
+to review, because `readOnlyHint` and other annotations are supplied by the
+server and are not verified. This policy
 applies to managed harness routes. Changes to existing definitions go through
 the configured decision model or review. Explicit blocks and quarantines take
 precedence. Hosted apps such as those under Codex's `codex_apps` catalog

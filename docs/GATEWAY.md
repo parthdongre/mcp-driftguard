@@ -98,14 +98,17 @@ contain credentials or private results.
 5. Reject unsupported protocol methods, callbacks, extensions and incomplete
    modern results. Requests cannot reach roots, prompts, resources, sampling,
    elicitation, tasks, or approval operations through an unguarded pass-through.
-6. Apply an independent output policy. Non-text content, resource links,
-   embedded resources, malformed output, known passed credentials and PEM private
-   keys are blocked. Arbitrary metadata and structured content are not forwarded.
-   For an approved `outputSchema`, retain `structuredContent` only after bounded,
-   reference-free instance validation and the same credential/private-key checks.
+6. Apply an independent output policy. Text, plus base64 image (PNG, JPEG, GIF,
+   WebP) and audio (WAV, MPEG, Ogg, WebM, FLAC) items up to 512 KiB decoded per
+   result, are forwarded. SVG, resource links, embedded resources, malformed output,
+   known passed credentials and PEM private keys are blocked; media is decoded and
+   checked for the same credentials and key markers. Arbitrary metadata, content
+   annotations and uncontracted structured content are not forwarded.
+   For an approved `outputSchema`, retain `structuredContent` only after bounded
+   instance validation and the same credential/private-key checks.
    Successful results must supply the contracted structured object. Error results
    may omit it; if present, it is still checked. Unsupported schema keywords
-   (including references, regexes and branching applicators) withhold that tool
+   (including remote or recursive references and regexes) withhold that tool
    and record `unsupported_output_contract` before an upstream call is sent.
 7. Bound writes and responses by timeout and message size. Invalidate approvals
    on disconnect, malformed catalog, transport failure or explicit shutdown.
@@ -143,7 +146,7 @@ Verified against official primary specifications on 2026-10-15:
 | MRTR / input-required results | Rejected; no roots, sampling, elicitation or extension capability advertised |
 | Request cancellation | Calls are serialized and time-bounded; concurrent cancellation is not implemented |
 | Streamable HTTP | Explicit HTTPS endpoint; JSON and bounded request-scoped SSE; current method/name/parameter routing headers; legacy sessions only in the legacy profile |
-| JSON Schema | Definition metaschema validation plus a bounded, reference-free subset for input and structured output instance validation; unsupported contracts fail closed |
+| JSON Schema | Definition metaschema validation plus a bounded subset for input and structured output instance validation: core type/size/range keywords, `anyOf`/`oneOf`/`allOf`/`not`, and local `$ref` into root `$defs`/`definitions` (inlined under a node budget; recursive refs rejected). `format` is an annotation and not asserted. `pattern`, `patternProperties`, `if`/`then`/`else`, `uniqueItems` and remote refs fail closed |
 | Platform validation | Actual authored stdio and loopback HTTP tests run on Linux/macOS/Windows; see the current platform evidence for native packaging/startup results |
 
 This is a restricted interoperable tools subset, **not full MCP conformance**.

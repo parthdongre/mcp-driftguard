@@ -17,6 +17,7 @@ import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .canonicalize import exact_json
 from .gateway import MAX_REVIEW_CATALOG_BYTES, MAX_REVIEW_CATALOG_TOOLS, GuardStore, ServerIdentity
@@ -40,6 +41,12 @@ FETCH_SECONDS = 90.0
 CODEX_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 _VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_SECRET_FLAG = re.compile(r"(key|token|secret|password|passwd|auth|credential|bearer)",
+                          re.IGNORECASE)
+UNTRUSTED_CLAUDE = ("Claude Code has not approved this project server. Approve it in Claude Code "
+                    "first; nothing was started.")
+UNTRUSTED_CODEX = ("Codex does not trust this project, so it ignores this project server. Trust "
+                   "the project in Codex first; nothing was started.")
 
 
 class HarnessError(ValueError):
@@ -57,6 +64,8 @@ class _Source:
     file_digest: str
     kind: str = "configured"
     gateway_servers: tuple[str, ...] = ()
+    # Set when the owning harness would not start this repository-supplied server.
+    trust_issue: str | None = None
 
     @property
     def source_id(self) -> str:
@@ -68,6 +77,7 @@ class _Source:
     def digest(self) -> str:
         return hashlib.sha256(exact_json([
             self.source_id, self.file_digest, self.settings, list(self.gateway_servers),
+            self.trust_issue,
         ]).encode()).hexdigest()
 
 
@@ -280,6 +290,7 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
              ("claude-code", "user", claude_path),
              ("claude-code", "project", project / ".mcp.json")]
     local: tuple[Path, Any, str] | None = None
+    codex_trusted = False
     for harness, scope, path in paths:
         if scope == "project" and harness == "codex" and path == codex_home / "config.toml":
             continue
@@ -289,6 +300,8 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
                 continue
             data, digest = result
             entries(harness, scope, path, data.get("mcp_servers" if harness == "codex" else "mcpServers", {}), digest)
+            if harness == "codex" and scope == "user":
+                codex_trusted = _codex_project_trusted(data, project)
             if harness == "claude-code" and scope == "user":
                 projects = data.get("projects", {})
                 if isinstance(projects, dict) and isinstance(projects.get(str(project)), dict):
@@ -299,6 +312,16 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
             sources = {key: value for key, value in sources.items() if key[0] != harness}
             # Keep other harnesses usable without guessing the effective config.
             warnings.append(f"blocked:{harness}")
+    # A repository's own config files cannot approve themselves. Only the user's harness
+    # state decides whether a project-scope server would run.
+    claude_state = local[1] if local is not None else {}
+    for key, source in list(sources.items()):
+        if source.scope != "project":
+            continue
+        if source.harness == "codex" and not codex_trusted:
+            sources[key] = replace(source, trust_issue=UNTRUSTED_CODEX)
+        elif source.harness == "claude-code" and not _claude_project_approved(claude_state, source.name):
+            sources[key] = replace(source, trust_issue=UNTRUSTED_CLAUDE)
     if local is not None:
         path, data, digest = local
         entries("claude-code", "local", path, data.get("mcpServers", {}), digest)
@@ -343,6 +366,60 @@ def _sources(project: Path) -> tuple[list[_Source], list[str]]:
     return sorted(sources.values(), key=lambda s: (s.kind != "runtime", s.harness, s.name)), warnings
 
 
+def _codex_project_trusted(user_config: dict[str, Any], project: Path) -> bool:
+    projects = user_config.get("projects")
+    if not isinstance(projects, dict):
+        return False
+    for key in {str(project), str(project.resolve())}:
+        entry = projects.get(key)
+        if isinstance(entry, dict) and entry.get("trust_level") == "trusted":
+            return True
+    return False
+
+
+def _claude_project_approved(state: Any, name: str) -> bool:
+    if not isinstance(state, dict):
+        return False
+    disabled = state.get("disabledMcpjsonServers")
+    if isinstance(disabled, list) and name in disabled:
+        return False
+    enabled = state.get("enabledMcpjsonServers")
+    return state.get("enableAllProjectMcpServers") is True or (
+        isinstance(enabled, list) and name in enabled)
+
+
+def _redacted_args(args: list[Any]) -> list[str]:
+    shown: list[str] = []
+    hide_next = False
+    for arg in args[:64]:
+        text = arg if isinstance(arg, str) else "?"
+        if hide_next:
+            shown.append("[redacted]")
+            hide_next = False
+        elif text.startswith("-") and "=" in text and _SECRET_FLAG.search(text.split("=", 1)[0]):
+            shown.append(text.split("=", 1)[0] + "=[redacted]")
+        else:
+            shown.append(text[:256])
+            hide_next = text.startswith("-") and bool(_SECRET_FLAG.search(text))
+    return shown
+
+
+def _launch_preview(source: _Source) -> dict[str, Any] | None:
+    """What fetching would start or contact, without expanded values or literal secrets."""
+    raw = source.settings
+    if not isinstance(raw, dict):
+        return None
+    url = raw.get("url")
+    if isinstance(url, str):
+        parts = urlsplit(url)
+        return {"url": f"{parts.scheme}://{parts.netloc.rsplit('@', 1)[-1]}"[:512]}
+    command, args = raw.get("command"), raw.get("args", [])
+    if not isinstance(command, str):
+        return None
+    return {"command": command[:1024],
+            "args": _redacted_args(args) if isinstance(args, list) else []}
+
+
 def _expand(value: str) -> str:
     def substitute(match: re.Match[str]) -> str:
         name, default = match.groups()
@@ -358,6 +435,8 @@ def _config(source: _Source) -> StdioConfig | HttpConfig:
     raw = source.settings
     if not isinstance(raw, dict):
         raise HarnessError("This server configuration is malformed.")
+    if source.trust_issue:
+        raise HarnessError(source.trust_issue)
     if raw.get("enabled", True) is not True or raw.get("disabled", False) is not False:
         raise HarnessError("This server is disabled in the harness configuration.")
     if source.kind == "configured" and _is_gateway(raw):
@@ -473,6 +552,7 @@ def scan(project_dir: str | None = None) -> dict[str, Any]:
         items.append({"source_id": source.source_id, "config_digest": source.digest,
                       "harness": source.harness, "name": source.name, "scope": source.scope,
                       "kind": source.kind, "config_path": str(source.path),
+                      "launch": _launch_preview(source),
                       "transport": transport, "ready": issue is None, "issue": issue})
     return {"project_dir": str(project), "sources": items, "warnings": warnings,
             "scope": "Definition review only. Collection does not route or protect harness calls."}

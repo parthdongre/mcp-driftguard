@@ -21,7 +21,7 @@ def test_invalid_arguments_do_not_execute(args):
         assert calls==[]
         assert not any(e['event_type']=='call_completed' for e in store.events())
 
-@pytest.mark.parametrize('schema',[{'$ref':'https://example.invalid/external'}, {'pattern':'(a+)+$'}, {'anyOf':[{}]}])
+@pytest.mark.parametrize('schema',[{'$ref':'https://example.invalid/external'}, {'pattern':'(a+)+$'}, {'if':{'type':'object'},'then':{}}])
 def test_unsupported_contract_never_executes(schema):
     with configured() as store:
         definition=tool();definition['inputSchema'].update(schema)

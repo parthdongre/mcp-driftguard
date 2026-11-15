@@ -576,12 +576,21 @@ impl Peer {
             message["jsonrpc"] = json!("2.0");
         }
         self.send(&message).await?;
-        let message = self
-            .messages
-            .recv()
-            .await
-            .ok_or(ReviewError("MCP server disconnected."))?
-            .map_err(ReviewError)?;
+        let message = loop {
+            let message = self
+                .messages
+                .recv()
+                .await
+                .ok_or(ReviewError("MCP server disconnected."))?
+                .map_err(ReviewError)?;
+            // A late reply to an earlier request that timed out is discarded.
+            if message.get("method").is_none()
+                && message["id"].as_u64().is_some_and(|earlier| earlier < id)
+            {
+                continue;
+            }
+            break message;
+        };
         if message["id"].as_u64() != Some(id)
             || message.get("method").is_some()
             || message.get("error").is_some()
