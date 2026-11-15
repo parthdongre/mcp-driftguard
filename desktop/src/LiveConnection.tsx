@@ -4,6 +4,7 @@ import { GatewayServers } from './GatewayServers';
 import { Icon } from './Icon';
 import type { BridgeAction, BridgeRequest, CatalogSync, ToolRecord } from './types';
 import { groupCatalog } from './catalog-connections';
+import { harnessPresentation } from './harness-state';
 
 type Harness = { id: string; label: string; detected: boolean; installed: boolean; configured: boolean; attached: number };
 
@@ -134,18 +135,14 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
     {!native ? <p className="harness-preview">Open the desktop app to detect and connect coding harnesses on this device.</p>
       : !data && !statusError ? <p role="status">Detecting installed harnesses…</p> : null}
     {data?.harnesses.length ? <ul className="managed-harness-list">{data.harnesses.map(client => {
-      const connected = client.configured;
+      const state = harnessPresentation(client);
       return <li key={client.id}>
-        <div><strong>{client.label}</strong><span>{client.installed && !connected
-          ? 'Managed configuration needs repair — disconnect, then reconnect'
-          : client.attached ? 'MCP session attached'
-          : connected ? 'Configured — open a new client session'
-          : client.detected ? 'Detected on this device' : 'Not detected'}</span></div>
+        <div><strong>{client.label}</strong><span>{state.description}</span></div>
         <div className="managed-harness-actions">
-          {connected ? <span className={client.attached ? 'badge positive' : 'badge'}>{client.attached ? 'Connected' : 'Configured'}</span> : null}
-          {client.installed ? <button className="button subtle" disabled={!!busy || catalogSyncing}
+          {state.connected ? <span className={client.attached ? 'badge positive' : 'badge'}>{state.badge}</span> : null}
+          {state.canDisconnect ? <button className="button subtle" disabled={!!busy || catalogSyncing}
             aria-label={`Disconnect ${client.label}`} onClick={() => void act('live_disconnect', `Disconnecting ${client.label}…`, client.id)}>Disconnect</button> : null}
-          {!client.installed && client.detected ? <button className="button primary" disabled={!!busy || catalogSyncing}
+          {state.canConnect ? <button className="button primary" disabled={!!busy || catalogSyncing}
             aria-label={`Connect ${client.label}`}
             onClick={() => void act('live_connect', `Connecting ${client.label}…`, client.id)}>Connect</button> : null}
         </div>
