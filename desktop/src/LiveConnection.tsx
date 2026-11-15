@@ -117,7 +117,9 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
   const codexConnected = data?.harnesses.some(client => client.id === 'codex' &&
     (client.configured ?? (data.engine !== 'rust' && client.installed && data.running)));
   const activeJob = codexConnected && data?.job.stage === 'running';
-  const bypassedRoutes = data?.codex_skipped_routes ?? skippedRoutes;
+  // With zero eligible routes the engine has no routing manifest to persist,
+  // so preserve the skipped result from the attempted route action.
+  const bypassedRoutes = data?.codex_skipped_routes?.length ? data.codex_skipped_routes : skippedRoutes;
   const discovered = catalogSync?.servers.filter(server => server.state === 'observed') ?? [];
   const unavailable = catalogSync?.servers.filter(server => server.state === 'unavailable') ?? [];
   const toolCount = Math.max(data?.catalog_tools ?? 0, discovered.reduce((sum, server) => sum + (server.tools ?? 0), 0));
