@@ -4,8 +4,9 @@ import { GatewayServers } from './GatewayServers';
 import { Icon } from './Icon';
 import type { BridgeAction, BridgeRequest, CatalogSync, ToolRecord } from './types';
 import { groupCatalog } from './catalog-connections';
+import { harnessPresentation } from './harness-state';
 
-type Harness = { id: string; label: string; detected: boolean; installed: boolean; attached: number };
+type Harness = { id: string; label: string; detected: boolean; installed: boolean; configured?: boolean; attached: number };
 
 type LiveStatus = {
   engine?: 'rust'; pending?: number; catalog_tools?: number;
@@ -16,6 +17,7 @@ type LiveStatus = {
   job: { stage: string; message?: string; sha256?: string; revision?: number };
   message?: string;
   codex_routes?: string[];
+  codex_skipped_routes?: string[];
 };
 
 export function LiveConnection({ native, onChanged, onReview, onReviewConnection, tools, sources, catalogSync, catalogSyncing, catalogError, onSync }: {
@@ -60,17 +62,28 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
   const act = async (action: BridgeAction, label: string, harness?: string) => {
     if (!native || working.current) return;
     working.current = true; generation.current += 1; setBusy(label); setError(''); setNotice('');
+    let operationApplied = false;
     try {
       const payload: BridgeRequest = harness ? { action, harness } : { action };
       const result = await request<LiveStatus>(payload);
+      operationApplied = true;
       const next = await request<LiveStatus>({ action: 'live_status' });
       if (mounted.current) {
         setData(next); setNotice(result.message ?? ''); previousJob.current = next.job.stage;
         changed.current();
       }
-      if (next.engine === 'rust' && action === 'live_connect') await onSync();
+      // Refresh discovery on both transitions, including removal of stale tools.
+      if (next.engine === 'rust' && (action === 'live_connect' || action === 'live_disconnect')) {
+        await onSync();
+      }
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : 'Connection operation failed.');
+      if (mounted.current) {
+        const detail = failure instanceof Error ? failure.message : 'Unknown error.';
+        setError(operationApplied
+          ? `The harness configuration was changed, but refresh failed: ${detail}`
+          : `Connection operation failed: ${detail}`);
+        // Let the next timer poll reconcile state without replaying the mutation.
+      }
     } finally { working.current = false; if (mounted.current) setBusy(''); }
   };
   const [skippedRoutes, setSkippedRoutes] = useState<string[]>([]);
@@ -101,8 +114,12 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
       if (mounted.current) setBusy('');
     }
   };
-  const codexConnected = data?.harnesses.some(client => client.id === 'codex' && client.installed);
+  const codexConnected = data?.harnesses.some(client => client.id === 'codex' &&
+    (client.configured ?? (data.engine !== 'rust' && client.installed && data.running)));
   const activeJob = codexConnected && data?.job.stage === 'running';
+  // With zero eligible routes the engine has no routing manifest to persist,
+  // so preserve the skipped result from the attempted route action.
+  const bypassedRoutes = data?.codex_skipped_routes?.length ? data.codex_skipped_routes : skippedRoutes;
   const discovered = catalogSync?.servers.filter(server => server.state === 'observed') ?? [];
   const unavailable = catalogSync?.servers.filter(server => server.state === 'unavailable') ?? [];
   const toolCount = Math.max(data?.catalog_tools ?? 0, discovered.reduce((sum, server) => sum + (server.tools ?? 0), 0));
@@ -129,18 +146,20 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
     {!native ? <p className="harness-preview">Open the desktop app to detect and connect coding harnesses on this device.</p>
       : !data && !statusError ? <p role="status">Detecting installed harnesses…</p> : null}
     {data?.harnesses.length ? <ul className="managed-harness-list">{data.harnesses.map(client => {
-      const connected = client.installed && (data.engine === 'rust' || data.running);
+      // The legacy Python workspace does not expose the Rust 'configured' field.
+      const state = harnessPresentation({
+        ...client,
+        configured: client.configured ?? (data.engine !== 'rust' && client.installed && data.running),
+      });
       return <li key={client.id}>
-        <div><strong>{client.label}</strong><span>{client.attached ? 'MCP session attached' : connected
-          ? 'Ready for a new client session' : client.installed ? 'Gateway stopped'
-            : client.detected ? 'Detected on this device' : 'Not detected'}</span></div>
+        <div><strong>{client.label}</strong><span>{state.description}</span></div>
         <div className="managed-harness-actions">
-          {connected ? <span className={client.attached ? 'badge positive' : 'badge'}>{client.attached ? 'Connected' : 'Configured'}</span> : null}
-          {client.installed ? <button className="button subtle" disabled={!!busy || catalogSyncing}
+          {state.connected ? <span className={client.attached ? 'badge positive' : 'badge'}>{state.badge}</span> : null}
+          {state.canDisconnect ? <button className="button subtle" disabled={!!busy || catalogSyncing}
             aria-label={`Disconnect ${client.label}`} onClick={() => void act('live_disconnect', `Disconnecting ${client.label}…`, client.id)}>Disconnect</button> : null}
-          {!connected && (client.detected || client.installed) ? <button className="button primary" disabled={!!busy || catalogSyncing}
-            aria-label={`${client.installed ? 'Reconnect' : 'Connect'} ${client.label}`}
-            onClick={() => void act('live_connect', `Connecting ${client.label}…`, client.id)}>{client.installed ? 'Reconnect' : 'Connect'}</button> : null}
+          {state.canConnect ? <button className="button primary" disabled={!!busy || catalogSyncing}
+            aria-label={`Connect ${client.label}`}
+            onClick={() => void act('live_connect', `Connecting ${client.label}…`, client.id)}>Connect</button> : null}
         </div>
       </li>;
     })}</ul> : null}
@@ -153,10 +172,10 @@ export function LiveConnection({ native, onChanged, onReview, onReviewConnection
           {data.codex_routes?.length ? 'Restore direct connections' : 'Route existing Codex MCPs'}
         </button>
       </div>
-      {skippedRoutes.length ? <p className="harness-scope">Left on their existing connections: {skippedRoutes.join(', ')}</p> : null}
+      {bypassedRoutes.length ? <p className="harness-scope" role="alert">Not protected by DriftGuard: {bypassedRoutes.join(', ')}. These Codex MCP routes were skipped due to unsupported configuration or authentication and may still connect directly.</p> : null}
       <p className="harness-scope">Codex-hosted apps are managed by Codex. DriftGuard can review their catalog.</p>
     </> : null}
-    {data ? <p className="harness-provider-note">Use OpenRouter or Ollama through your coding client’s model settings. DriftGuard handles MCP tool access.</p> : null}
+    {data ? <p className="harness-provider-note">Use OpenRouter or Ollama through your coding client’s model settings. Only MCP calls explicitly routed through DriftGuard are protected. Disconnecting removes the managed configuration; restart the client to clear cached tools and sessions.</p> : null}
     {data?.engine === 'rust' && data.harnesses.some(client => client.installed) ? <>
       <div className="managed-harness-summary">
         <div><strong>MCP tool discovery</strong>

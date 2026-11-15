@@ -220,7 +220,7 @@ pub(crate) fn catalog_configs(db: &Path) -> Result<Vec<CatalogConfigResult>> {
             let read = || {
                 let manifest = read_manifest(&location(db, client))?;
                 let target = if let Some(manifest) = manifest {
-                    if manifest.disconnecting || !check_entry(client, &manifest)? {
+                    if !is_connected(client, &manifest)? {
                         return Ok(None);
                     }
                     manifest.target
@@ -583,7 +583,7 @@ fn connect(db: &Path, client: Client, profile: &Path) -> Result<Value> {
             .into());
         }
         if check_entry(client, &saved)? {
-            return Ok(status(client, &home_dir, &target, true));
+            return Ok(status(client, &home_dir, &target, true, true));
         }
         if saved.original != original {
             return Err(ReviewError(
@@ -613,7 +613,7 @@ fn connect(db: &Path, client: Client, profile: &Path) -> Result<Value> {
         return Err(ReviewError("Client settings changed during setup.").into());
     }
     save(&target, &edited.text, false)?;
-    Ok(status(client, &home_dir, &target, true))
+    Ok(status(client, &home_dir, &target, true, true))
 }
 
 fn disconnect(db: &Path, client: Client) -> Result<Value> {
@@ -626,6 +626,7 @@ fn disconnect(db: &Path, client: Client) -> Result<Value> {
             client,
             &home_dir,
             &client.config_path(&home_dir, isolated),
+            false,
             false,
         ));
     };
@@ -666,13 +667,13 @@ fn disconnect(db: &Path, client: Client) -> Result<Value> {
         }
     }
     fs::remove_file(path)?;
-    Ok(status(client, &home_dir, target, false))
+    Ok(status(client, &home_dir, target, false, false))
 }
 
-fn status(client: Client, home_dir: &Path, target: &Path, connected: bool) -> Value {
+fn status(client: Client, home_dir: &Path, target: &Path, connected: bool, managed: bool) -> Value {
     json!({
         "id":client.id(), "name":client.display(), "config_path":target,
-        "detected":client.detected(home_dir), "connected":connected
+        "detected":client.detected(home_dir), "connected":connected, "managed":managed
     })
 }
 
@@ -700,6 +701,13 @@ fn codex_routes(db: &Path) -> Result<Option<RoutedCodex>> {
 pub(crate) fn routed_codex_names(db: &Path) -> Result<Vec<String>> {
     Ok(codex_routes(db)?
         .map(|routes| routes.profiles.into_keys().collect())
+        .unwrap_or_default())
+}
+
+/// Routes skipped for compatibility or authentication reasons still bypass the gateway.
+pub(crate) fn skipped_codex_routes(db: &Path) -> Result<Vec<String>> {
+    Ok(codex_routes(db)?
+        .map(|routes| routes.skipped)
         .unwrap_or_default())
 }
 
@@ -754,12 +762,20 @@ fn route_codex(db: &Path, restore: bool) -> Result<Value> {
                     &saved.installed,
                     saved.profiles.into_keys(),
                 )?;
+                if read_text(&target, LIMIT)?.as_deref() != Some(current.as_str()) {
+                    return Err(
+                        ReviewError("Codex settings changed during route restoration.").into(),
+                    );
+                }
                 save(&target, &original, false)?;
             }
             fs::remove_file(path)?;
             return Ok(json!({"routed":[],"skipped":[]}));
         }
         if current == saved.original {
+            if read_text(&target, LIMIT)?.as_deref() != Some(current.as_str()) {
+                return Err(ReviewError("Codex settings changed during route setup.").into());
+            }
             save(&target, &saved.installed, false)?;
         } else if matches.contains(&false) {
             return Err(ReviewError(
@@ -817,11 +833,12 @@ pub fn run(db: &Path, mut args: impl Iterator<Item = OsString>) -> Result<Value>
                     .as_ref()
                     .map(|saved| saved.target.clone())
                     .unwrap_or_else(|| client.config_path(&home_dir, isolated));
+                let managed = manifest.is_some();
                 let connected = match manifest {
                     Some(saved) => is_connected(client, &saved).unwrap_or(false),
                     None => false,
                 };
-                Ok(status(client, &home_dir, &target, connected))
+                Ok(status(client, &home_dir, &target, connected, managed))
             })
             .collect::<Result<Vec<_>>>()?;
         return Ok(json!(entries));

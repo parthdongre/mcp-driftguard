@@ -156,6 +156,37 @@ fn configured_harness_catalogs_are_discovered_without_a_client_session() {
 }
 
 #[test]
+fn stale_profile_keeps_managed_disconnect_available() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join(".codex/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    let original = "# preserve existing Codex config\nmodel = 'example'\n";
+    fs::write(&config, original).unwrap();
+    let profile = root.path().join("profile.json");
+    fs::write(&profile, "{}").unwrap();
+
+    data(harness(
+        root.path(),
+        &["connect", "codex", profile.to_str().unwrap()],
+    ));
+    let healthy = data(harness(root.path(), &["list"]));
+    assert_eq!(healthy[0]["managed"], true);
+    assert_eq!(healthy[0]["connected"], true);
+
+    // A changed profile revokes the managed connection without losing its
+    // recovery record. The UI must still offer Disconnect, not Reconnect.
+    fs::write(&profile, "{\"revision\": 2}").unwrap();
+    let stale = data(harness(root.path(), &["list"]));
+    assert_eq!(stale[0]["managed"], true);
+    assert_eq!(stale[0]["connected"], false);
+    data(harness(root.path(), &["disconnect", "codex"]));
+    assert_eq!(fs::read_to_string(config).unwrap(), original);
+    let removed = data(harness(root.path(), &["list"]));
+    assert_eq!(removed[0]["managed"], false);
+    assert_eq!(removed[0]["connected"], false);
+}
+
+#[test]
 fn all_managed_configs_restore_original_bytes() {
     let root = tempfile::tempdir().unwrap();
     let profile = root.path().join("profile.json");
@@ -291,6 +322,7 @@ enabled = false
     fs::write(&config, original).unwrap();
     let result = data(harness(root.path(), &["route", "codex"]));
     assert_eq!(result["routed"], serde_json::json!(["notes", "remote"]));
+    assert_eq!(result["skipped"], serde_json::json!(["oauth"]));
     let edited = fs::read_to_string(&config).unwrap();
     assert!(edited.contains("--route"));
     assert!(edited.contains("https://example.org/mcp"));
