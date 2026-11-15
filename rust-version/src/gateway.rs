@@ -513,7 +513,8 @@ impl Gateway {
                         .into_iter()
                         .flatten()
                         .filter_map(|item| item["text"].as_str())
-                        .collect(),
+                        .collect::<String>()
+                        + &crate::contracts::media_text(&result),
                 );
                 if self.upstream.contains_secret(&result) || self.upstream.contains_secret(&joined)
                 {

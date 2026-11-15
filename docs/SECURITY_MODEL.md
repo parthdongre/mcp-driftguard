@@ -39,8 +39,11 @@ non-object root schemas, malformed root fields, nonfinite/non-JSON values, exces
 and byte/tool limits reject the catalog and invalidate invocation trust. Input/output
 schemas are checked against bundled metaschemas: inputs support Draft 7 and 2020-12,
 and outputs support 2020-12. Format evaluation is disabled: the metaschema check does
-not run attacker regex patterns. Separate bounded, reference-free validators check
-call arguments and contracted structured outputs; unsupported contracts fail closed.
+not run attacker regex patterns. Separate bounded validators check call arguments and
+contracted structured outputs. They inline local `$defs`/`definitions` references under
+a 10,000-node budget (recursive references are rejected), allow at most 512 union
+branches, never evaluate regexes and treat `format` as an annotation. Unsupported
+contracts fail closed.
 A failed assessment also invalidates
 trust. No user `$ref`, icon URL or other definition URL is fetched. A stale transport
 identity cannot ingest a catalog or invalidate a newer configured binding.

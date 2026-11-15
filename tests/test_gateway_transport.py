@@ -1,4 +1,5 @@
 """Actual subprocess wire tests using only an authored local fixture server."""
+import base64
 import hashlib
 import json
 import os
@@ -288,6 +289,15 @@ def test_identity_changed_script_is_not_dispatched(server):
 
 @pytest.mark.parametrize("output", [
     {"content": [{"type": "resource_link", "uri": "file:///secret"}]},
+    {"content": [{"type": "image", "data": "PHN2Zz4=", "mimeType": "image/svg+xml"}]},
+    {"content": [{"type": "image", "data": "not base64!", "mimeType": "image/png"}]},
+    {"content": [{"type": "image", "mimeType": "image/png"}]},
+    {"content": [{"type": "audio", "data": "AAAA", "mimeType": "image/png"}]},
+    {"content": [{"type": "image", "mimeType": "image/png",
+                  "data": base64.b64encode(b"\x89PNG-----BEGIN PRIVATE KEY-----").decode()}]},
+    {"content": [{"type": "image", "mimeType": "image/png",
+                  "data": base64.b64encode(b"x" * (512 * 1024 + 1)).decode()}]},
+    {"content": [{"type": "text", "text": "-----BEGIN RSA"}, {"type": "text", "text": " PRIVATE KEY-----"}]},
     {"content": [{"type": "text", "text": "-----BEGIN PRIVATE KEY-----secret"}]},
     {"content": [{"type": "text", "text": "-----BEGIN ENCRYPTED PRIVATE KEY-----secret"}]},
     {"content": [{"type": "text", "text": "-----BEGIN DSA PRIVATE KEY-----secret"}]},
@@ -307,6 +317,56 @@ def test_independent_output_policy_blocks_unsupported_or_secret_results(server, 
         assert not gateway.closed
         update(output={"content": [{"type": "text", "text": "Sunny"}]})
         assert gateway.call("weather", {})["content"] == [{"type": "text", "text": "Sunny"}]
+
+
+def test_image_and_audio_results_are_forwarded_without_extra_fields(server):
+    config, update, _ = server
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64).decode()
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(), store)
+        approve(store)
+        update(output={"content": [
+            {"type": "text", "text": "Chart"},
+            {"type": "image", "data": png, "mimeType": "IMAGE/PNG", "annotations": {"x": 1}},
+            {"type": "audio", "data": "UklGRg==", "mimeType": "audio/wav", "_meta": {"x": 1}},
+        ]})
+        assert gateway.call("weather", {})["content"] == [
+            {"type": "text", "text": "Chart"},
+            {"type": "image", "data": png, "mimeType": "image/png"},
+            {"type": "audio", "data": "UklGRg==", "mimeType": "audio/wav"},
+        ]
+
+
+def test_credential_hidden_in_media_is_blocked(server, monkeypatch):
+    config, update, _ = server
+    monkeypatch.setenv("DRIFTGUARD_TEST_TOKEN", "secret-token-fixture-123")
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(pass_env=("DRIFTGUARD_TEST_TOKEN",)), store)
+        approve(store)
+        data = base64.b64encode(b"\x89PNG secret-token-fixture-123").decode()
+        update(output={"content": [{"type": "image", "data": data, "mimeType": "image/png"}]})
+        with pytest.raises(RpcError, match="credential"):
+            gateway.call("weather", {})
+
+
+def test_pydantic_style_optional_fields_are_listed_and_validated(server):
+    config, update, root = server
+    definition = {**tool(), "inputSchema": {
+        "type": "object", "required": ["city"],
+        "$defs": {"Unit": {"type": "string", "enum": ["c", "f"]}},
+        "properties": {"city": {"type": "string"},
+                       "unit": {"anyOf": [{"$ref": "#/$defs/Unit"}, {"type": "null"}],
+                                "default": None}}}}
+    update(tools=[definition])
+    with GuardStore() as store:
+        gateway = ProtectedGateway(config(), store)
+        approve(store)
+        assert [item["name"] for item in gateway.list_approved()] == ["weather"]
+        assert gateway.call("weather", {"city": "Pune", "unit": None})["content"]
+        with pytest.raises(GateError):
+            gateway.call("weather", {"city": "Pune", "unit": "k"})
+        calls = (root / "calls.jsonl").read_text().splitlines()
+        assert len(calls) == 1
 
 
 def test_configured_credential_is_blocked_at_egress(server, monkeypatch):

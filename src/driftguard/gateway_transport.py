@@ -5,6 +5,8 @@ are rejected rather than transparently bypassing the approval boundary.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import functools
 import hashlib
 import json
@@ -39,6 +41,14 @@ SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROO
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}\Z")
 # Any PEM/PGP private key armor: PKCS#8 (plain and ENCRYPTED), RSA, EC, DSA, OPENSSH, PGP.
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY")
+PRIVATE_KEY_BYTES = re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY")
+# Binary result types the client renders as media. SVG is excluded because it can carry script.
+MEDIA_TYPES = {
+    "image": {"image/png", "image/jpeg", "image/gif", "image/webp"},
+    "audio": {"audio/wav", "audio/x-wav", "audio/mpeg", "audio/ogg", "audio/webm", "audio/flac"},
+}
+# Decoded bytes; base64 adds a third, which must still fit the 1 MiB message limit.
+MAX_MEDIA_BYTES = 512 * 1024
 
 
 IDENTITY_KDF_ITERATIONS = 100_000
@@ -646,21 +656,47 @@ class ProtectedGateway:
                 raise
 
     def _check_result(self, result: dict[str, Any], output_schema: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Bounded text and approved structured-contract egress checks."""
+        """Bounded text/image/audio and approved structured-contract egress checks."""
         content = result.get("content")
         if not isinstance(content, list) or len(content) > 256:
             raise _rejected_result("Tool result content is invalid or exceeds the item limit")
         if "isError" in result and not isinstance(result["isError"], bool):
             raise _rejected_result("Tool result isError must be boolean")
-        clean = []
+        clean: list[dict[str, Any]] = []
+        texts: list[str] = []
+        media_bytes = 0
         for item in content:
-            if not isinstance(item, dict) or item.get("type") != "text" or not isinstance(item.get("text"), str):
-                raise _rejected_result("Only text tool results are supported by this policy")
-            clean.append({"type": "text", "text": item["text"]})
-        encoded = json.dumps(clean, ensure_ascii=False)
-        if self._contains_credential("".join(item["text"] for item in clean)):
+            if not isinstance(item, dict):
+                raise _rejected_result("Tool result content is invalid")
+            kind = item.get("type")
+            if kind == "text" and isinstance(item.get("text"), str):
+                clean.append({"type": "text", "text": item["text"]})
+                texts.append(item["text"])
+                continue
+            if kind not in MEDIA_TYPES:
+                raise _rejected_result("Only text, image and audio tool results are supported by this policy")
+            data, mime = item.get("data"), item.get("mimeType")
+            if not isinstance(mime, str) or mime.lower() not in MEDIA_TYPES[kind]:
+                raise _rejected_result("Tool result media type is not allowed")
+            if not isinstance(data, str) or len(data) > 4 * MAX_MEDIA_BYTES // 3 + 4:
+                raise _rejected_result("Tool result media exceeds the byte limit")
+            try:
+                decoded = base64.b64decode(data, validate=True)
+            except (binascii.Error, ValueError):
+                raise _rejected_result("Tool result media is not valid base64") from None
+            media_bytes += len(decoded)
+            if media_bytes > MAX_MEDIA_BYTES:
+                raise _rejected_result("Tool result media exceeds the byte limit")
+            # A server could hide a passed credential or key inside binary data.
+            if PRIVATE_KEY_BYTES.search(decoded) or any(
+                    secret.encode("utf-8") in decoded for secret in self._credentials):
+                raise _rejected_result("Tool result media contains protected credential material")
+            clean.append({"type": kind, "data": data, "mimeType": mime.lower()})
+        joined = "".join(texts)
+        if self._contains_credential(joined):
             raise _rejected_result("Tool result contains a configured credential")
-        if PRIVATE_KEY.search(encoded):
+        # Also check the joined text so a marker split across items is still caught.
+        if PRIVATE_KEY.search(joined) or PRIVATE_KEY.search(json.dumps(texts, ensure_ascii=False)):
             raise _rejected_result("Tool result contains private key material")
         forwarded = {"content": clean, "isError": result.get("isError", False)}
         if output_schema is not None and (not forwarded["isError"] or "structuredContent" in result):
