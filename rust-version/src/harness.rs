@@ -763,7 +763,9 @@ fn route_codex(db: &Path, restore: bool) -> Result<Value> {
                     saved.profiles.into_keys(),
                 )?;
                 if read_text(&target, LIMIT)?.as_deref() != Some(current.as_str()) {
-                    return Err(ReviewError("Codex settings changed during route restoration.").into());
+                    return Err(
+                        ReviewError("Codex settings changed during route restoration.").into(),
+                    );
                 }
                 save(&target, &original, false)?;
             }
