@@ -47,7 +47,7 @@ pub fn live(db: &Path, request: &Value) -> Result<Value> {
                 entry["name"].as_str().unwrap_or(client)
             )
         } else {
-            format!("Disconnected {}.", entry["name"].as_str().unwrap_or(client))
+            format!("Removed {}'s managed MCP configuration. The gateway rejects further managed calls; restart the client to clear cached tools. Direct MCP connections are not affected.", entry["name"].as_str().unwrap_or(client))
         });
     }
     let mut store = ReviewStore::open(db)?;
@@ -66,25 +66,24 @@ pub fn live(db: &Path, request: &Value) -> Result<Value> {
         .ok_or(ReviewError("Missing coding harness status."))?
     {
         let prefix = format!("gateway:{}:", entry["id"].as_str().unwrap_or_default());
-        let installed = entry["connected"] == true;
-        let attached = if installed || entry["id"] == "codex" {
-            health
-                .iter()
-                .filter(|row| {
-                    row["active"] == true
-                        && row["server_id"]
-                            .as_str()
-                            .is_some_and(|source| source.starts_with(&prefix))
-                })
-                .map(|row| row["sessions"].as_u64().unwrap_or_default())
-                .sum::<u64>()
-        } else {
-            0
-        };
+        let installed = entry["managed"] == true;
+        let configured = entry["connected"] == true;
+        // Existing sessions may remain attached briefly after disconnect. Report them
+        // rather than pretending the client process has terminated.
+        let attached = health
+            .iter()
+            .filter(|row| {
+                row["active"] == true
+                    && row["server_id"]
+                        .as_str()
+                        .is_some_and(|source| source.starts_with(&prefix))
+            })
+            .map(|row| row["sessions"].as_u64().unwrap_or_default())
+            .sum::<u64>();
         clients += attached;
         harnesses.push(
             json!({"id":entry["id"],"label":entry["name"],"detected":entry["detected"],
-            "installed":installed,"attached":attached}),
+            "installed":installed,"configured":configured,"attached":attached}),
         );
     }
     let pending = store.pending_gateway_tools()?;
@@ -92,7 +91,9 @@ pub fn live(db: &Path, request: &Value) -> Result<Value> {
     Ok(
         json!({"engine":"rust","harnesses":harnesses,"running":clients>0,"clients":clients,
         "verified":false,"job":{"stage":"idle"},"tool":null,"pending":pending,
-        "catalog_tools":catalog_tools,"message":message,"codex_routes":crate::harness::routed_codex_names(db)?}),
+        "catalog_tools":catalog_tools,"message":message,
+        "codex_routes":crate::harness::routed_codex_names(db)?,
+        "codex_skipped_routes":crate::harness::skipped_codex_routes(db)?}),
     )
 }
 
