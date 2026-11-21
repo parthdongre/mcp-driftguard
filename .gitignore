@@ -14,6 +14,10 @@ dist/
 venv/
 env/
 ENV/
+/.runtime/
+
+# Local research outputs
+/artifacts/
 
 # Testing
 .pytest_cache/
@@ -24,6 +28,7 @@ coverage.xml
 .tox/
 
 # Tooling
+.serena/
 .ruff_cache/
 .mypy_cache/
 .benchmarks/

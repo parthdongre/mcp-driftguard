@@ -1,0 +1,11 @@
+# Training environment inputs. The resolved exact versions are captured at run time in run/dependency-lock.txt.
+torch==2.12.1
+transformers
+accelerate
+datasets
+huggingface_hub
+scikit-learn
+safetensors
+sentencepiece
+joblib
+numpy
